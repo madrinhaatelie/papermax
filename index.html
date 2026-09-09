@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="description" content="PAPER MAX — O sistema operacional da sua papelaria." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>PAPER MAX</title>
+  <style>
+    :root{--bg:#0b1020;--panel:rgba(20,28,48,.68);--panel2:rgba(255,255,255,.06);--line:rgba(255,255,255,.11);--text:#f5f7fb;--muted:#9da8bd;--accent:#9d8cff;--blue:#63a4ff;--green:#56d39b;--yellow:#f3c969;--orange:#f4a261;--red:#ff6b7a;--sidebar:72px}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:radial-gradient(circle at 15% 10%,rgba(157,140,255,.16),transparent 30%),radial-gradient(circle at 85% 20%,rgba(99,164,255,.12),transparent 28%),var(--bg);min-height:100vh;overflow-x:hidden}
+    button,input{font:inherit}.app{min-height:100vh;display:flex}.sidebar{width:var(--sidebar);position:fixed;inset:0 auto 0 0;padding:18px 10px;background:rgba(8,13,27,.72);backdrop-filter:blur(20px);border-right:1px solid var(--line);z-index:10;transition:width .18s ease}.sidebar:hover{width:235px}.brand{height:46px;display:flex;align-items:center;gap:12px;padding:0 8px;margin-bottom:18px;white-space:nowrap;overflow:hidden}.brand-mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(157,140,255,.3),rgba(99,164,255,.18));border:1px solid rgba(255,255,255,.14);font-weight:800}.brand-name{font-weight:800;letter-spacing:.04em;opacity:0;transition:opacity .12s}.sidebar:hover .brand-name{opacity:1}.nav{display:grid;gap:6px}.nav button{position:relative;border:0;background:transparent;color:var(--muted);height:48px;border-radius:13px;display:flex;align-items:center;gap:13px;padding:0 12px;cursor:pointer;text-align:left}.nav button:hover,.nav button.active{background:rgba(255,255,255,.065);color:var(--text)}.nav-icon{width:24px;text-align:center;font-size:19px;flex:none}.nav-label{opacity:0;white-space:nowrap;transition:opacity .12s}.sidebar:hover .nav-label{opacity:1}.nav button.active::before{content:"";position:absolute;left:-10px;top:10px;bottom:10px;width:3px;border-radius:0 4px 4px 0;background:var(--accent);box-shadow:0 0 12px rgba(157,140,255,.65)}
+    main{margin-left:var(--sidebar);width:calc(100% - var(--sidebar));padding:18px 20px 28px;transition:margin-left .18s ease,width .18s ease}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px}.greeting h1{font-size:20px;margin:0 0 3px}.greeting p{margin:0;color:var(--muted);font-size:13px}.datetime{text-align:right;min-width:150px}.date{font-weight:700;font-size:13px}.clock{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;margin-top:3px}.glass{background:var(--panel);border:1px solid var(--line);box-shadow:0 12px 36px rgba(0,0,0,.18);backdrop-filter:blur(18px);border-radius:16px}.quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.quick button{border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:9px 12px;border-radius:11px;cursor:pointer;font-size:12px}.quick button.primary{background:rgba(157,140,255,.17);border-color:rgba(157,140,255,.35)}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}.mini{padding:12px 14px;min-height:76px}.mini-head{color:var(--muted);font-size:11px}.mini-value{font-size:24px;font-weight:800;margin-top:7px}.layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,.8fr);gap:12px}.panel{padding:14px}.panel-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.panel-title h2{font-size:14px;margin:0}.search{border:1px solid var(--line);background:rgba(255,255,255,.045);color:var(--text);border-radius:10px;padding:8px 10px;outline:none;width:190px;font-size:12px}.orders{display:grid;gap:7px}.order{display:grid;grid-template-columns:4px 1fr auto;gap:11px;align-items:center;padding:10px 8px 10px 0;border-bottom:1px solid rgba(255,255,255,.055)}.status{width:4px;height:42px;border-radius:0 5px 5px 0;position:relative;overflow:hidden}.status::after{content:"";position:absolute;inset:-100% 0;background:linear-gradient(180deg,transparent,rgba(255,255,255,.6),transparent);animation:flow 3.6s linear infinite;opacity:.45}.yellow{background:var(--yellow)}.blue{background:var(--blue)}.green{background:var(--green)}.red{background:var(--red)}.order-name{font-size:12px;font-weight:700}.order-meta{color:var(--muted);font-size:11px;margin-top:3px}.actions{display:flex;gap:5px}.actions button{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:6px 8px;font-size:10px;cursor:pointer}.alerts{display:grid;gap:7px}.alert{padding:10px 11px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);font-size:11px}.alert strong{display:block;margin-bottom:3px}.mother{margin-top:12px;padding:14px}.mother h2{font-size:14px;margin:0 0 10px}.lifetime{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.life{padding:10px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035)}.life span{font-size:10px;color:var(--muted)}.life b{display:block;font-size:18px;margin-top:4px}.chart{margin-top:12px;padding:14px}.bars{height:150px;display:flex;align-items:end;gap:10px;padding:12px 4px 4px}.bar-wrap{flex:1;height:100%;display:flex;flex-direction:column;justify-content:end;align-items:center;gap:5px}.bar{width:100%;max-width:38px;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,var(--accent),rgba(157,140,255,.28));min-height:8px}.bar-label{font-size:9px;color:var(--muted)}.save{position:fixed;right:18px;bottom:14px;color:var(--muted);font-size:10px;background:rgba(8,13,27,.62);border:1px solid var(--line);padding:6px 9px;border-radius:9px;backdrop-filter:blur(12px)}
+    @keyframes flow{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.layout{grid-template-columns:1fr}}@media(max-width:620px){main{padding:12px}.topbar{align-items:flex-start}.datetime{min-width:auto}.cards{gap:7px}.mini-value{font-size:20px}.search{width:130px}.actions{display:none}.sidebar{width:58px}.sidebar:hover{width:58px}.brand-name,.nav-label{display:none}main{margin-left:58px;width:calc(100% - 58px)}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" aria-label="Navegação principal">
+    <div class="brand"><div class="brand-mark">P</div><div class="brand-name">PAPER MAX</div></div>
+    <nav class="nav">
+      <button class="active"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></button>
+      <button><span class="nav-icon">▣</span><span class="nav-label">Pedidos</span></button>
+      <button><span class="nav-icon">◇</span><span class="nav-label">Produtos</span></button>
+      <button><span class="nav-icon">📦</span><span class="nav-label">Estoque</span></button>
+      <button><span class="nav-icon">$</span><span class="nav-label">Financeiro</span></button>
+      <button><span class="nav-icon">⚙</span><span class="nav-label">Ajustes</span></button>
+    </nav>
+  </aside>
+  <main>
+    <header class="topbar">
+      <div class="greeting"><h1>Olá, Cliente</h1><p>Hoje o dia está perfeito para produzir, vender e crescer. ✨</p></div>
+      <div class="datetime"><div class="date" id="date"></div><div class="clock" id="clock"></div></div>
+    </header>
+    <section class="quick">
+      <button class="primary">+ Novo pedido</button><button>+ Novo produto</button><button>Personalização em massa</button><button>Nova compra</button><button>Importar CSV</button>
+    </section>
+    <section class="cards">
+      <div class="glass mini"><div class="mini-head">Pedidos hoje</div><div class="mini-value">12</div></div>
+      <div class="glass mini"><div class="mini-head">Em produção</div><div class="mini-value">08</div></div>
+      <div class="glass mini"><div class="mini-head">Pendências</div><div class="mini-value">03</div></div>
+      <div class="glass mini"><div class="mini-head">Prontos</div><div class="mini-value">17</div></div>
+    </section>
+    <section class="layout">
+      <div class="glass panel"><div class="panel-title"><h2>Pedidos ativos</h2><input class="search" placeholder="Buscar em todo o sistema" /></div>
+        <div class="orders">
+          <div class="order"><span class="status yellow"></span><div><div class="order-name">Pedido 1048 · Sacola M</div><div class="order-meta">12 unidades · 09/09/2026 · Aguardando aprovação</div></div><div class="actions"><button>Editar</button><button>Ver</button></div></div>
+          <div class="order"><span class="status blue"></span><div><div class="order-name">Pedido 1047 · Buquê Rosas Queridas</div><div class="order-meta">10 unidades · 09/09/2026 · Em produção</div></div><div class="actions"><button>Editar</button><button>Ver</button></div></div>
+          <div class="order"><span class="status red"></span><div><div class="order-name">Pedido 1046 · Kit Festa</div><div class="order-meta">30 unidades · 08/09/2026 · Bloqueado por material</div></div><div class="actions"><button>Editar</button><button>Ver</button></div></div>
+          <div class="order"><span class="status green"></span><div><div class="order-name">Pedido 1045 · Sacola P</div><div class="order-meta">25 unidades · 08/09/2026 · Pronto</div></div><div class="actions"><button>Editar</button><button>Ver</button></div></div>
+        </div>
+      </div>
+      <div class="glass panel"><div class="panel-title"><h2>Pendências</h2></div><div class="alerts"><div class="alert"><strong>🟡 3 pedidos aguardando aprovação</strong>Revisar antes de liberar a produção.</div><div class="alert"><strong>🔴 1 pedido bloqueado</strong>Falta material para concluir.</div><div class="alert"><strong>🟠 5 pedidos com entrega em 09/09/2026</strong>Conferir embalagem e expedição.</div><div class="alert"><strong>🟡 2 materiais para reposição</strong>Estoque abaixo do mínimo.</div></div></div>
+    </section>
+    <section class="glass mother"><h2>O que foi feito até hoje?</h2><div class="lifetime"><div class="life"><span>VENDAS</span><b>R$ 0,00</b></div><div class="life"><span>LUCRO</span><b>R$ 0,00</b></div><div class="life"><span>PRODUTOS</span><b>0</b></div></div></section>
+    <section class="glass chart"><div class="panel-title"><h2>Vendas por mês</h2><span class="mini-head">Quantidade de pedidos</span></div><div class="bars"><div class="bar-wrap"><div class="bar" style="height:34%"></div><span class="bar-label">Abr</span></div><div class="bar-wrap"><div class="bar" style="height:48%"></div><span class="bar-label">Mai</span></div><div class="bar-wrap"><div class="bar" style="height:43%"></div><span class="bar-label">Jun</span></div><div class="bar-wrap"><div class="bar" style="height:67%"></div><span class="bar-label">Jul</span></div><div class="bar-wrap"><div class="bar" style="height:76%"></div><span class="bar-label">Ago</span></div><div class="bar-wrap"><div class="bar" style="height:91%"></div><span class="bar-label">Set</span></div></div></section>
+  </main>
+</div>
+<div class="save">✓ Salvo automaticamente</div>
+<script>
+  const pad=n=>String(n).padStart(2,'0');
+  function tick(){const d=new Date();document.querySelector('#date').textContent=`${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;document.querySelector('#clock').textContent=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`}
+  tick();setInterval(tick,1000);
+  if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
