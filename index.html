@@ -3,66 +3,1555 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#111827" />
+  <meta name="theme-color" content="#0d0f14" />
   <meta name="description" content="PAPER MAX — O sistema operacional da sua papelaria." />
   <link rel="manifest" href="manifest.webmanifest" />
   <title>PAPER MAX</title>
   <style>
-    :root{--bg:#0b1020;--panel:rgba(20,28,48,.68);--panel2:rgba(255,255,255,.06);--line:rgba(255,255,255,.11);--text:#f5f7fb;--muted:#9da8bd;--accent:#9d8cff;--blue:#63a4ff;--green:#56d39b;--yellow:#f3c969;--orange:#f4a261;--red:#ff6b7a;--sidebar:72px}
-    *{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:radial-gradient(circle at 15% 10%,rgba(157,140,255,.16),transparent 30%),radial-gradient(circle at 85% 20%,rgba(99,164,255,.12),transparent 28%),var(--bg);min-height:100vh;overflow-x:hidden}
-    button,input{font:inherit}.app{min-height:100vh;display:flex}.sidebar{width:var(--sidebar);position:fixed;inset:0 auto 0 0;padding:18px 10px;background:rgba(8,13,27,.72);backdrop-filter:blur(20px);border-right:1px solid var(--line);z-index:10;transition:width .18s ease}.sidebar:hover{width:235px}.brand{height:46px;display:flex;align-items:center;gap:12px;padding:0 8px;margin-bottom:18px;white-space:nowrap;overflow:hidden}.brand-mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(157,140,255,.3),rgba(99,164,255,.18));border:1px solid rgba(255,255,255,.14);font-weight:800}.brand-name{font-weight:800;letter-spacing:.04em;opacity:0;transition:opacity .12s}.sidebar:hover .brand-name{opacity:1}.nav{display:grid;gap:6px}.nav button{position:relative;border:0;background:transparent;color:var(--muted);height:48px;border-radius:13px;display:flex;align-items:center;gap:13px;padding:0 12px;cursor:pointer;text-align:left}.nav button:hover,.nav button.active{background:rgba(255,255,255,.065);color:var(--text)}.nav-icon{width:24px;text-align:center;font-size:19px;flex:none}.nav-label{opacity:0;white-space:nowrap;transition:opacity .12s}.sidebar:hover .nav-label{opacity:1}.nav button.active::before{content:"";position:absolute;left:-10px;top:10px;bottom:10px;width:3px;border-radius:0 4px 4px 0;background:var(--accent);box-shadow:0 0 12px rgba(157,140,255,.65)}
-    main{margin-left:var(--sidebar);width:calc(100% - var(--sidebar));padding:18px 20px 28px;transition:margin-left .18s ease,width .18s ease}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px}.greeting h1{font-size:20px;margin:0 0 3px}.greeting p{margin:0;color:var(--muted);font-size:13px}.datetime{text-align:right;min-width:150px}.date{font-weight:700;font-size:13px}.clock{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;margin-top:3px}.glass{background:var(--panel);border:1px solid var(--line);box-shadow:0 12px 36px rgba(0,0,0,.18);backdrop-filter:blur(18px);border-radius:16px}.quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.quick button{border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:9px 12px;border-radius:11px;cursor:pointer;font-size:12px}.quick button.primary{background:rgba(157,140,255,.17);border-color:rgba(157,140,255,.35)}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}.mini{padding:12px 14px;min-height:76px}.mini-head{color:var(--muted);font-size:11px}.mini-value{font-size:24px;font-weight:800;margin-top:7px}.layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,.8fr);gap:12px}.panel{padding:14px}.panel-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.panel-title h2{font-size:14px;margin:0}.search{border:1px solid var(--line);background:rgba(255,255,255,.045);color:var(--text);border-radius:10px;padding:8px 10px;outline:none;width:190px;font-size:12px}.orders{display:grid;gap:7px}.order{display:grid;grid-template-columns:4px 1fr auto;gap:11px;align-items:center;padding:10px 8px 10px 0;border-bottom:1px solid rgba(255,255,255,.055)}.status{width:4px;height:42px;border-radius:0 5px 5px 0;position:relative;overflow:hidden}.status::after{content:"";position:absolute;inset:-100% 0;background:linear-gradient(180deg,transparent,rgba(255,255,255,.6),transparent);animation:flow 3.6s linear infinite;opacity:.45}.yellow{background:var(--yellow)}.blue{background:var(--blue)}.green{background:var(--green)}.red{background:var(--red)}.order-name{font-size:12px;font-weight:700}.order-meta{color:var(--muted);font-size:11px;margin-top:3px}.actions{display:flex;gap:5px}.actions button{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:6px 8px;font-size:10px;cursor:pointer}.alerts{display:grid;gap:7px}.alert{padding:10px 11px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);font-size:11px}.alert strong{display:block;margin-bottom:3px}.mother{margin-top:12px;padding:14px}.mother h2{font-size:14px;margin:0 0 10px}.lifetime{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.life{padding:10px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035)}.life span{font-size:10px;color:var(--muted)}.life b{display:block;font-size:18px;margin-top:4px}.chart{margin-top:12px;padding:14px}.bars{height:150px;display:flex;align-items:end;gap:10px;padding:12px 4px 4px}.bar-wrap{flex:1;height:100%;display:flex;flex-direction:column;justify-content:end;align-items:center;gap:5px}.bar{width:100%;max-width:38px;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,var(--accent),rgba(157,140,255,.28));min-height:8px}.bar-label{font-size:9px;color:var(--muted)}.save{position:fixed;right:18px;bottom:14px;color:var(--muted);font-size:10px;background:rgba(8,13,27,.62);border:1px solid var(--line);padding:6px 9px;border-radius:9px;backdrop-filter:blur(12px)}
-    @keyframes flow{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.layout{grid-template-columns:1fr}}@media(max-width:620px){main{padding:12px}.topbar{align-items:flex-start}.datetime{min-width:auto}.cards{gap:7px}.mini-value{font-size:20px}.search{width:130px}.actions{display:none}.sidebar{width:58px}.sidebar:hover{width:58px}.brand-name,.nav-label{display:none}main{margin-left:58px;width:calc(100% - 58px)}}
+    :root {
+      --bg-canvas: #0b0c10;
+      --bg-surface: #12141a;
+      --bg-surface-raised: #181b22;
+      --bg-surface-hover: #1e222b;
+      --border-subtle: #20242e;
+      --border-strong: #2a303e;
+      --border-focus: #4f46e5;
+      
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      
+      --accent-primary: #4f46e5;
+      --accent-hover: #4338ca;
+      --accent-subtle: rgba(79, 70, 229, 0.12);
+      
+      --status-yellow-bg: rgba(245, 158, 11, 0.1);
+      --status-yellow-border: rgba(245, 158, 11, 0.25);
+      --status-yellow-text: #fbbf24;
+      --status-yellow-dot: #f59e0b;
+
+      --status-blue-bg: rgba(59, 130, 246, 0.1);
+      --status-blue-border: rgba(59, 130, 246, 0.25);
+      --status-blue-text: #60a5fa;
+      --status-blue-dot: #3b82f6;
+
+      --status-red-bg: rgba(244, 63, 94, 0.1);
+      --status-red-border: rgba(244, 63, 94, 0.25);
+      --status-red-text: #fda4af;
+      --status-red-dot: #f43f5e;
+
+      --status-green-bg: rgba(16, 185, 129, 0.1);
+      --status-green-border: rgba(16, 185, 129, 0.25);
+      --status-green-text: #6ee7b7;
+      --status-green-dot: #10b981;
+
+      --sidebar-width: 72px;
+      --sidebar-expanded: 230px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text-primary);
+      background-color: var(--bg-canvas);
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      background-color: var(--bg-canvas);
+    }
+
+    /* Clean Dark Sidebar */
+    .sidebar {
+      width: var(--sidebar-width);
+      position: fixed;
+      inset: 0 auto 0 0;
+      padding: 16px 10px;
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-subtle);
+      z-index: 20;
+      transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar:hover {
+      width: var(--sidebar-expanded);
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .brand {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 6px;
+      margin-bottom: 20px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-strong);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .brand-name {
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.06em;
+      color: var(--text-primary);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .sidebar:hover .brand-name {
+      opacity: 1;
+    }
+
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .nav button {
+      position: relative;
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 10px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s ease, color 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .nav button:hover {
+      background: var(--bg-surface-raised);
+      color: var(--text-primary);
+    }
+
+    .nav button.active {
+      background: var(--accent-subtle);
+      color: #818cf8;
+      font-weight: 600;
+    }
+
+    .nav button.active::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      top: 10px;
+      bottom: 10px;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background-color: var(--accent-primary);
+    }
+
+    .nav-icon {
+      width: 24px;
+      text-align: center;
+      font-size: 17px;
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .nav-label {
+      opacity: 0;
+      font-size: 13px;
+      transition: opacity 0.15s ease;
+    }
+
+    .sidebar:hover .nav-label {
+      opacity: 1;
+    }
+
+    .sidebar-footer {
+      padding: 8px 6px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .avatar-sm {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .avatar-meta {
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar:hover .avatar-meta {
+      opacity: 1;
+    }
+
+    .avatar-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .avatar-role {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* Main Content Area */
+    main {
+      margin-left: var(--sidebar-width);
+      width: calc(100% - var(--sidebar-width));
+      padding: 24px 28px 40px;
+      transition: margin-left 0.2s cubic-bezier(0.16, 1, 0.3, 1), width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      max-width: 1400px;
+    }
+
+    /* Topbar */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .greeting h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .greeting p {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .datetime {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      padding: 6px 14px;
+      border-radius: 9999px;
+    }
+
+    .date {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+
+    .clock {
+      color: var(--text-secondary);
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+      border-left: 1px solid var(--border-subtle);
+      padding-left: 10px;
+    }
+
+    /* Quick Actions */
+    .quick {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      border: 1px solid var(--border-subtle);
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn:hover {
+      background-color: var(--bg-surface-hover);
+      border-color: var(--border-strong);
+    }
+
+    .btn-primary {
+      background-color: var(--accent-primary);
+      border-color: var(--accent-primary);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    /* Metric Cards Grid */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 16px 18px;
+      transition: border-color 0.15s ease;
+    }
+
+    .card:hover {
+      border-color: var(--border-strong);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .card-label {
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .card-icon-badge {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      background: var(--bg-surface-raised);
+      color: var(--text-secondary);
+    }
+
+    .card-value {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .card-subtext {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* Main 2-Column Layout */
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.85fr) minmax(300px, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .panel {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-count {
+      font-size: 11px;
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-weight: 500;
+    }
+
+    .search-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      color: var(--text-muted);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .search {
+      border: 1px solid var(--border-subtle);
+      background-color: var(--bg-surface-raised);
+      color: var(--text-primary);
+      border-radius: 8px;
+      padding: 7px 12px 7px 30px;
+      outline: none;
+      width: 210px;
+      font-size: 12px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .search:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 1px var(--border-focus);
+    }
+
+    .search::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* Orders List */
+    .orders {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .order-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .order-row:hover {
+      border-color: var(--border-strong);
+      background-color: var(--bg-surface-hover);
+    }
+
+    .order-main {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .order-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .order-meta {
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+
+    /* Status Badges */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .status-yellow {
+      background: var(--status-yellow-bg);
+      border: 1px solid var(--status-yellow-border);
+      color: var(--status-yellow-text);
+    }
+    .status-yellow .status-dot { background: var(--status-yellow-dot); }
+
+    .status-blue {
+      background: var(--status-blue-bg);
+      border: 1px solid var(--status-blue-border);
+      color: var(--status-blue-text);
+    }
+    .status-blue .status-dot { background: var(--status-blue-dot); }
+
+    .status-red {
+      background: var(--status-red-bg);
+      border: 1px solid var(--status-red-border);
+      color: var(--status-red-text);
+    }
+    .status-red .status-dot { background: var(--status-red-dot); }
+
+    .status-green {
+      background: var(--status-green-bg);
+      border: 1px solid var(--status-green-border);
+      color: var(--status-green-text);
+    }
+    .status-green .status-dot { background: var(--status-green-dot); }
+
+    .actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .action-btn {
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      padding: 5px 9px;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .action-btn:hover {
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+      background: var(--bg-surface-raised);
+    }
+
+    /* Alerts Panel */
+    .alerts {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .alert-card {
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-left: 3px solid var(--border-subtle);
+      transition: border-color 0.15s ease;
+    }
+
+    .alert-card:hover {
+      border-color: var(--border-strong);
+    }
+
+    .alert-card.alert-yellow {
+      border-left-color: var(--status-yellow-dot);
+    }
+
+    .alert-card.alert-red {
+      border-left-color: var(--status-red-dot);
+    }
+
+    .alert-card.alert-orange {
+      border-left-color: #f97316;
+    }
+
+    .alert-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 12px;
+    }
+
+    .alert-desc {
+      color: var(--text-secondary);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    /* Lifetime Performance Panel */
+    .mother {
+      margin-bottom: 16px;
+    }
+
+    .lifetime-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .life-card {
+      padding: 14px 16px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      background: var(--bg-surface-raised);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .life-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .life-val {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+      margin-top: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Sales Chart */
+    .chart-panel {
+      margin-bottom: 16px;
+    }
+
+    .bars {
+      height: 150px;
+      display: flex;
+      align-items: flex-end;
+      gap: 14px;
+      padding: 16px 8px 4px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .bar-wrap {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+    }
+
+    .bar {
+      width: 100%;
+      max-width: 44px;
+      border-radius: 4px 4px 0 0;
+      background: #312e81;
+      border: 1px solid #4338ca;
+      min-height: 8px;
+      transition: background-color 0.2s ease, transform 0.15s ease;
+      cursor: pointer;
+    }
+
+    .bar:hover, .bar.active {
+      background: var(--accent-primary);
+      border-color: #6366f1;
+      transform: translateY(-2px);
+    }
+
+    .bar-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .bar-tooltip {
+      position: absolute;
+      top: -24px;
+      background: var(--bg-surface-hover);
+      border: 1px solid var(--border-strong);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+
+    .bar-wrap:hover .bar-tooltip {
+      opacity: 1;
+    }
+
+    /* Clean Auto-save Status */
+    .save-indicator {
+      position: fixed;
+      right: 20px;
+      bottom: 16px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      padding: 6px 12px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 30;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+
+    .save-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+    }
+
+    /* Clean Dark Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      transform: translateY(12px) scale(0.98);
+      transition: transform 0.2s ease;
+      overflow: hidden;
+    }
+
+    .modal-backdrop.open .modal-box {
+      transform: translateY(0) scale(1);
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-header h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 4px;
+      border-radius: 4px;
+    }
+
+    .modal-close:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-raised);
+    }
+
+    .modal-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .form-input, .form-select {
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: var(--border-focus);
+    }
+
+    .modal-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      background: var(--bg-surface-raised);
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 60px;
+      right: 20px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-primary);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transform: translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      z-index: 60;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Responsive */
+    @media (max-width: 960px) {
+      .cards {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      main {
+        padding: 16px;
+        margin-left: 56px;
+        width: calc(100% - 56px);
+      }
+      .sidebar {
+        width: 56px;
+      }
+      .sidebar:hover {
+        width: 56px;
+      }
+      .brand-name, .nav-label, .avatar-meta {
+        display: none !important;
+      }
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .cards {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .lifetime-grid {
+        grid-template-columns: 1fr;
+      }
+      .search {
+        width: 140px;
+      }
+    }
   </style>
 </head>
 <body>
-<div class="app">
-  <aside class="sidebar" aria-label="Navegação principal">
-    <div class="brand"><div class="brand-mark">P</div><div class="brand-name">PAPER MAX</div></div>
-    <nav class="nav">
-      <button class="active"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></button>
-      <button><span class="nav-icon">▣</span><span class="nav-label">Pedidos</span></button>
-      <button><span class="nav-icon">◇</span><span class="nav-label">Produtos</span></button>
-      <button><span class="nav-icon">📦</span><span class="nav-label">Estoque</span></button>
-      <button><span class="nav-icon">$</span><span class="nav-label">Financeiro</span></button>
-      <button><span class="nav-icon">⚙</span><span class="nav-label">Ajustes</span></button>
+<div class="app" id="app-root">
+  <!-- Clean Dark Sidebar -->
+  <aside class="sidebar" id="main-sidebar" aria-label="Navegação principal">
+    <div class="brand" id="brand-header">
+      <div class="brand-mark" id="brand-mark">P</div>
+      <div class="brand-name" id="brand-title">PAPER MAX</div>
+    </div>
+    
+    <nav class="nav" id="sidebar-nav">
+      <button class="active" id="nav-home" data-view="inicio">
+        <span class="nav-icon">⌂</span>
+        <span class="nav-label">Início</span>
+      </button>
+      <button id="nav-orders" data-view="pedidos">
+        <span class="nav-icon">▣</span>
+        <span class="nav-label">Pedidos</span>
+      </button>
+      <button id="nav-products" data-view="produtos">
+        <span class="nav-icon">◇</span>
+        <span class="nav-label">Produtos</span>
+      </button>
+      <button id="nav-stock" data-view="estoque">
+        <span class="nav-icon">📦</span>
+        <span class="nav-label">Estoque</span>
+      </button>
+      <button id="nav-finance" data-view="financeiro">
+        <span class="nav-icon">$</span>
+        <span class="nav-label">Financeiro</span>
+      </button>
+      <button id="nav-settings" data-view="ajustes">
+        <span class="nav-icon">⚙</span>
+        <span class="nav-label">Ajustes</span>
+      </button>
     </nav>
+
+    <div class="sidebar-footer" id="sidebar-user">
+      <div class="avatar-sm" id="user-avatar">PM</div>
+      <div class="avatar-meta" id="user-meta">
+        <span class="avatar-name">Ateliê Papel</span>
+        <span class="avatar-role">Administrador</span>
+      </div>
+    </div>
   </aside>
-  <main>
-    <header class="topbar">
-      <div class="greeting"><h1>Olá, Cliente</h1><p>Hoje o dia está perfeito para produzir, vender e crescer. ✨</p></div>
-      <div class="datetime"><div class="date" id="date"></div><div class="clock" id="clock"></div></div>
+
+  <!-- Main Work Area -->
+  <main id="main-content">
+    <header class="topbar" id="page-header">
+      <div class="greeting" id="greeting-box">
+        <h1 id="greeting-title">Olá, Papelaria</h1>
+        <p id="greeting-subtitle">Painel operacional com visão limpa de produção, estoque e vendas.</p>
+      </div>
+      <div class="datetime" id="datetime-display">
+        <div class="date" id="date">--/--/----</div>
+        <div class="clock" id="clock">--:--:--</div>
+      </div>
     </header>
-    <section class="quick">
-      <button class="primary">+ Novo pedido</button><button>+ Novo produto</button><button>Personalização em massa</button><button>Nova compra</button><button>Importar CSV</button>
+
+    <!-- Quick Actions -->
+    <section class="quick" id="quick-actions-bar" aria-label="Ações rápidas">
+      <button class="btn btn-primary" id="btn-quick-new-order">+ Novo pedido</button>
+      <button class="btn" id="btn-quick-new-product">+ Novo produto</button>
+      <button class="btn" id="btn-quick-bulk">Personalização em massa</button>
+      <button class="btn" id="btn-quick-purchase">Nova compra</button>
+      <button class="btn" id="btn-quick-import">Importar CSV</button>
     </section>
-    <section class="cards">
-      <div class="glass mini"><div class="mini-head">Pedidos hoje</div><div class="mini-value">12</div></div>
-      <div class="glass mini"><div class="mini-head">Em produção</div><div class="mini-value">08</div></div>
-      <div class="glass mini"><div class="mini-head">Pendências</div><div class="mini-value">03</div></div>
-      <div class="glass mini"><div class="mini-head">Prontos</div><div class="mini-value">17</div></div>
+
+    <!-- Stat Metric Cards -->
+    <section class="cards" id="metric-cards-grid">
+      <div class="card" id="card-metric-today">
+        <div class="card-top">
+          <span class="card-label">Pedidos hoje</span>
+          <span class="card-icon-badge">📋</span>
+        </div>
+        <div class="card-value" id="val-orders-today">12</div>
+        <div class="card-subtext">+2 em relação a ontem</div>
+      </div>
+
+      <div class="card" id="card-metric-prod">
+        <div class="card-top">
+          <span class="card-label">Em produção</span>
+          <span class="card-icon-badge">⚙</span>
+        </div>
+        <div class="card-value" id="val-orders-prod">08</div>
+        <div class="card-subtext">Capacidade em 78%</div>
+      </div>
+
+      <div class="card" id="card-metric-pending">
+        <div class="card-top">
+          <span class="card-label">Pendências</span>
+          <span class="card-icon-badge">⚠️</span>
+        </div>
+        <div class="card-value" id="val-orders-pending">03</div>
+        <div class="card-subtext">Aguardando aprovação</div>
+      </div>
+
+      <div class="card" id="card-metric-ready">
+        <div class="card-top">
+          <span class="card-label">Prontos</span>
+          <span class="card-icon-badge">✓</span>
+        </div>
+        <div class="card-value" id="val-orders-ready">17</div>
+        <div class="card-subtext">Prontos para envio/retirada</div>
+      </div>
     </section>
-    <section class="layout">
-      <div class="glass panel"><div class="panel-title"><h2>Pedidos ativos</h2><input class="search" placeholder="Buscar em todo o sistema" /></div>
-        <div class="orders">
-          <div class="order"><span class="status yellow"></span><div><div class="order-name">Pedido 1048 · Sacola M</div><div class="order-meta">12 unidades · 09/09/2026 · Aguardando aprovação</div></div><div class="actions"><button>Editar</button><button>Ver</button></div></div>
-          <div class="order"><span class="status blue"></span><div><div class="order-name">Pedido 1047 · Buquê Rosas Queridas</div><div class="order-meta">10 unidades · 09/09/2026 · Em produção</div></div><div class="actions"><button>Editar</button><button>Ver</button></div></div>
-          <div class="order"><span class="status red"></span><div><div class="order-name">Pedido 1046 · Kit Festa</div><div class="order-meta">30 unidades · 08/09/2026 · Bloqueado por material</div></div><div class="actions"><button>Editar</button><button>Ver</button></div></div>
-          <div class="order"><span class="status green"></span><div><div class="order-name">Pedido 1045 · Sacola P</div><div class="order-meta">25 unidades · 08/09/2026 · Pronto</div></div><div class="actions"><button>Editar</button><button>Ver</button></div></div>
+
+    <!-- Two-column Operational Layout -->
+    <section class="layout" id="operational-layout">
+      <!-- Active Orders Panel -->
+      <div class="panel" id="panel-orders">
+        <div class="panel-header">
+          <h2 class="panel-title" id="title-orders">
+            Pedidos ativos
+            <span class="badge-count" id="badge-orders-count">4 pedidos</span>
+          </h2>
+          <div class="search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input class="search" id="input-order-search" placeholder="Buscar pedido ou produto..." />
+          </div>
+        </div>
+
+        <div class="orders" id="orders-list">
+          <!-- Dynamic Order Rows rendered by JavaScript -->
         </div>
       </div>
-      <div class="glass panel"><div class="panel-title"><h2>Pendências</h2></div><div class="alerts"><div class="alert"><strong>🟡 3 pedidos aguardando aprovação</strong>Revisar antes de liberar a produção.</div><div class="alert"><strong>🔴 1 pedido bloqueado</strong>Falta material para concluir.</div><div class="alert"><strong>🟠 5 pedidos com entrega em 09/09/2026</strong>Conferir embalagem e expedição.</div><div class="alert"><strong>🟡 2 materiais para reposição</strong>Estoque abaixo do mínimo.</div></div></div>
+
+      <!-- Alerts and Needs Panel -->
+      <div class="panel" id="panel-alerts">
+        <div class="panel-header">
+          <h2 class="panel-title" id="title-alerts">Pendências e Atenção</h2>
+        </div>
+        <div class="alerts" id="alerts-list">
+          <div class="alert-card alert-yellow" id="alert-item-1">
+            <div class="alert-title">🟡 3 pedidos aguardando aprovação</div>
+            <div class="alert-desc">Revisar arte e especificações antes de liberar a produção.</div>
+          </div>
+          <div class="alert-card alert-red" id="alert-item-2">
+            <div class="alert-title">🔴 1 pedido bloqueado</div>
+            <div class="alert-desc">Papel couchê 250g insuficiente para finalizar o Kit Festa.</div>
+          </div>
+          <div class="alert-card alert-orange" id="alert-item-3">
+            <div class="alert-title">🟠 5 pedidos com entrega hoje</div>
+            <div class="alert-desc">Conferir embalagem final, notas e etiquetas de expedição.</div>
+          </div>
+          <div class="alert-card alert-yellow" id="alert-item-4">
+            <div class="alert-title">🟡 2 materiais para reposição</div>
+            <div class="alert-desc">Estoque de fitas de cetim e ilhós abaixo do limite mínimo.</div>
+          </div>
+        </div>
+      </div>
     </section>
-    <section class="glass mother"><h2>O que foi feito até hoje?</h2><div class="lifetime"><div class="life"><span>VENDAS</span><b>R$ 0,00</b></div><div class="life"><span>LUCRO</span><b>R$ 0,00</b></div><div class="life"><span>PRODUTOS</span><b>0</b></div></div></section>
-    <section class="glass chart"><div class="panel-title"><h2>Vendas por mês</h2><span class="mini-head">Quantidade de pedidos</span></div><div class="bars"><div class="bar-wrap"><div class="bar" style="height:34%"></div><span class="bar-label">Abr</span></div><div class="bar-wrap"><div class="bar" style="height:48%"></div><span class="bar-label">Mai</span></div><div class="bar-wrap"><div class="bar" style="height:43%"></div><span class="bar-label">Jun</span></div><div class="bar-wrap"><div class="bar" style="height:67%"></div><span class="bar-label">Jul</span></div><div class="bar-wrap"><div class="bar" style="height:76%"></div><span class="bar-label">Ago</span></div><div class="bar-wrap"><div class="bar" style="height:91%"></div><span class="bar-label">Set</span></div></div></section>
+
+    <!-- Summary Lifetime Performance -->
+    <section class="panel mother" id="panel-lifetime">
+      <div class="panel-header">
+        <h2 class="panel-title" id="title-lifetime">O que foi feito até hoje?</h2>
+        <span class="card-label">Acumulado histórico</span>
+      </div>
+      <div class="lifetime-grid" id="lifetime-metrics">
+        <div class="life-card" id="life-card-sales">
+          <span class="life-label">Vendas Totais</span>
+          <b class="life-val" id="val-lifetime-sales">R$ 14.850,00</b>
+        </div>
+        <div class="life-card" id="life-card-profit">
+          <span class="life-label">Lucro Líquido Estimado</span>
+          <b class="life-val" id="val-lifetime-profit">R$ 6.220,00</b>
+        </div>
+        <div class="life-card" id="life-card-prods">
+          <span class="life-label">Produtos Cadastrados</span>
+          <b class="life-val" id="val-lifetime-products">48 itens</b>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sales & Volume Bar Chart -->
+    <section class="panel chart-panel" id="panel-chart">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title" id="title-chart">Vendas por mês</h2>
+          <span class="card-subtext">Evolução do volume de pedidos finalizados</span>
+        </div>
+        <span class="badge-count" id="badge-chart-year">2026</span>
+      </div>
+      <div class="bars" id="sales-bars-container">
+        <div class="bar-wrap" id="bar-wrap-abr">
+          <span class="bar-tooltip" id="tooltip-abr">34 pedidos</span>
+          <div class="bar" id="bar-abr" style="height: 34%"></div>
+          <span class="bar-label">Abr</span>
+        </div>
+        <div class="bar-wrap" id="bar-wrap-mai">
+          <span class="bar-tooltip" id="tooltip-mai">48 pedidos</span>
+          <div class="bar" id="bar-mai" style="height: 48%"></div>
+          <span class="bar-label">Mai</span>
+        </div>
+        <div class="bar-wrap" id="bar-wrap-jun">
+          <span class="bar-tooltip" id="tooltip-jun">43 pedidos</span>
+          <div class="bar" id="bar-jun" style="height: 43%"></div>
+          <span class="bar-label">Jun</span>
+        </div>
+        <div class="bar-wrap" id="bar-wrap-jul">
+          <span class="bar-tooltip" id="tooltip-jul">67 pedidos</span>
+          <div class="bar" id="bar-jul" style="height: 67%"></div>
+          <span class="bar-label">Jul</span>
+        </div>
+        <div class="bar-wrap" id="bar-wrap-ago">
+          <span class="bar-tooltip" id="tooltip-ago">76 pedidos</span>
+          <div class="bar" id="bar-ago" style="height: 76%"></div>
+          <span class="bar-label">Ago</span>
+        </div>
+        <div class="bar-wrap" id="bar-wrap-set">
+          <span class="bar-tooltip" id="tooltip-set">91 pedidos</span>
+          <div class="bar active" id="bar-set" style="height: 91%"></div>
+          <span class="bar-label">Set</span>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
-<div class="save">✓ Salvo automaticamente</div>
+
+<!-- Clean Auto-save Badge -->
+<div class="save-indicator" id="auto-save-pill">
+  <span class="save-dot"></span>
+  <span>Salvo automaticamente</span>
+</div>
+
+<!-- Modal: Novo Pedido -->
+<div class="modal-backdrop" id="modal-order">
+  <div class="modal-box" id="modal-order-box">
+    <div class="modal-header">
+      <h3 id="modal-order-title">Cadastrar Novo Pedido</h3>
+      <button class="modal-close" id="btn-close-modal" aria-label="Fechar modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="order-input-title">Nome / Item do Pedido</label>
+        <input class="form-input" id="order-input-title" placeholder="Ex: Sacola Kraft Personalizada G" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="order-input-qty">Quantidade</label>
+        <input type="number" class="form-input" id="order-input-qty" value="10" min="1" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="order-input-status">Status Inicial</label>
+        <select class="form-select" id="order-input-status">
+          <option value="yellow">Aguardando aprovação</option>
+          <option value="blue" selected>Em produção</option>
+          <option value="red">Bloqueado por material</option>
+          <option value="green">Pronto</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="order-input-date">Data de Entrega</label>
+        <input type="date" class="form-input" id="order-input-date" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="btn-cancel-order">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-order">Salvar Pedido</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Detalhes do Pedido -->
+<div class="modal-backdrop" id="modal-view-order">
+  <div class="modal-box" id="modal-view-box">
+    <div class="modal-header">
+      <h3 id="modal-view-title">Detalhes do Pedido</h3>
+      <button class="modal-close" id="btn-close-view-modal">✕</button>
+    </div>
+    <div class="modal-body" id="modal-view-body">
+      <!-- Injected dynamically -->
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="btn-close-view-ok">Concluído</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Message -->
+<div class="toast" id="system-toast">
+  <span id="toast-icon">✓</span>
+  <span id="toast-message">Operação realizada com sucesso!</span>
+</div>
+
 <script>
-  const pad=n=>String(n).padStart(2,'0');
-  function tick(){const d=new Date();document.querySelector('#date').textContent=`${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;document.querySelector('#clock').textContent=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`}
-  tick();setInterval(tick,1000);
-  if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+  // Initial Orders State
+  let orders = [
+    {
+      id: 1048,
+      title: "Pedido 1048 · Sacola M",
+      qty: 12,
+      date: "09/09/2026",
+      status: "yellow",
+      statusLabel: "Aguardando aprovação"
+    },
+    {
+      id: 1047,
+      title: "Pedido 1047 · Buquê Rosas Queridas",
+      qty: 10,
+      date: "09/09/2026",
+      status: "blue",
+      statusLabel: "Em produção"
+    },
+    {
+      id: 1046,
+      title: "Pedido 1046 · Kit Festa",
+      qty: 30,
+      date: "08/09/2026",
+      status: "red",
+      statusLabel: "Bloqueado por material"
+    },
+    {
+      id: 1045,
+      title: "Pedido 1045 · Sacola P",
+      qty: 25,
+      date: "08/09/2026",
+      status: "green",
+      statusLabel: "Pronto"
+    }
+  ];
+
+  // Status mapping
+  const statusMeta = {
+    yellow: { label: "Aguardando aprovação", class: "status-yellow" },
+    blue: { label: "Em produção", class: "status-blue" },
+    red: { label: "Bloqueado por material", class: "status-red" },
+    green: { label: "Pronto", class: "status-green" }
+  };
+
+  // Clock & Date updates
+  const pad = n => String(n).padStart(2, '0');
+  function updateTime() {
+    const d = new Date();
+    const dateEl = document.getElementById('date');
+    const clockEl = document.getElementById('clock');
+    if (dateEl) {
+      dateEl.textContent = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    }
+    if (clockEl) {
+      clockEl.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+  }
+  updateTime();
+  setInterval(updateTime, 1000);
+
+  // Toast Helper
+  function showToast(msg, isSuccess = true) {
+    const toast = document.getElementById('system-toast');
+    const msgEl = document.getElementById('toast-message');
+    const iconEl = document.getElementById('toast-icon');
+    if (!toast || !msgEl) return;
+    msgEl.textContent = msg;
+    iconEl.textContent = isSuccess ? "✓" : "ℹ";
+    toast.classList.add('show');
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2800);
+  }
+
+  // Render Orders
+  function renderOrders(filterText = '') {
+    const container = document.getElementById('orders-list');
+    const badgeCount = document.getElementById('badge-orders-count');
+    if (!container) return;
+
+    const filtered = orders.filter(o => 
+      o.title.toLowerCase().includes(filterText.toLowerCase()) ||
+      o.statusLabel.toLowerCase().includes(filterText.toLowerCase()) ||
+      String(o.id).includes(filterText)
+    );
+
+    if (badgeCount) {
+      badgeCount.textContent = `${filtered.length} pedido${filtered.length === 1 ? '' : 's'}`;
+    }
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">
+          Nenhum pedido encontrado para "${filterText}".
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = filtered.map(o => {
+      const meta = statusMeta[o.status] || statusMeta.yellow;
+      return `
+        <div class="order-row" id="order-row-${o.id}">
+          <div class="order-main">
+            <div class="order-title">${escapeHtml(o.title)}</div>
+            <div class="order-meta">${o.qty} unidades · ${o.date}</div>
+          </div>
+          <span class="status-badge ${meta.class}">
+            <span class="status-dot"></span>
+            <span>${meta.label}</span>
+          </span>
+          <div class="actions">
+            <button class="action-btn" onclick="cycleStatus(${o.id})" title="Alterar status do pedido">Status</button>
+            <button class="action-btn" onclick="viewOrder(${o.id})" title="Visualizar detalhes">Ver</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>'"]/g, tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[tag] || tag));
+  }
+
+  // Change Status on Click
+  window.cycleStatus = function(id) {
+    const order = orders.find(o => o.id === id);
+    if (!order) return;
+    const cycle = ['yellow', 'blue', 'green', 'red'];
+    const nextIdx = (cycle.indexOf(order.status) + 1) % cycle.length;
+    order.status = cycle[nextIdx];
+    order.statusLabel = statusMeta[order.status].label;
+    
+    // update metric counter
+    updateMetrics();
+    const searchVal = document.getElementById('input-order-search')?.value || '';
+    renderOrders(searchVal);
+    showToast(`Status atualizado para: ${order.statusLabel}`);
+  };
+
+  // View Order Details
+  window.viewOrder = function(id) {
+    const order = orders.find(o => o.id === id);
+    if (!order) return;
+    const viewModal = document.getElementById('modal-view-order');
+    const viewBody = document.getElementById('modal-view-body');
+    const viewTitle = document.getElementById('modal-view-title');
+
+    if (viewTitle) viewTitle.textContent = `Pedido #${order.id}`;
+    if (viewBody) {
+      viewBody.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+          <div>
+            <div style="color: var(--text-muted); font-size: 11px; text-transform: uppercase;">Descrição</div>
+            <div style="font-weight: 600; color: var(--text-primary); margin-top: 2px;">${escapeHtml(order.title)}</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <div style="color: var(--text-muted); font-size: 11px; text-transform: uppercase;">Quantidade</div>
+              <div style="font-weight: 600; color: var(--text-primary); margin-top: 2px;">${order.qty} un</div>
+            </div>
+            <div>
+              <div style="color: var(--text-muted); font-size: 11px; text-transform: uppercase;">Data de Entrega</div>
+              <div style="font-weight: 600; color: var(--text-primary); margin-top: 2px;">${order.date}</div>
+            </div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 11px; text-transform: uppercase;">Situação Atual</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge ${statusMeta[order.status].class}">
+                <span class="status-dot"></span>
+                <span>${statusMeta[order.status].label}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    viewModal?.classList.add('open');
+  };
+
+  function updateMetrics() {
+    const inProd = orders.filter(o => o.status === 'blue').length;
+    const pending = orders.filter(o => o.status === 'yellow').length;
+    const ready = orders.filter(o => o.status === 'green').length;
+
+    const prodEl = document.getElementById('val-orders-prod');
+    const pendEl = document.getElementById('val-orders-pending');
+    const readyEl = document.getElementById('val-orders-ready');
+
+    if (prodEl) prodEl.textContent = pad(inProd);
+    if (pendEl) pendEl.textContent = pad(pending);
+    if (readyEl) readyEl.textContent = pad(ready);
+  }
+
+  // Setup Event Listeners
+  document.addEventListener('DOMContentLoaded', () => {
+    renderOrders();
+    updateMetrics();
+
+    // Default today date for new order input
+    const today = new Date().toISOString().split('T')[0];
+    const orderDateInput = document.getElementById('order-input-date');
+    if (orderDateInput) orderDateInput.value = today;
+
+    // Search filter
+    const searchInput = document.getElementById('input-order-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        renderOrders(e.target.value);
+      });
+    }
+
+    // Modal: New Order
+    const modalOrder = document.getElementById('modal-order');
+    const btnNewOrder = document.getElementById('btn-quick-new-order');
+    const btnCloseModal = document.getElementById('btn-close-modal');
+    const btnCancelOrder = document.getElementById('btn-cancel-order');
+    const btnSaveOrder = document.getElementById('btn-save-order');
+
+    const openOrderModal = () => {
+      modalOrder?.classList.add('open');
+      document.getElementById('order-input-title')?.focus();
+    };
+    const closeOrderModal = () => {
+      modalOrder?.classList.remove('open');
+    };
+
+    btnNewOrder?.addEventListener('click', openOrderModal);
+    btnCloseModal?.addEventListener('click', closeOrderModal);
+    btnCancelOrder?.addEventListener('click', closeOrderModal);
+
+    btnSaveOrder?.addEventListener('click', () => {
+      const titleInput = document.getElementById('order-input-title');
+      const qtyInput = document.getElementById('order-input-qty');
+      const statusInput = document.getElementById('order-input-status');
+      const dateInput = document.getElementById('order-input-date');
+
+      const title = titleInput?.value.trim() || 'Novo Pedido Personalizado';
+      const qty = parseInt(qtyInput?.value || '1', 10);
+      const status = statusInput?.value || 'blue';
+      const rawDate = dateInput?.value || '';
+      
+      let formattedDate = 'Hoje';
+      if (rawDate) {
+        const parts = rawDate.split('-');
+        if (parts.length === 3) {
+          formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+
+      const nextId = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1050;
+
+      orders.unshift({
+        id: nextId,
+        title: `Pedido ${nextId} · ${title}`,
+        qty: qty,
+        date: formattedDate,
+        status: status,
+        statusLabel: statusMeta[status].label
+      });
+
+      // Update counters
+      const todayCount = document.getElementById('val-orders-today');
+      if (todayCount) {
+        const current = parseInt(todayCount.textContent, 10) || 0;
+        todayCount.textContent = pad(current + 1);
+      }
+
+      updateMetrics();
+      renderOrders(searchInput?.value || '');
+      closeOrderModal();
+      if (titleInput) titleInput.value = '';
+      showToast(`Pedido #${nextId} cadastrado com sucesso!`);
+    });
+
+    // Close View modal
+    const viewModal = document.getElementById('modal-view-order');
+    document.getElementById('btn-close-view-modal')?.addEventListener('click', () => {
+      viewModal?.classList.remove('open');
+    });
+    document.getElementById('btn-close-view-ok')?.addEventListener('click', () => {
+      viewModal?.classList.remove('open');
+    });
+
+    // Quick Action buttons
+    document.getElementById('btn-quick-new-product')?.addEventListener('click', () => {
+      showToast("Novo produto: acesse o módulo Produtos para cadastrar.", false);
+    });
+    document.getElementById('btn-quick-bulk')?.addEventListener('click', () => {
+      showToast("Personalização em massa: 12 itens selecionáveis.", false);
+    });
+    document.getElementById('btn-quick-purchase')?.addEventListener('click', () => {
+      showToast("Nova compra de insumos registrada para o estoque.", true);
+    });
+    document.getElementById('btn-quick-import')?.addEventListener('click', () => {
+      showToast("Importar CSV: selecione arquivo de pedidos ou insumos.", false);
+    });
+
+    // Sidebar navigation active state toggle
+    const navButtons = document.querySelectorAll('#sidebar-nav button');
+    navButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        navButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const view = btn.getAttribute('data-view') || 'módulo';
+        showToast(`Navegando para: ${view.charAt(0).toUpperCase() + view.slice(1)}`);
+      });
+    });
+
+    // Close modals on clicking backdrop
+    window.addEventListener('click', (e) => {
+      if (e.target === modalOrder) closeOrderModal();
+      if (e.target === viewModal) viewModal.classList.remove('open');
+    });
+  });
+
+  // Service Worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  }
 </script>
 </body>
 </html>
+
