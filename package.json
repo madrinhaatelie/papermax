@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "build": "echo 'Build complete'",
+    "build": "npm run lint",
     "start": "node server.js",
     "lint": "node --check server.js"
   },
@@ -12,5 +12,8 @@
     "@google/genai": "^2.22.0",
     "express": "^4.21.2",
     "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@vercel/node": "^13.0.1"
   }
 }
