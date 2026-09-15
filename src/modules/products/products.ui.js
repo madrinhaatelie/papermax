@@ -110,7 +110,6 @@ export function renderProductsRankingView(container, options = {}) {
       <div class="panel-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-subtle);">
         <div>
           <h3 class="panel-title">Ranking Comercial de Desempenho</h3>
-          <span class="card-subtext">Cálculo determinístico com base nos pedidos reais, custos BOM e imutabilidade dos snapshots</span>
         </div>
       </div>
 
@@ -257,7 +256,6 @@ export function renderProductsTrendsView(container, options = {}) {
     <div class="module-header" style="margin-top: 12px; margin-bottom: 12px;">
       <div>
         <h3 class="panel-title" style="font-size: 16px;">📈 Tendências de Mercado e Padrões de Demanda</h3>
-        <p class="module-subtitle">Diagnósticos explicáveis derivados dos pedidos reais, variações de volume e margens calculadas.</p>
       </div>
     </div>
 
@@ -380,7 +378,6 @@ export function renderProductsTrendsView(container, options = {}) {
       <div class="panel-header" style="margin-bottom: 12px;">
         <div>
           <h3 class="panel-title">🗓 Calendário e Picos Sazonais de Papelaria Personalizada</h3>
-          <span class="card-subtext">Datas comemorativas chave mapeadas com base no comportamento dos pedidos</span>
         </div>
       </div>
 
@@ -423,7 +420,6 @@ export function renderProductsCapacityView(container, options = {}) {
     <div class="module-header" style="margin-top: 12px; margin-bottom: 12px;">
       <div>
         <h3 class="panel-title" style="font-size: 16px;">📦 Inteligência de Estoque vs. Demanda de Produtos</h3>
-        <p class="module-subtitle">Capacidade produtiva máxima com base no estoque disponível e identificação antecipada de gargalos de insumos.</p>
       </div>
     </div>
 

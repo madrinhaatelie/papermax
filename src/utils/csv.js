@@ -92,3 +92,5 @@ export function downloadCSV(filename, csvContent) {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+export const downloadCSVFile = downloadCSV;

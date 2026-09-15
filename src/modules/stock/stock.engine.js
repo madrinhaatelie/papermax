@@ -701,31 +701,40 @@ export function calculateProductCapacity(product, materials = [], components = [
 export function checkOrderStockAvailability(order, products = [], materials = [], components = []) {
   if (!order) return { sufficient: true, missingMaterials: [] };
 
-  const product = order.productSnapshot || products.find(p => p.id === order.productId);
-  if (!product) return { sufficient: true, missingMaterials: [] };
+  const items = (order.items && order.items.length > 0) ? order.items : [{
+    productSnapshot: order.productSnapshot || products.find(p => p.id === order.productId),
+    qty: Number(order.qty) || 1
+  }];
 
-  const orderQty = Number(order.qty) || 1;
   const materialsMap = Object.fromEntries(materials.map(m => [m.id, m]));
-  const expanded = expandProductComposition(product, orderQty, materials, components);
+  const requiredMaterialsMap = {};
+
+  for (const item of items) {
+    if (!item.productSnapshot) continue;
+    const expanded = expandProductComposition(item.productSnapshot, item.qty, materials, components);
+    for (const matItem of expanded.flattenedInsumos) {
+      const mat = materialsMap[matItem.materialId];
+      if (!mat) continue;
+      const baseUnit = mat.baseUnit || matItem.unit;
+      const required = convertUnit(matItem.requiredQty, matItem.unit, baseUnit, mat.packQuantity || 1);
+      requiredMaterialsMap[matItem.materialId] = (requiredMaterialsMap[matItem.materialId] || 0) + required;
+    }
+  }
 
   const missingMaterials = [];
 
-  for (const item of expanded.flattenedInsumos) {
-    const mat = materialsMap[item.materialId];
+  for (const [materialId, requiredQty] of Object.entries(requiredMaterialsMap)) {
+    const mat = materialsMap[materialId];
     if (!mat) continue;
-
-    const baseUnit = mat.baseUnit || item.unit;
-    const required = convertUnit(item.requiredQty, item.unit, baseUnit, mat.packQuantity || 1);
     const current = Number(mat.currentStock) || 0;
-
-    if (current < required) {
+    if (current < requiredQty) {
       missingMaterials.push({
         materialId: mat.id,
         name: mat.name,
-        requiredQty: Number(required.toFixed(2)),
+        requiredQty: Number(requiredQty.toFixed(2)),
         currentStock: current,
-        missingQty: Number((required - current).toFixed(2)),
-        unit: baseUnit
+        missingQty: Number((requiredQty - current).toFixed(2)),
+        unit: mat.baseUnit || mat.unit
       });
     }
   }
@@ -758,19 +767,30 @@ export function consumeOrderMaterials(order, { materials = [], components = [], 
     };
   }
 
-  const product = order.productSnapshot || order.product || (order.composition ? order : {});
-  const orderQty = Number(order.qty) || 1;
-  const expanded = expandProductComposition(product, orderQty, materials, components);
+  const items = (order.items && order.items.length > 0) ? order.items : [{
+    productSnapshot: order.productSnapshot || order.product || (order.composition ? order : {}),
+    qty: Number(order.qty) || 1
+  }];
 
   const createdMovements = [];
   const materialsMap = Object.fromEntries(materials.map(m => [m.id, m]));
+  const requiredMaterialsMap = {};
 
-  for (const item of expanded.flattenedInsumos) {
-    const mat = materialsMap[item.materialId];
+  for (const item of items) {
+    if (!item.productSnapshot) continue;
+    const expanded = expandProductComposition(item.productSnapshot, item.qty, materials, components);
+    for (const matItem of expanded.flattenedInsumos) {
+      const mat = materialsMap[matItem.materialId];
+      if (!mat) continue;
+      const baseUnit = mat.baseUnit || matItem.unit;
+      const deductQty = convertUnit(matItem.requiredQty, matItem.unit, baseUnit, mat.packQuantity || 1);
+      requiredMaterialsMap[matItem.materialId] = (requiredMaterialsMap[matItem.materialId] || 0) + deductQty;
+    }
+  }
+
+  for (const [materialId, deductQty] of Object.entries(requiredMaterialsMap)) {
+    const mat = materialsMap[materialId];
     if (!mat) continue;
-
-    const baseUnit = mat.baseUnit || item.unit;
-    const deductQty = convertUnit(item.requiredQty, item.unit, baseUnit, mat.packQuantity || 1);
 
     const prevStock = Number(mat.currentStock) || 0;
     const newStock = Math.max(0, prevStock - deductQty);
@@ -785,14 +805,14 @@ export function consumeOrderMaterials(order, { materials = [], components = [], 
       type: 'saida',
       reason: 'producao',
       quantity: Number(deductQty.toFixed(2)),
-      unit: baseUnit,
+      unit: mat.baseUnit || mat.unit,
       previousStock: prevStock,
       newStock: Number(newStock.toFixed(2)),
       origin: `Pedido #${order.number} · ${order.customer || 'Cliente'}`,
       orderId: order.id,
       productId: order.productId,
       operator,
-      notes: notes || `Consumo de produção para ${orderQty} un de ${order.productTitle || product?.name || 'Item'}`,
+      notes: notes || `Consumo de produção para itens do Pedido #${order.number}`,
       createdAt: new Date().toISOString()
     };
 

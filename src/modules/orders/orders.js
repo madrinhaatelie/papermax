@@ -204,76 +204,148 @@ export function getNextOrderNumber() {
 }
 
 export function createOrder(payload) {
-  // 1. Validation
-  const customer = (payload.customer || '').trim();
-  if (!customer) {
-    throw new Error('Informe o Nome do cliente.');
-  }
-
-  const qty = parseInt(payload.qty, 10);
-  if (isNaN(qty) || qty < 1) {
-    throw new Error('A quantidade deve ser de no mínimo 1 item.');
+  let customerName = (payload.customer || '').trim();
+  if (!customerName && payload.customerType === 'PJ') customerName = (payload.customerCompany || '').trim();
+  if (!customerName) {
+    throw new Error('Informe o Nome/Empresa do cliente.');
   }
 
   const products = loadProducts();
-  const selectedProduct = products.find(p => p.id === payload.productId);
-  if (!selectedProduct) {
-    throw new Error('Selecione um produto cadastrado no catálogo.');
+  const items = Array.isArray(payload.items) && payload.items.length > 0 ? payload.items : [];
+  
+  if (items.length === 0 && payload.productId) {
+    items.push({
+      productId: payload.productId,
+      qty: parseInt(payload.qty || 1, 10),
+      personalization: payload.personalization || {},
+      changeOptions: payload.changeOptions || {},
+      unitPrice: payload.unitPrice || 0,
+      totalPrice: payload.totalPrice || 0,
+      notes: payload.notes || ''
+    });
   }
 
-  // 2. Validate required personalization fields defined in product
-  const personalization = payload.personalization || {};
-  if (Array.isArray(selectedProduct.personalizationFields)) {
-    for (const field of selectedProduct.personalizationFields) {
-      if (field.required) {
-        const val = personalization[field.id];
-        if (val === undefined || val === null || String(val).trim() === '') {
-          throw new Error(`Informe o campo obrigatório de personalização: "${field.name}".`);
+  if (items.length === 0) {
+    throw new Error('A ordem deve ter pelo menos um item.');
+  }
+
+  const processedItems = [];
+  let totalCalculated = 0;
+
+  for (const item of items) {
+    const qty = parseInt(item.qty, 10);
+    if (isNaN(qty) || qty < 1) {
+      throw new Error('A quantidade deve ser de no mínimo 1 item para todos os produtos.');
+    }
+    const selectedProduct = products.find(p => p.id === item.productId);
+    if (!selectedProduct) {
+      throw new Error('Um dos produtos selecionados não foi encontrado no catálogo.');
+    }
+
+    const personalization = item.personalization || {};
+    if (Array.isArray(selectedProduct.personalizationFields)) {
+      for (const field of selectedProduct.personalizationFields) {
+        if (field.required) {
+          const val = personalization[field.id];
+          if (val === undefined || val === null || String(val).trim() === '') {
+            throw new Error(`Informe o campo obrigatório de personalização: "${field.name}" para o produto ${selectedProduct.name}.`);
+          }
         }
       }
     }
-  }
 
-  // 3. Validate required change options defined in product
-  const changeOptions = payload.changeOptions || {};
-  if (Array.isArray(selectedProduct.changeOptions)) {
-    for (const opt of selectedProduct.changeOptions) {
-      if (opt.required) {
-        const val = changeOptions[opt.id];
-        if (val === undefined || val === null || String(val).trim() === '') {
-          throw new Error(`Selecione a opção obrigatória: "${opt.name}".`);
+    const changeOptions = item.changeOptions || {};
+    if (Array.isArray(selectedProduct.changeOptions)) {
+      for (const opt of selectedProduct.changeOptions) {
+        if (opt.required) {
+          const val = changeOptions[opt.id];
+          if (val === undefined || val === null || String(val).trim() === '') {
+            throw new Error(`Selecione a opção obrigatória: "${opt.name}" para o produto ${selectedProduct.name}.`);
+          }
         }
       }
     }
-  }
 
-  // 4. Create frozen ProductSnapshot (Critical rule!)
-  const productSnapshot = createSnapshotFromProduct(selectedProduct);
+    const productSnapshot = createSnapshotFromProduct(selectedProduct);
+    const unitPrice = item.unitPrice !== undefined ? Number(item.unitPrice) : (selectedProduct.price || 0);
+    const totalPrice = unitPrice * qty;
+    totalCalculated += totalPrice;
+
+    processedItems.push({
+      id: generateId('itm'),
+      productId: selectedProduct.id,
+      productTitle: selectedProduct.name,
+      qty,
+      personalization,
+      changeOptions,
+      productSnapshot,
+      unitPrice,
+      totalPrice,
+      notes: (item.notes || '').trim()
+    });
+  }
 
   const nextNum = getNextOrderNumber();
   const statusKey = payload.status && ORDER_STATUS_MAP[payload.status] ? payload.status : 'yellow';
   const statusLabel = ORDER_STATUS_MAP[statusKey].label;
-
+  
+  const eventDateFormatted = payload.eventDate ? formatDateBR(payload.eventDate) : '';
+  const limitDateFormatted = payload.limitDate ? formatDateBR(payload.limitDate) : '';
   const deliveryDateFormatted = formatDateBR(payload.deliveryDate || new Date());
   const orderDateFormatted = formatDateBR(payload.orderDate || new Date());
+
+  const primaryItem = processedItems[0];
+  const orderTitle = processedItems.length > 1 ? `Vários Itens (${processedItems.length})` : primaryItem.productTitle;
 
   const newOrder = {
     id: nextNum,
     number: nextNum,
-    customer,
-    productId: selectedProduct.id,
-    productTitle: selectedProduct.name,
-    title: `Pedido ${nextNum} · ${selectedProduct.name}`,
-    qty,
+    
+    customerType: payload.customerType || 'PF',
+    customer: customerName,
+    customerPhone: payload.customerPhone || '',
+    customerBirthDate: payload.customerBirthDate || '',
+    customerCPF: payload.customerCPF || '',
+    customerCNPJ: payload.customerCNPJ || '',
+    customerCompany: payload.customerCompany || '',
+    
+    deliveryCep: payload.deliveryCep || '',
+    deliveryAddress: payload.deliveryAddress || '',
+    deliveryNumber: payload.deliveryNumber || '',
+    deliveryNeighborhood: payload.deliveryNeighborhood || '',
+    deliveryCity: payload.deliveryCity || '',
+    deliveryState: payload.deliveryState || '',
+    deliveryNotes: payload.deliveryNotes || '',
+
+    eventDate: eventDateFormatted,
+    limitDate: limitDateFormatted,
+
+    items: processedItems,
+
+    productId: primaryItem.productId,
+    productTitle: orderTitle,
+    title: `Pedido ${nextNum} · ${orderTitle}`,
+    qty: primaryItem.qty,
+    personalization: primaryItem.personalization,
+    changeOptions: primaryItem.changeOptions,
+    productSnapshot: primaryItem.productSnapshot,
+
     orderDate: orderDateFormatted,
     deliveryDate: deliveryDateFormatted,
     status: statusKey,
     statusLabel,
-    personalization,
-    changeOptions,
-    productSnapshot, // Frozen snapshot: product modifications will NEVER change this
+    
     generatedFiles: Array.isArray(payload.generatedFiles) ? payload.generatedFiles : [],
     notes: (payload.notes || '').trim(),
+    
+    financial: payload.financial || {
+      totalAmount: totalCalculated,
+      paidAmount: payload.paidAmount || 0,
+      remainingAmount: (payload.remainingAmount !== undefined) ? payload.remainingAmount : totalCalculated,
+      discount: payload.discount || 0,
+      paymentMethods: payload.paymentMethod ? [{ method: payload.paymentMethod, amount: payload.paidAmount || 0 }] : []
+    },
+
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };

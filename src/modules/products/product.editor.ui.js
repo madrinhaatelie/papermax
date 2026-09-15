@@ -93,26 +93,26 @@ export function openProductConfigDrawer({
         </div>
 
         <!-- Abas de Navegação -->
-        <div style="display: flex; gap: 4px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 14px; overflow-x: auto; padding-bottom: 2px;">
-          <button class="btn btn-sm ${activeTab === 'geral' ? 'btn-primary' : ''}" data-tab-btn="geral" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;">
+        <div class="binder-tabs">
+          <button type="button" class="binder-tab ${activeTab === 'geral' ? 'active' : ''}" data-tab-btn="geral">
             1. Geral & Preço
           </button>
-          <button class="btn btn-sm ${activeTab === 'personalizacao' ? 'btn-primary' : ''}" data-tab-btn="personalizacao" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;" title="Textos e dados fornecidos pelo cliente (Ex: Nome, Idade, Frase)">
-            2. Personalização: Textos (${(product.personalizationFields || []).length})
+          <button type="button" class="binder-tab ${activeTab === 'personalizacao' ? 'active' : ''}" data-tab-btn="personalizacao" title="Textos e dados fornecidos pelo cliente (Ex: Nome, Idade, Frase)">
+            2. Personalização (${(product.personalizationFields || []).length})
           </button>
-          <button class="btn btn-sm ${activeTab === 'alteracoes' ? 'btn-primary' : ''}" data-tab-btn="alteracoes" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;" title="Acabamentos e opções físicas de produção (Ex: Cor, Material, Alça)">
-            3. Alterações: Variações (${(product.changeOptions || []).length})
+          <button type="button" class="binder-tab ${activeTab === 'alteracoes' ? 'active' : ''}" data-tab-btn="alteracoes" title="Acabamentos e opções físicas de produção (Ex: Cor, Material, Alça)">
+            3. Alterações (${(product.changeOptions || []).length})
           </button>
-          <button class="btn btn-sm ${activeTab === 'gabarito' ? 'btn-primary' : ''}" data-tab-btn="gabarito" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;">
-            4. Áreas / Gabarito (${(product.editor?.textAreas || []).length})
+          <button type="button" class="binder-tab ${activeTab === 'gabarito' ? 'active' : ''}" data-tab-btn="gabarito">
+            4. Gabarito (${(product.editor?.textAreas || []).length})
           </button>
-          <button class="btn btn-sm ${activeTab === 'pdfbase' ? 'btn-primary' : ''}" data-tab-btn="pdfbase" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;">
+          <button type="button" class="binder-tab ${activeTab === 'pdfbase' ? 'active' : ''}" data-tab-btn="pdfbase">
             5. PDF Base
           </button>
         </div>
 
         <!-- Conteúdo da Aba Ativa -->
-        <div id="product-editor-tab-body">
+        <div id="product-editor-tab-body" class="binder-panel">
           ${renderActiveTab(categories)}
         </div>
       </div>

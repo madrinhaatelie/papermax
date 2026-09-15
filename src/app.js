@@ -6,7 +6,7 @@
 import { bus, showToast } from './core/events.js';
 import { onSaveStatusChange, loadSettings, saveSettings } from './data/storage.js';
 import { exportBackup, restoreBackup, getLastBackupTimestamp } from './data/backup.engine.js';
-import { getAuthenticatedUser, renderLoginScreen } from './data/auth.js';
+import { getAuthenticatedUser, renderLoginScreen, getGreetingPhrase } from './data/auth.js';
 import { calculateDashboardMetrics } from './modules/dashboard/dashboard.js';
 import {
   getAutomationRules,
@@ -83,6 +83,12 @@ import { renderFinanceModule } from './modules/finance/finance.ui.js';
 import { openBulkPersonalizationModal } from './modules/personalization/bulk.ui.js';
 import { generatePersonalizedPdf, triggerPdfDownload } from './modules/personalization/pdf.engine.js';
 import { openProductConfigDrawer } from './modules/products/product.editor.ui.js';
+import {
+  renderOrdersView as renderOrdersModuleView,
+  renderNewOrderPage,
+  showOrderConsultationDrawer,
+  openEditOrderDrawer as openEditOrderDrawerModule
+} from './modules/orders/orders.ui.js';
 import { fileStorage } from './data/filestorage.js';
 import { escapeHtml, formatCurrency, formatDateBR, formatDateShortBR, parseDateBRToISO, generateId } from './utils/sanitize.js';
 import { initCopilotUI } from './modules/copilot/copilot.ui.js';
@@ -93,6 +99,7 @@ let ordersTab = 'em_andamento'; // 'em_andamento' | 'todos' | 'aguardando' | 'pr
 let productsTab = 'todos'; // 'todos' | 'vitrine' | 'ranking' | 'categorias'
 let orderSearchTerm = '';
 let productSearchTerm = '';
+let dashboardStageFilter = null;
 
 // ==========================================
 // TOAST NOTIFICATION (Re-exported from core/events to eliminate duplication)
@@ -154,6 +161,16 @@ function initClock() {
 
       dateEl.textContent = `${day}/${month}/${year}`;
       clockEl.textContent = `${hours}:${minutes}:${seconds}`;
+    }
+
+    const greetingTitle = document.getElementById('greeting-title');
+    if (greetingTitle && greetingTitle.textContent !== 'Olá, Diretora Master Julia Aleixo') {
+      greetingTitle.textContent = 'Olá, Diretora Master Julia Aleixo';
+    }
+    const greetingSubtitle = document.getElementById('greeting-subtitle');
+    if (greetingSubtitle && !greetingSubtitle.dataset.initialized) {
+      greetingSubtitle.textContent = `Hoje o dia está perfeito para ${getGreetingPhrase()}`;
+      greetingSubtitle.dataset.initialized = 'true';
     }
   }
 
@@ -218,6 +235,8 @@ export function closeDrawer() {
 // ==========================================
 // RENDER: DASHBOARD VIEW
 // ==========================================
+// RENDER: INÍCIO (DASHBOARD)
+// ==========================================
 function renderDashboard() {
   const container = document.getElementById('view-container');
   if (!container) return;
@@ -225,7 +244,7 @@ function renderDashboard() {
   const metrics = calculateDashboardMetrics();
 
   container.innerHTML = `
-    <!-- Stat Metric Cards -->
+    <!-- BLOCO 01: Cards de Métricas Principais (Stat Cards) -->
     <section class="cards" id="metric-cards-grid">
       <div class="card" id="card-metric-today">
         <div class="card-top">
@@ -233,7 +252,6 @@ function renderDashboard() {
           <span class="card-icon-badge">📋</span>
         </div>
         <div class="card-value" id="val-orders-today">${metrics.todayCount}</div>
-        <div class="card-subtext">Data de criação ou entrega hoje</div>
       </div>
 
       <div class="card" id="card-metric-prod">
@@ -242,7 +260,6 @@ function renderDashboard() {
           <span class="card-icon-badge">⚙</span>
         </div>
         <div class="card-value" id="val-orders-prod">${metrics.inProdCount}</div>
-        <div class="card-subtext">Pedidos em fase de execução</div>
       </div>
 
       <div class="card" id="card-metric-pending">
@@ -251,119 +268,102 @@ function renderDashboard() {
           <span class="card-icon-badge">⚠️</span>
         </div>
         <div class="card-value" id="val-orders-pending">${metrics.pendingCount}</div>
-        <div class="card-subtext">Aguardando aprovação ou insumo</div>
       </div>
 
       <div class="card" id="card-metric-ready">
         <div class="card-top">
-          <span class="card-label">Prontos</span>
+          <span class="card-label">Liberado Para Entrega</span>
           <span class="card-icon-badge">✓</span>
         </div>
         <div class="card-value" id="val-orders-ready">${metrics.readyCount}</div>
-        <div class="card-subtext">Prontos para envio ou retirada</div>
       </div>
     </section>
 
-    <!-- Operational Production Pipeline: "O que preciso produzir hoje?" (Etapa 4) -->
+    <!-- BLOCO 02: Esteira Operacional: "O que vou produzir hoje?" -->
     <section class="operational-strip" id="sec-operational-pipeline">
       <div class="operational-strip-header">
-        <div class="operational-strip-title">
-          <span>🏭 O que preciso produzir hoje?</span>
-          <span style="font-size: 11px; font-weight: 500; color: var(--text-muted);">Visão operacional diária</span>
+        <div class="operational-strip-title" style="display: flex; align-items: center; gap: 10px;">
+          <span>🏭 O que vou produzir hoje?</span>
+          ${dashboardStageFilter ? `<span style="font-size: 11px; font-weight: 600; color: var(--accent-primary); background: #e0e7ff; padding: 2px 8px; border-radius: 999px;">Filtro: ${escapeHtml(dashboardStageFilter)} · <a href="#" id="link-clear-stage-filter" style="text-decoration: underline; color: inherit;">Limpar</a></span>` : ''}
         </div>
         <button class="btn btn-sm" id="btn-dash-open-print-queue" style="font-size: 11px; padding: 4px 10px; font-weight: 600;">
-          🖨 Abrir Fila de Impressão (${metrics.operational.printQueueCount})
+          🖨 Resumo diário (${metrics.operational.printQueueCount})
         </button>
       </div>
 
       <div class="pipeline-grid">
-        <div class="pipeline-card" data-dash-tab="aguardando" title="Ver pedidos aguardando">
+        <div class="pipeline-card ${dashboardStageFilter === 'aguardando' ? 'active-filter' : ''}" data-dash-tab="aguardando" title="Filtrar pedidos aguardando" style="cursor: pointer; ${dashboardStageFilter === 'aguardando' ? 'border: 2px solid #eab308; background: #fefce8;' : ''}">
           <div class="pipeline-card-top">
             <span class="pipeline-card-label">🟡 Aguardando</span>
-            <span class="status-dot" style="background: var(--status-yellow-dot);"></span>
           </div>
           <div class="pipeline-card-count">${metrics.operational.awaitingCount}</div>
         </div>
 
-        <div class="pipeline-card" data-dash-tab="impressao" title="Ver pedidos em Impressão">
+        <div class="pipeline-card ${dashboardStageFilter === 'impressao' ? 'active-filter' : ''}" data-dash-tab="impressao" title="Filtrar pedidos em Impressão" style="cursor: pointer; ${dashboardStageFilter === 'impressao' ? 'border: 2px solid #3b82f6; background: #eff6ff;' : ''}">
           <div class="pipeline-card-top">
             <span class="pipeline-card-label">🖨 Impressão</span>
-            <span class="status-dot" style="background: var(--status-blue-dot);"></span>
           </div>
           <div class="pipeline-card-count" style="color: var(--accent-primary);">${metrics.operational.impressaoCount}</div>
         </div>
 
-        <div class="pipeline-card" data-dash-tab="corte" title="Ver pedidos em Corte">
+        <div class="pipeline-card ${dashboardStageFilter === 'corte' ? 'active-filter' : ''}" data-dash-tab="corte" title="Filtrar pedidos em Corte" style="cursor: pointer; ${dashboardStageFilter === 'corte' ? 'border: 2px solid #2563eb; background: #eff6ff;' : ''}">
           <div class="pipeline-card-top">
             <span class="pipeline-card-label">✂ Corte</span>
-            <span class="status-dot" style="background: #2563eb;"></span>
           </div>
           <div class="pipeline-card-count">${metrics.operational.corteCount}</div>
         </div>
 
-        <div class="pipeline-card" data-dash-tab="vinco" title="Ver pedidos em Vinco">
+        <div class="pipeline-card ${dashboardStageFilter === 'vinco' ? 'active-filter' : ''}" data-dash-tab="vinco" title="Filtrar pedidos em Vinco" style="cursor: pointer; ${dashboardStageFilter === 'vinco' ? 'border: 2px solid #9333ea; background: #faf5ff;' : ''}">
           <div class="pipeline-card-top">
             <span class="pipeline-card-label">📐 Vinco</span>
-            <span class="status-dot" style="background: #9333ea;"></span>
           </div>
           <div class="pipeline-card-count">${metrics.operational.vincoCount}</div>
         </div>
 
-        <div class="pipeline-card" data-dash-tab="montagem" title="Ver pedidos em Montagem">
+        <div class="pipeline-card ${dashboardStageFilter === 'montagem' ? 'active-filter' : ''}" data-dash-tab="montagem" title="Filtrar pedidos em Montagem" style="cursor: pointer; ${dashboardStageFilter === 'montagem' ? 'border: 2px solid #4f46e5; background: #eef2ff;' : ''}">
           <div class="pipeline-card-top">
             <span class="pipeline-card-label">🧩 Montagem</span>
-            <span class="status-dot" style="background: #4f46e5;"></span>
           </div>
           <div class="pipeline-card-count">${metrics.operational.montagemCount}</div>
         </div>
 
-        <div class="pipeline-card" data-dash-tab="acabamento" title="Ver pedidos em Acabamento">
+        <div class="pipeline-card ${dashboardStageFilter === 'acabamento' ? 'active-filter' : ''}" data-dash-tab="acabamento" title="Filtrar pedidos em Acabamento" style="cursor: pointer; ${dashboardStageFilter === 'acabamento' ? 'border: 2px solid #0284c7; background: #f0f9ff;' : ''}">
           <div class="pipeline-card-top">
             <span class="pipeline-card-label">✨ Acabamento</span>
-            <span class="status-dot" style="background: #0284c7;"></span>
           </div>
           <div class="pipeline-card-count">${metrics.operational.acabamentoCount}</div>
         </div>
 
-        <div class="pipeline-card" data-dash-tab="conferencia" title="Ver pedidos em CQ / Conferência">
+        <div class="pipeline-card ${dashboardStageFilter === 'conferencia' ? 'active-filter' : ''}" data-dash-tab="conferencia" title="Filtrar pedidos em CQ / Conferência" style="cursor: pointer; ${dashboardStageFilter === 'conferencia' ? 'border: 2px solid #ea580c; background: #fff7ed;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">🔍 CQ</span>
-            <span class="status-dot" style="background: #ea580c;"></span>
+            <span class="pipeline-card-label">🔍 CQ / Conferência</span>
           </div>
           <div class="pipeline-card-count" style="color: #c2410c;">${metrics.operational.conferenciaCount}</div>
         </div>
 
-        <div class="pipeline-card" data-dash-tab="embalagem" title="Ver pedidos em Embalagem">
+        <div class="pipeline-card ${dashboardStageFilter === 'embalagem' ? 'active-filter' : ''}" data-dash-tab="embalagem" title="Filtrar pedidos em Embalagem" style="cursor: pointer; ${dashboardStageFilter === 'embalagem' ? 'border: 2px solid #0d9488; background: #f0fdfa;' : ''}">
           <div class="pipeline-card-top">
             <span class="pipeline-card-label">📦 Embalagem</span>
-            <span class="status-dot" style="background: #0d9488;"></span>
           </div>
           <div class="pipeline-card-count">${metrics.operational.embalagemCount}</div>
         </div>
 
-        <div class="pipeline-card" data-dash-tab="pronto" title="Ver pedidos Prontos">
+        <div class="pipeline-card ${dashboardStageFilter === 'pronto' ? 'active-filter' : ''}" data-dash-tab="pronto" title="Filtrar pedidos Prontos" style="cursor: pointer; ${dashboardStageFilter === 'pronto' ? 'border: 2px solid #10b981; background: #ecfdf5;' : ''}">
           <div class="pipeline-card-top">
             <span class="pipeline-card-label">✓ Pronto</span>
-            <span class="status-dot" style="background: var(--status-green-dot);"></span>
           </div>
           <div class="pipeline-card-count" style="color: #059669;">${metrics.operational.prontoCount}</div>
         </div>
       </div>
     </section>
 
-    <!-- Two-column Operational Layout -->
+    <!-- BLOCO 03 & BLOCO 04: Two-column Operational Layout -->
     <section class="layout" id="operational-layout">
-      <!-- Active Orders Panel -->
+      <!-- BLOCO 03: Active Orders Panel -->
       <div class="panel" id="panel-orders">
-        <div class="panel-header">
-          <h2 class="panel-title" id="title-orders">
-            Pedidos ativos
-            <span class="badge-count" id="badge-orders-count">${metrics.activeOrders.length} pedidos</span>
-          </h2>
-          <div class="search-wrapper">
-            <span class="search-icon">🔍</span>
-            <input class="search" id="input-dashboard-search" placeholder="Buscar pedido ou produto..." value="${escapeHtml(orderSearchTerm)}" />
-          </div>
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <h2 class="panel-title" id="title-orders" style="margin: 0;">Pedidos ativos</h2>
+          <span class="badge-count" id="badge-orders-count" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">(${metrics.activeOrders.length} pedidos)</span>
         </div>
 
         <div class="orders" id="dashboard-orders-list">
@@ -371,7 +371,7 @@ function renderDashboard() {
         </div>
       </div>
 
-      <!-- Alerts and Needs Panel -->
+      <!-- BLOCO 04: Alerts and Needs Panel -->
       <div class="panel" id="panel-alerts">
         <div class="panel-header">
           <h2 class="panel-title" id="title-alerts">Pendências e Atenção</h2>
@@ -379,8 +379,8 @@ function renderDashboard() {
         <div class="alerts" id="alerts-list">
           ${metrics.commercial?.highestGrowth ? `
             <div class="alert-card alert-blue" style="cursor: pointer;" id="dash-alert-growth" title="Clique para ver o ranking de produtos">
-              <div class="alert-title">🚀 Produto em Maior Crescimento: ${escapeHtml(metrics.commercial.highestGrowth.name)} (+${metrics.commercial.highestGrowth.growthQtyPct.toFixed(1)}%)</div>
-              <div class="alert-desc">${metrics.commercial.highestGrowth.qty} un vendidas nos últimos 30 dias (${formatCurrency(metrics.commercial.highestGrowth.revenue)}). Clique para ver análise.</div>
+              <div class="alert-title">🚀 Maior Crescimento: ${escapeHtml(metrics.commercial.highestGrowth.name)} (+${metrics.commercial.highestGrowth.growthQtyPct.toFixed(1)}%)</div>
+              <div class="alert-desc">${metrics.commercial.highestGrowth.qty} un vendidas nos últimos 30 dias (${formatCurrency(metrics.commercial.highestGrowth.revenue)}). Clique para ver ranking.</div>
             </div>
           ` : ''}
           ${metrics.commercial?.highestMargin ? `
@@ -391,85 +391,124 @@ function renderDashboard() {
           ` : ''}
           ${metrics.commercial?.stockAlerts?.length > 0 ? `
             <div class="alert-card alert-orange" style="cursor: pointer;" id="dash-alert-stock" title="Clique para ver a capacidade de produção">
-              <div class="alert-title">⚠ Alerta de Demanda × Estoque (${metrics.commercial.stockAlerts.length} produto(s))</div>
+              <div class="alert-title">⚠ Alerta Demanda × Estoque (${metrics.commercial.stockAlerts.length} produto(s) críticos)</div>
               <div class="alert-desc">${escapeHtml(metrics.commercial.stockAlerts.map(p => p.name).join(', '))} com estoque abaixo do volume de vendas.</div>
             </div>
           ` : ''}
           ${metrics.operational.qcAlertOrders.length > 0 ? `
             <div class="alert-card alert-red">
-              <div class="alert-title">🔴 ${metrics.operational.qcAlertOrders.length} pedido(s) com não conformidade no CQ</div>
-              <div class="alert-desc">${escapeHtml(metrics.operational.qcAlertOrders.map(o => `Pedido ${o.number || o.id}`).join(', '))} requer(em) retrabalho na linha de produção.</div>
+              <div class="alert-title">🔴 ${metrics.operational.qcAlertOrders.length} pedido(s) com não conformidades no CQ</div>
+              <div class="alert-desc">${escapeHtml(metrics.operational.qcAlertOrders.map(o => `Pedido ${o.number || o.id}`).join(', '))} necessitam de retrabalho na linha de produção.</div>
             </div>
           ` : ''}
           ${metrics.operational.pendingPdfOrders.length > 0 ? `
             <div class="alert-card alert-yellow">
-              <div class="alert-title">🟡 ${metrics.operational.pendingPdfOrders.length} pedido(s) sem PDF vetorial gerado</div>
-              <div class="alert-desc">Gere o PDF de produção para liberar a fila de impressão.</div>
+              <div class="alert-title">🟡 ${metrics.operational.pendingPdfOrders.length} pedido(s) sem PDF gerado</div>
+              <div class="alert-desc">Avisos de corte e impressão pendentes de arquivo vetorial.</div>
             </div>
           ` : ''}
           ${metrics.operational.urgentOrders.length > 0 ? `
             <div class="alert-card alert-orange">
-              <div class="alert-title">🟠 ${metrics.operational.urgentOrders.length} pedido(s) prioritários ou com entrega para hoje</div>
-              <div class="alert-desc">Monitore a conferência final e o empacotamento.</div>
+              <div class="alert-title">🟠 ${metrics.operational.urgentOrders.length} pedido(s) urgentes / entrega hoje</div>
+              <div class="alert-desc">Prioridades imediatas para conferência final e empacotamento.</div>
             </div>
           ` : ''}
           <div class="alert-card alert-blue">
             <div class="alert-title">🔵 ${metrics.inProdCount} pedido(s) na linha operacional</div>
-            <div class="alert-desc">Plotter de corte, vinco, montagem e acabamento em andamento.</div>
+            <div class="alert-desc">Impressão, corte, vinco, montagem e acabamento em andamento.</div>
           </div>
           <div class="alert-card alert-green">
-            <div class="alert-title">🟢 ${metrics.readyCount} pedido(s) finalizados</div>
-            <div class="alert-desc">Conferir embalagem final e liberação para o cliente.</div>
+            <div class="alert-title">🟢 ${metrics.readyCount} pedido(s) liberados para entrega</div>
+            <div class="alert-desc">Embalagem final conferida e prontos para liberação ao cliente.</div>
           </div>
         </div>
-
       </div>
     </section>
 
-    <!-- Summary Lifetime Performance -->
+    <!-- BLOCO 05: Acumulado Histórico Real -->
     <section class="panel mother" id="panel-lifetime">
       <div class="panel-header">
-        <h2 class="panel-title" id="title-lifetime">O que foi feito até hoje?</h2>
-        <span class="card-label">Acumulado histórico real</span>
+        <h2 class="panel-title" id="title-lifetime">O que foi feito até hoje</h2>
       </div>
-      <div class="lifetime-grid" id="lifetime-metrics">
+      <div class="lifetime-grid" id="lifetime-metrics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
         <div class="life-card" id="life-card-sales">
-          <span class="life-label">Vendas Totais</span>
+          <span class="life-label">Faturamento</span>
           <b class="life-val" id="val-lifetime-sales">${formatCurrency(metrics.totalRevenue)}</b>
         </div>
         <div class="life-card" id="life-card-profit">
-          <span class="life-label">Lucro Líquido Estimado</span>
-          <b class="life-val" id="val-lifetime-profit">${formatCurrency(metrics.estimatedProfit)}</b>
+          <span class="life-label">Lucro</span>
+          <b class="life-val" id="val-lifetime-profit">${formatCurrency(metrics.profit50)}</b>
         </div>
         <div class="life-card" id="life-card-prods">
-          <span class="life-label">Produtos Cadastrados</span>
-          <b class="life-val" id="val-lifetime-products">${metrics.productsCount} itens</b>
+          <span class="life-label">Produtos</span>
+          <b class="life-val" id="val-lifetime-products">${metrics.soldProductsCount} un</b>
+        </div>
+        <div class="life-card" id="life-card-invest">
+          <span class="life-label">Investimento</span>
+          <b class="life-val" id="val-lifetime-invest">${formatCurrency(metrics.totalInvested)}</b>
         </div>
       </div>
     </section>
 
-    <!-- Sales & Volume Bar Chart -->
+    <!-- BLOCO 06: Gráfico de Vendas por Mês no ANO ATUAL -->
     <section class="panel chart-panel" id="panel-chart">
-      <div class="panel-header">
-        <div>
-          <h2 class="panel-title" id="title-chart">Vendas por mês</h2>
-          <span class="card-subtext">Evolução do volume de pedidos no ano</span>
-        </div>
+      <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 class="panel-title" id="title-chart">Vendas de 2026</h2>
         <span class="badge-count" id="badge-chart-year">2026</span>
       </div>
-      <div class="bars" id="sales-bars-container">
-        ${metrics.chartData.map((bar, idx) => {
-          const maxVal = Math.max(...metrics.chartData.map(b => b.value), 100);
-          const percent = Math.min(100, Math.round((bar.value / maxVal) * 90) + 10);
-          const isActive = idx === metrics.chartData.length - 1 ? 'active' : '';
-          return `
-            <div class="bar-wrap">
-              <span class="bar-tooltip">${bar.value} pedidos</span>
-              <div class="bar ${isActive}" style="height: ${percent}%"></div>
-              <span class="bar-label">${escapeHtml(bar.label)}</span>
-            </div>
-          `;
-        }).join('')}
+
+      <div class="chart-container-responsive" style="position: relative; width: 100%; padding-top: 8px;">
+        <!-- Responsive Line SVG Overlay -->
+        <svg class="chart-line-overlay" viewBox="0 0 600 120" preserveAspectRatio="none" style="position: absolute; top: 18px; left: 0; width: 100%; height: 110px; pointer-events: none; z-index: 5; overflow: visible;">
+          <defs>
+            <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#818cf8" stop-opacity="0.6"/>
+              <stop offset="70%" stop-color="#c084fc" stop-opacity="0.85"/>
+              <stop offset="100%" stop-color="#f472b6" stop-opacity="1"/>
+            </linearGradient>
+            <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+          ${(() => {
+            const data = metrics.chartData;
+            const maxVal = Math.max(...data.map(d => d.value), 10);
+            const points = data.map((d, i) => {
+              const x = (i + 0.5) * (600 / data.length);
+              const y = 110 - Math.round((d.value / maxVal) * 85);
+              return { x, y, val: d.value, isCurrent: d.isCurrent };
+            });
+            const dPath = points.reduce((acc, pt, i) => {
+              if (i === 0) return `M ${pt.x} ${pt.y}`;
+              const prev = points[i - 1];
+              const cx = (prev.x + pt.x) / 2;
+              return `${acc} C ${cx} ${prev.y}, ${cx} ${pt.y}, ${pt.x} ${pt.y}`;
+            }, '');
+            return `
+              <path d="${dPath}" fill="none" stroke="url(#lineGrad)" stroke-width="3" stroke-linecap="round" filter="url(#neonGlow)" />
+              ${points.map(pt => `
+                <circle cx="${pt.x}" cy="${pt.y}" r="${pt.isCurrent ? '5.5' : '3.5'}" fill="${pt.isCurrent ? '#f472b6' : '#818cf8'}" stroke="#ffffff" stroke-width="2" />
+              `).join('')}
+            `;
+          })()}
+        </svg>
+
+        <!-- Responsive Bars with Tooltips and Neon Pulse -->
+        <div class="bars" id="sales-bars-container" style="position: relative; z-index: 2;">
+          ${metrics.chartData.map(bar => {
+            const maxVal = Math.max(...metrics.chartData.map(b => b.value), 10);
+            const percent = Math.min(100, Math.round((bar.value / maxVal) * 85) + 12);
+            const activeClass = bar.isCurrent ? 'active neon-pulse' : '';
+            return `
+              <div class="bar-wrap">
+                <span class="bar-tooltip" style="z-index: 20;">${bar.value} pedidos</span>
+                <div class="bar ${activeClass}" style="height: ${percent}%;"></div>
+                <span class="bar-label" style="font-size: 11px;">${escapeHtml(bar.label)}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
       </div>
     </section>
   `;
@@ -477,20 +516,26 @@ function renderDashboard() {
   // Render orders inside active list
   renderDashboardOrdersList();
 
-  // Search input in dashboard
-  const searchInput = document.getElementById('input-dashboard-search');
-  if (searchInput) {
-    searchInput.addEventListener('input', e => {
-      orderSearchTerm = e.target.value;
-      renderDashboardOrdersList();
+  // Clear stage filter link
+  const linkClearFilter = container.querySelector('#link-clear-stage-filter');
+  if (linkClearFilter) {
+    linkClearFilter.addEventListener('click', e => {
+      e.preventDefault();
+      dashboardStageFilter = null;
+      renderDashboard();
     });
   }
 
-  // Pipeline card quick navigation (Etapa 4)
+  // Pipeline card quick filter by etapa (Bloco 02)
   container.querySelectorAll('[data-dash-tab]').forEach(card => {
     card.addEventListener('click', () => {
-      ordersTab = card.dataset.dashTab;
-      switchView('pedidos');
+      const stage = card.dataset.dashTab;
+      if (dashboardStageFilter === stage) {
+        dashboardStageFilter = null;
+      } else {
+        dashboardStageFilter = stage;
+      }
+      renderDashboard();
     });
   });
 
@@ -527,18 +572,34 @@ function renderDashboard() {
   }
 }
 
-
 function renderDashboardOrdersList() {
   const container = document.getElementById('dashboard-orders-list');
   if (!container) return;
 
-  const orders = getOrders({ search: orderSearchTerm }).filter(isOrderActive);
+  let orders = getOrders({ search: orderSearchTerm }).filter(isOrderActive);
+
+  if (dashboardStageFilter) {
+    orders = orders.filter(o => {
+      const stage = (o.production?.currentStage || '').toLowerCase();
+      const status = (o.status || '').toLowerCase();
+      if (dashboardStageFilter === 'aguardando') return stage === 'aprovacao' || stage === 'aguardando' || status === 'yellow';
+      if (dashboardStageFilter === 'impressao') return stage === 'impressao' || status === 'blue';
+      if (dashboardStageFilter === 'corte') return stage === 'corte';
+      if (dashboardStageFilter === 'vinco') return stage === 'vinco';
+      if (dashboardStageFilter === 'montagem') return stage === 'montagem';
+      if (dashboardStageFilter === 'acabamento') return stage === 'acabamento';
+      if (dashboardStageFilter === 'conferencia') return stage === 'conferencia' || stage === 'cq';
+      if (dashboardStageFilter === 'embalagem') return stage === 'embalagem';
+      if (dashboardStageFilter === 'pronto') return stage === 'pronto' || status === 'green';
+      return stage === dashboardStageFilter;
+    });
+  }
 
   if (orders.length === 0) {
     container.innerHTML = `
       <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">
-        <b style="display: block; color: var(--text-primary); margin-bottom: 4px;">Nenhum pedido ativo encontrado.</b>
-        Os pedidos aparecerão aqui quando forem criados e estiverem em andamento na produção.
+        <b style="display: block; color: var(--text-primary); margin-bottom: 4px;">Nenhum pedido encontrado ${dashboardStageFilter ? `na etapa "${dashboardStageFilter}"` : 'ativo'}.</b>
+        ${dashboardStageFilter ? 'Clique no card da etapa para remover o filtro.' : 'Os pedidos aparecerão aqui quando forem criados e estiverem em andamento na produção.'}
       </div>
     `;
     return;
@@ -555,26 +616,43 @@ function renderDashboardOrdersList() {
     return `
       <div class="list-row ${statusClass}" data-order-id="${order.id}">
         <div class="list-main" style="cursor: pointer;" data-action="view-order" data-id="${order.id}">
-          <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
+          <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;">
             ${orderTitleFormatted}
-            <span style="font-size: 11px; font-weight: normal; color: var(--text-secondary);">• ${customer}</span>
+            <span style="font-size: 12px; font-weight: normal; color: var(--text-secondary);">· ${customer}</span>
           </div>
-          <div class="list-meta">
-            ${qty} un · Entrega: ${date}
+          <div class="list-meta" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+            Quantidade: ${qty} un · Entrega: ${date}
           </div>
         </div>
-        <div style="text-align: right; min-width: 120px;">
-            <span style="font-weight: 600; font-size: 11px; color: var(--text-secondary); cursor: pointer;" data-action="cycle-status" data-id="${order.id}">${escapeHtml(order.statusLabel || statusDef.label)}</span>
+        <div style="text-align: right; min-width: 110px;">
+          <span class="order-status-badge" style="display: inline-block; font-weight: 600; font-size: 11px; padding: 4px 8px; border-radius: 6px; cursor: pointer; background: #ffffff; border: 1px solid #e2e8f0; color: var(--text-secondary); transition: all 0.15s ease;" data-action="cycle-status" data-id="${order.id}" title="Clique para avançar status">${escapeHtml(order.statusLabel || statusDef.label)}</span>
         </div>
-        <div class="actions">
-            <button class="action-btn" data-action="edit-order" data-id="${order.id}" title="Editar pedido">✏️ Editar</button>
-            <button class="action-btn" data-action="dup-order" data-id="${order.id}" title="Duplicar pedido">📋 Duplicar</button>
-            <button class="action-btn" data-action="del-order" data-id="${order.id}" title="Excluir pedido" style="color: #ef4444;">🗑️ Excluir</button>
-            <button class="action-btn" data-action="hide-order" data-id="${order.id}" title="Ocultar pedido">👁️ Ocultar</button>
+        <div class="actions" style="position: relative;">
+          <button class="action-btn btn-dots-menu" data-action="toggle-dots" data-id="${order.id}" title="Ações do pedido" style="padding: 4px 8px; font-weight: bold; font-size: 14px; line-height: 1;">⋮</button>
+          <div class="dots-dropdown-menu" id="dots-menu-${order.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 120px; padding: 4px 0;">
+            <button class="dots-menu-item" data-action="edit-order" data-id="${order.id}">Editar</button>
+            <button class="dots-menu-item" data-action="dup-order" data-id="${order.id}">Duplicar</button>
+            <button class="dots-menu-item" data-action="del-order" data-id="${order.id}" style="color: #ef4444;">Excluir</button>
+            <button class="dots-menu-item" data-action="hide-order" data-id="${order.id}">Ocultar</button>
+          </div>
         </div>
       </div>
     `;
   }).join('');
+
+  // Bind Three Dots menu toggle
+  container.querySelectorAll('[data-action="toggle-dots"]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const menu = container.querySelector(`#dots-menu-${id}`);
+      const isVisible = menu && menu.style.display === 'block';
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      if (menu && !isVisible) {
+        menu.style.display = 'block';
+      }
+    });
+  });
 
   // Bind actions
   container.querySelectorAll('[data-action="cycle-status"]').forEach(btn => {
@@ -594,317 +672,22 @@ function renderDashboardOrdersList() {
       showOrderDetailsDrawer(id);
     });
   });
-}
 
-// ==========================================
-// RENDER: PEDIDOS VIEW (FULL MODULE)
-// ==========================================
-function renderOrdersView() {
-  const container = document.getElementById('view-container');
-  if (!container) return;
-
-  const orders = getOrders({ tab: ordersTab, search: orderSearchTerm });
-
-  container.innerHTML = `
-    <div class="module-header">
-      <div>
-        <h2 class="module-title">Gestão de Pedidos</h2>
-        <p class="module-subtitle">Acompanhe todos os pedidos, prazos de entrega e personalizações do cliente.</p>
-      </div>
-      <div class="module-actions">
-        <button class="btn btn-primary" id="btn-orders-new">+ Novo pedido</button>
-        <button class="btn" id="btn-orders-bulk" style="font-weight: 600;">⚡ Personalização em massa</button>
-        <button class="btn" id="btn-orders-export">Exportar CSV</button>
-        <button class="btn" id="btn-orders-template">Modelo CSV</button>
-        <button class="btn" id="btn-orders-import">Importar CSV</button>
-      </div>
-    </div>
-
-    <!-- Orders Tabs Submenu -->
-    <div class="subtabs" id="orders-subtabs">
-      <button class="subtab-btn ${ordersTab === 'em_andamento' ? 'active' : ''}" data-tab="em_andamento">⚡ Em Andamento (Ativos)</button>
-      <button class="subtab-btn ${ordersTab === 'todos' ? 'active' : ''}" data-tab="todos">Todos</button>
-      <button class="subtab-btn ${ordersTab === 'aguardando' ? 'active' : ''}" data-tab="aguardando">🟡 Aguardando</button>
-      <button class="subtab-btn ${ordersTab === 'producao' ? 'active' : ''}" data-tab="producao">🔵 Produção</button>
-      <button class="subtab-btn ${ordersTab === 'impressao' ? 'active' : ''}" data-tab="impressao">🖨 Impressão</button>
-      <button class="subtab-btn ${ordersTab === 'corte' ? 'active' : ''}" data-tab="corte">✂ Corte</button>
-      <button class="subtab-btn ${ordersTab === 'vinco' ? 'active' : ''}" data-tab="vinco">📐 Vinco</button>
-      <button class="subtab-btn ${ordersTab === 'montagem' ? 'active' : ''}" data-tab="montagem">🧩 Montagem</button>
-      <button class="subtab-btn ${ordersTab === 'acabamento' ? 'active' : ''}" data-tab="acabamento">✨ Acabamento</button>
-      <button class="subtab-btn ${ordersTab === 'conferencia' ? 'active' : ''}" data-tab="conferencia">🔍 CQ</button>
-      <button class="subtab-btn ${ordersTab === 'embalagem' ? 'active' : ''}" data-tab="embalagem">📦 Embalagem</button>
-      <button class="subtab-btn ${ordersTab === 'prontos' ? 'active' : ''}" data-tab="prontos">🟢 Prontos</button>
-      <button class="subtab-btn ${ordersTab === 'entregues' ? 'active' : ''}" data-tab="entregues">⚪ Entregues</button>
-      <button class="subtab-btn ${ordersTab === 'bloqueados' ? 'active' : ''}" data-tab="bloqueados">🔴 Bloqueados</button>
-      <button class="subtab-btn ${ordersTab === 'cancelados' ? 'active' : ''}" data-tab="cancelados">Cancelados</button>
-    </div>
-
-    <!-- Search & Filters -->
-    <div class="filter-bar">
-      <div class="search-wrapper flex-1">
-        <span class="search-icon">🔍</span>
-        <input class="search w-full" id="input-orders-search" placeholder="Buscar por número (ex: Pedido 1048), cliente, produto ou status..." value="${escapeHtml(orderSearchTerm)}" />
-      </div>
-      <span class="badge-count">${orders.length} pedidos</span>
-    </div>
-
-    <!-- Orders Table Panel -->
-    <div class="panel" style="margin-top: 12px; padding: 0;">
-      <div class="table-responsive">
-        ${ordersTab === 'fila_impressao' ? `
-          <!-- Specialized Print Queue Table (Etapa 4) -->
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Identificação</th>
-                <th>Produto</th>
-                <th>Qtd</th>
-                <th>Arquivo (PDF)</th>
-                <th>Status Impressão</th>
-                <th>Prioridade</th>
-                <th>Data Entrega</th>
-                <th style="text-align: right;">Ações de Impressão</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${orders.length === 0 ? `
-                <tr>
-                  <td colspan="8" style="text-align: center; padding: 36px; color: var(--text-muted);">
-                    <b style="display: block; color: var(--text-primary); margin-bottom: 4px;">Nenhum pedido na fila de impressão no momento.</b>
-                    Os pedidos aprovados aparecerão aqui aguardando liberação para a plotter.
-                  </td>
-                </tr>
-              ` : orders.map(order => {
-                const printJob = order.production?.printJob || {};
-                const pStatus = printJob.status || 'aguardando_impressao';
-                const pPriority = printJob.priority || 'normal';
-                const files = order.generatedFiles || [];
-                const latestFile = files[0];
-
-                let pBadgeClass = 'status-yellow';
-                let pLabel = 'Aguardando';
-                if (pStatus === 'imprimindo') {
-                  pBadgeClass = 'status-blue';
-                  pLabel = 'Imprimindo';
-                } else if (pStatus === 'pausada') {
-                  pBadgeClass = 'status-neutral';
-                  pLabel = 'Pausada';
-                } else if (pStatus === 'concluida') {
-                  pBadgeClass = 'status-green';
-                  pLabel = 'Concluída';
-                }
-
-                return `
-                  <tr>
-                    <td>
-                      <b>Pedido ${order.number || order.id}</b>
-                      <div style="font-size: 10px; color: var(--text-muted);">${escapeHtml(order.production?.operationalCode || `OP-${order.number}`)}</div>
-                    </td>
-                    <td>${escapeHtml(order.productTitle || 'Item')}</td>
-                    <td><b>${order.qty}</b> un</td>
-                    <td>
-                      ${latestFile ? `
-                        <button class="btn btn-sm btn-dl-order-file" data-file-id="${latestFile.fileId}" style="font-size: 11px; padding: 2px 8px;" title="${escapeHtml(latestFile.fileName)}">
-                          📄 PDF Pronto
-                        </button>
-                      ` : `
-                        <span style="font-size: 11px; color: #ea580c; font-weight: 500;">⚠ Sem PDF</span>
-                      `}
-                    </td>
-                    <td>
-                      <span class="status-pill ${pBadgeClass}">
-                        ${pLabel}
-                      </span>
-                    </td>
-                    <td>
-                      <span class="priority-badge priority-${pPriority}">
-                        ${pPriority}
-                      </span>
-                    </td>
-                    <td>${order.deliveryDate || '--/--/----'}</td>
-                    <td style="text-align: right;">
-                      <div class="action-btn-group">
-                        ${pStatus !== 'imprimindo' && pStatus !== 'concluida' ? `
-                          <button class="btn-action btn-primary" data-action="print-start" data-id="${order.id}" title="Iniciar impressão na máquina">▶ Iniciar</button>
-                        ` : ''}
-                        ${pStatus === 'imprimindo' ? `
-                          <button class="btn-action" data-action="print-pause" data-id="${order.id}" title="Pausar impressão">⏸ Pausar</button>
-                          <button class="btn-action btn-primary" data-action="print-complete" data-id="${order.id}" title="Concluir impressão e enviar para corte">✓ Concluir</button>
-                        ` : ''}
-                        <button class="btn-action" data-action="view-order" data-id="${order.id}" title="Abrir detalhes operacionais">Abrir</button>
-                      </div>
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        ` : `
-          <!-- Standard Orders List -->
-          <div class="list-group" style="display: flex; flex-direction: column; gap: 8px;">
-              ${orders.length === 0 ? `
-                  <div style="text-align: center; padding: 36px; color: var(--text-muted); background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-subtle);">
-                    <b style="display: block; color: var(--text-primary); margin-bottom: 4px;">Nenhum pedido encontrado nesta visualização.</b>
-                    Utilize o botão "+ Novo pedido" acima para registrar um pedido ou selecione outra aba de filtro.
-                  </div>
-              ` : orders.map(order => {
-                const statusDef = ORDER_STATUS_MAP[order.status] || ORDER_STATUS_MAP.yellow;
-                const statusClass = `status-${statusDef.colorClass || order.status}`;
-                const orderIdDisplay = `Pedido ${order.number || order.id}`;
-
-                return `
-                  <div class="list-row ${statusClass}">
-                    <div class="list-main" style="cursor: pointer;" data-action="view-order" data-id="${order.id}">
-                      <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
-                          ${orderIdDisplay}
-                          <span style="font-size: 11px; font-weight: normal; color: var(--text-secondary);">• ${escapeHtml(order.customer || 'Cliente')}</span>
-                      </div>
-                      <div class="list-meta">
-                          ${escapeHtml(order.productTitle || 'Item')} 
-                          ${order.deliveryDate ? ` • Entrega: ${order.deliveryDate}` : ''}
-                      </div>
-                    </div>
-                    <div style="text-align: right; min-width: 120px;">
-                        <span style="font-weight: 600; font-size: 13px;">${order.qty} un</span>
-                    </div>
-                    <div class="actions">
-                        <button class="action-btn" data-action="edit-order" data-id="${order.id}" title="Editar pedido">✏️ Editar</button>
-                        <button class="action-btn" data-action="dup-order" data-id="${order.id}" title="Duplicar pedido">📋 Duplicar</button>
-                        <button class="action-btn" data-action="del-order" data-id="${order.id}" title="Excluir pedido" style="color: #ef4444;">🗑️ Excluir</button>
-                    </div>
-                  </div>
-                `;
-              }).join('')}
-          </div>
-        `}
-      </div>
-    </div>
-  `;
-
-  // Bind subtabs
-  container.querySelectorAll('#orders-subtabs button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      ordersTab = btn.dataset.tab;
-      renderOrdersView();
-    });
-  });
-
-  // Search input
-  const searchInput = document.getElementById('input-orders-search');
-  if (searchInput) {
-    searchInput.addEventListener('input', e => {
-      orderSearchTerm = e.target.value;
-      renderOrdersView();
-    });
-  }
-
-  // Action Buttons
-  const newBtn = document.getElementById('btn-orders-new');
-  if (newBtn) newBtn.addEventListener('click', () => openNewOrderDrawer());
-
-  const bulkBtn = document.getElementById('btn-orders-bulk');
-  if (bulkBtn) {
-    bulkBtn.addEventListener('click', () => {
-      openBulkPersonalizationModal(openDrawer, closeDrawer);
-    });
-  }
-
-  const exportBtn = document.getElementById('btn-orders-export');
-  if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-      const csv = exportOrdersCSV();
-      downloadCSVFile(`pedidos_${Date.now()}.csv`, csv);
-      showToast('CSV de Pedidos exportado com sucesso');
-    });
-  }
-
-  const templateBtn = document.getElementById('btn-orders-template');
-  if (templateBtn) {
-    templateBtn.addEventListener('click', () => {
-      const csv = exportOrdersCSVTemplate();
-      downloadCSVFile(`modelo_pedidos.csv`, csv);
-      showToast('Modelo CSV baixado com sucesso');
-    });
-  }
-
-  const importBtn = document.getElementById('btn-orders-import');
-  if (importBtn) {
-    importBtn.addEventListener('click', () => openImportCSVDrawer('pedidos'));
-  }
-
-  // Row action buttons
-  container.querySelectorAll('[data-action="cycle-status"]').forEach(el => {
-    el.addEventListener('click', () => {
-      cycleOrderStatus(el.dataset.id);
-      renderOrdersView();
-      showToast('Status atualizado');
-    });
-  });
-
-  container.querySelectorAll('[data-action="view-order"]').forEach(el => {
-    el.addEventListener('click', () => showOrderDetailsDrawer(el.dataset.id));
-  });
-
-  // Print Queue Action Listeners (Etapa 4)
-  container.querySelectorAll('[data-action="print-start"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const res = updateOrderPrintJobById(btn.dataset.id, 'iniciar');
-      if (res.success) {
-        showToast(res.message);
-        renderOrdersView();
-      } else {
-        showToast(res.message, '⚠');
-      }
-    });
-  });
-
-  container.querySelectorAll('[data-action="print-pause"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const res = updateOrderPrintJobById(btn.dataset.id, 'pausar');
-      if (res.success) {
-        showToast(res.message);
-        renderOrdersView();
-      } else {
-        showToast(res.message, '⚠');
-      }
-    });
-  });
-
-  container.querySelectorAll('[data-action="print-complete"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const res = updateOrderPrintJobById(btn.dataset.id, 'concluir');
-      if (res.success) {
-        showToast(res.message);
-        renderOrdersView();
-      } else {
-        showToast(res.message, '⚠');
-      }
-    });
-  });
-
-  // Download PDF buttons in table
-  container.querySelectorAll('.btn-dl-order-file').forEach(btn => {
-    btn.addEventListener('click', async e => {
+  container.querySelectorAll('[data-action="edit-order"]').forEach(btn => {
+    btn.addEventListener('click', e => {
       e.stopPropagation();
-      const fileId = btn.dataset.fileId;
-      const rec = await fileStorage.getFile(fileId);
-      if (rec && rec.blob) {
-        triggerPdfDownload(rec.blob, rec.metadata?.name || 'impressao.pdf');
-      } else {
-        showToast('Arquivo não encontrado no armazenamento local.', '⚠');
-      }
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      openEditOrderDrawer(btn.dataset.id);
     });
   });
 
-  container.querySelectorAll('[data-action="edit-order"]').forEach(el => {
-    el.addEventListener('click', () => openEditOrderDrawer(el.dataset.id));
-  });
-
-  container.querySelectorAll('[data-action="dup-order"]').forEach(el => {
-    el.addEventListener('click', () => {
+  container.querySelectorAll('[data-action="dup-order"]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
       try {
-        const dup = duplicateOrder(el.dataset.id);
-        renderOrdersView();
+        const dup = duplicateOrder(btn.dataset.id);
+        renderDashboard();
         showToast(`Pedido ${dup.number} duplicado com sucesso`);
       } catch (err) {
         showToast(err.message, '⚠');
@@ -912,25 +695,51 @@ function renderOrdersView() {
     });
   });
 
-  container.querySelectorAll('[data-action="del-order"]').forEach(el => {
-    el.addEventListener('click', (e) => {
+  container.querySelectorAll('[data-action="del-order"]').forEach(btn => {
+    btn.addEventListener('click', e => {
       e.stopPropagation();
-      const order = getOrderById(el.dataset.id);
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      const order = getOrderById(btn.dataset.id);
       if (!order) return;
       if (confirm(`Tem certeza que deseja excluir o Pedido ${order.number || order.id}?`)) {
-        deleteOrder(el.dataset.id);
-        renderOrdersView();
+        deleteOrder(btn.dataset.id);
+        renderDashboard();
         showToast('Pedido excluído');
       }
     });
   });
 
-  container.querySelectorAll('[data-action="hide-order"]').forEach(el => {
-    el.addEventListener('click', (e) => {
+  container.querySelectorAll('[data-action="hide-order"]').forEach(btn => {
+    btn.addEventListener('click', e => {
       e.stopPropagation();
-      showToast('Item ocultado da visualização.');
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      const row = btn.closest('.list-row');
+      if (row) {
+        row.style.display = 'none';
+      }
+      showToast('Pedido ocultado da visualização.');
     });
   });
+}
+
+// ==========================================
+// RENDER: PEDIDOS VIEW (FULL MODULE)
+// ==========================================
+export function getOrdersContext() {
+  return {
+    switchView,
+    openDrawer,
+    closeDrawer,
+    showToast,
+    openBulkPersonalizationModal,
+    openImportCSVDrawer
+  };
+}
+
+function renderOrdersView() {
+  const container = document.getElementById('view-container');
+  if (!container) return;
+  renderOrdersModuleView(container, getOrdersContext());
 }
 
 // ==========================================
@@ -947,7 +756,6 @@ function renderProductsView() {
     <div class="module-header">
       <div>
         <h2 class="module-title">Catálogo de Produtos</h2>
-        <p class="module-subtitle">Configure produtos, campos de personalização, opções de alteração e regras do ateliê.</p>
       </div>
       <div class="module-actions">
         <button class="btn btn-primary" id="btn-products-new">+ Novo produto</button>
@@ -1280,728 +1088,15 @@ function renderCategoriesManagerInline(container, categories) {
 // DRAWERS: ORDER DETAILS & EDIT/NEW
 // ==========================================
 function showOrderDetailsDrawer(orderId) {
-  const order = getOrderById(orderId);
-  if (!order) {
-    showToast('Pedido não encontrado', '⚠');
-    return;
-  }
-
-  const statusDef = ORDER_STATUS_MAP[order.status] || ORDER_STATUS_MAP.yellow;
-  const snap = order.productSnapshot || {};
-
-  const pFields = snap.personalizationFields || [];
-  const cOpts = snap.changeOptions || [];
-  const pValues = order.personalization || {};
-  const cValues = order.changeOptions || {};
-
-  const contentHtml = `
-    <div class="drawer-detail-section">
-      <div class="detail-badge-row">
-        <span class="status-pill status-${statusDef.colorClass || order.status}">
-          ${escapeHtml(order.statusLabel || statusDef.label)}
-        </span>
-        <span class="badge-count">Criado em: ${order.orderDate || '--/--/----'}</span>
-      </div>
-      <h2 style="font-size: 20px; font-weight: 700; margin: 12px 0 4px 0;">Pedido ${order.number || order.id}</h2>
-      <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px;">
-        Item: <b>${escapeHtml(order.productTitle || 'Item')}</b> · Quantidade: <b>${order.qty} un</b>
-      </div>
-    </div>
-
-    <!-- Production Stage Timeline Stepper (Etapa 4) -->
-    ${renderTimelineStepperHtml(order)}
-
-    <!-- Production Operational Controls & Action Box (Etapa 4) -->
-    ${renderProductionOpsBoxHtml(order)}
-
-    <div class="drawer-detail-section">
-      <h4 class="drawer-subtitle">Dados do Cliente</h4>
-      <div class="detail-grid">
-        <div class="detail-item">
-          <span class="detail-label">Nome do Cliente</span>
-          <span class="detail-val">${escapeHtml(order.customer || '—')}</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Data de Entrega</span>
-          <span class="detail-val"><b>${order.deliveryDate || '--/--/----'}</b></span>
-        </div>
-      </div>
-    </div>
-
-    <div class="drawer-detail-section">
-      <h4 class="drawer-subtitle">Personalização do Pedido</h4>
-      ${pFields.length === 0 && Object.keys(pValues).length === 0 ? `
-        <div class="text-muted" style="font-size: 13px;">Nenhum campo de texto personalizado.</div>
-      ` : `
-        <div class="detail-grid">
-          ${pFields.map(f => `
-            <div class="detail-item">
-              <span class="detail-label">${escapeHtml(f.name)}</span>
-              <span class="detail-val">${escapeHtml(pValues[f.id] || '—')}</span>
-            </div>
-          `).join('')}
-          ${Object.entries(pValues).filter(([k]) => !pFields.some(f => f.id === k)).map(([k, v]) => `
-            <div class="detail-item">
-              <span class="detail-label">${escapeHtml(k)}</span>
-              <span class="detail-val">${escapeHtml(v || '—')}</span>
-            </div>
-          `).join('')}
-        </div>
-      `}
-    </div>
-
-    <div class="drawer-detail-section">
-      <h4 class="drawer-subtitle">Opções de Alteração</h4>
-      ${cOpts.length === 0 && Object.keys(cValues).length === 0 ? `
-        <div class="text-muted" style="font-size: 13px;">Nenhuma opção de acabamento selecionada.</div>
-      ` : `
-        <div class="detail-grid">
-          ${cOpts.map(opt => `
-            <div class="detail-item">
-              <span class="detail-label">${escapeHtml(opt.name)}</span>
-              <span class="detail-val">${escapeHtml(cValues[opt.id] || '—')}</span>
-            </div>
-          `).join('')}
-          ${Object.entries(cValues).filter(([k]) => !cOpts.some(o => o.id === k)).map(([k, v]) => `
-            <div class="detail-item">
-              <span class="detail-label">${escapeHtml(k)}</span>
-              <span class="detail-val">${escapeHtml(v || '—')}</span>
-            </div>
-          `).join('')}
-        </div>
-      `}
-    </div>
-
-    ${order.notes ? `
-      <div class="drawer-detail-section">
-        <h4 class="drawer-subtitle">Observações do Pedido</h4>
-        <p style="font-size: 13px; color: var(--text-secondary); background: var(--bg-surface-raised); padding: 10px; border-radius: 6px;">
-          ${escapeHtml(order.notes)}
-        </p>
-      </div>
-    ` : ''}
-
-    <!-- Motor Profissional de PDF & Arquivos Gerados (Etapa 3) -->
-    <div class="drawer-detail-section" style="background: var(--bg-surface-raised); border: 1px solid var(--border-strong); border-radius: 8px; padding: 12px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <div>
-          <h4 class="drawer-subtitle" style="margin: 0; color: var(--accent-primary);">📄 Motor Profissional de PDF</h4>
-          <span style="font-size: 11px; color: var(--text-muted);">PDF vetorial de alta resolução pronto para impressão</span>
-        </div>
-        <div style="display: flex; gap: 6px;">
-          <button class="btn btn-sm" id="btn-view-order-mold" style="font-size: 11px;">👁 Ver Gabarito</button>
-          <button class="btn btn-sm btn-primary" id="btn-generate-order-pdf" style="font-size: 11px;">🚀 Gerar PDF</button>
-        </div>
-      </div>
-
-      <div id="order-mold-preview-box" style="display: none; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; margin-bottom: 10px; text-align: center;"></div>
-
-      <div id="order-pdf-feedback" style="display: none; margin-bottom: 8px; font-size: 11px;"></div>
-
-      <div style="margin-top: 8px;">
-        <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Arquivos Gerados deste Pedido:</span>
-        <div id="order-generated-files-list" style="margin-top: 6px;">
-          ${(order.generatedFiles || []).length === 0 ? `
-            <div style="font-size: 11px; color: var(--text-muted); font-style: italic;">
-              Nenhum PDF gerado ainda. Clique em "Gerar PDF" para produzir o arquivo vetorial final.
-            </div>
-          ` : (order.generatedFiles || []).map((file, idx) => `
-            <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 6px 10px; margin-bottom: 4px; font-size: 11px;">
-              <div>
-                <b>${idx + 1}.</b> 📄 ${escapeHtml(file.fileName)}
-                <span style="color: var(--text-muted); font-size: 10px;">(${file.size ? (file.size / 1024).toFixed(1) + ' KB' : 'PDF'})</span>
-              </div>
-              <button class="btn btn-sm btn-dl-order-file" data-file-id="${file.fileId}" style="font-size: 11px; padding: 2px 8px;">
-                ⬇ Baixar
-              </button>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-
-    <div class="drawer-detail-section">
-      <h4 class="drawer-subtitle">Product Snapshot (Blindagem Histórica)</h4>
-      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
-        <div>Produto Base: <b>${escapeHtml(snap.productName || order.productTitle)}</b></div>
-        <div>Versão de Configuração Utilizada: <b>v${snap.configurationVersion || 1}</b></div>
-        <div>Timestamp do Snapshot: <b>${formatDateBR(snap.snapshotTimestamp)}</b></div>
-        <div style="margin-top: 4px; font-style: italic;">
-          🔒 Esta configuração está congelada. Alterações futuras no catálogo de produtos não alteram este pedido.
-        </div>
-      </div>
-    </div>
-
-    <!-- Production History Timeline (Etapa 4) -->
-    ${renderProductionHistoryHtml(order)}
-  `;
-
-  const footerHtml = `
-    <button class="btn" id="btn-drawer-edit-order">Editar Pedido</button>
-    <button class="btn btn-primary" id="btn-drawer-close-ok">Fechar</button>
-  `;
-
-  openDrawer({
-    title: `Detalhes · Pedido ${order.number || order.id}`,
-    contentHtml,
-    footerHtml,
-    onMount: (drawer) => {
-      // Bind Etapa 4 Operational Production Events
-      bindProductionOpsEvents({
-        drawer,
-        order,
-        refreshDrawer: showOrderDetailsDrawer,
-        showToast,
-        openDrawer,
-        closeDrawer
-      });
-
-      drawer.querySelector('#btn-drawer-close-ok').addEventListener('click', closeDrawer);
-      drawer.querySelector('#btn-drawer-edit-order').addEventListener('click', () => {
-        closeDrawer();
-        openEditOrderDrawer(order.id);
-      });
-
-      // Ver gabarito visual
-      const previewBtn = drawer.querySelector('#btn-view-order-mold');
-      const previewBox = drawer.querySelector('#order-mold-preview-box');
-      previewBtn?.addEventListener('click', () => {
-        const isShown = previewBox.style.display === 'block';
-        previewBox.style.display = isShown ? 'none' : 'block';
-        if (!isShown) {
-          const prod = (order.productSnapshot && order.productSnapshot.productId) ? {
-            ...order.productSnapshot,
-            id: order.productSnapshot.productId || order.productId,
-            name: order.productSnapshot.productName || order.productTitle
-          } : (getProductById(order.productId) || snap);
-          const textAreas = prod.editor?.textAreas || [];
-          const nameVal = order.personalization?.field_nome || order.personalization?.nome || order.customer || 'Nome';
-          previewBox.innerHTML = `
-            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Posicionamento das Áreas no Molde:</div>
-            <svg width="240" height="240" viewBox="0 0 595 842" style="border: 1px solid #cbd5e1; background: #fafaf9; border-radius: 4px;">
-              <rect x="110" y="160" width="375" height="520" fill="#f5ede3" stroke="#d6c5b2" stroke-width="2" rx="4" />
-              <line x1="110" y1="210" x2="485" y2="210" stroke="#c4b09b" stroke-dasharray="4,4" stroke-width="2" />
-              <circle cx="200" cy="185" r="8" fill="#8c7764" />
-              <circle cx="395" cy="185" r="8" fill="#8c7764" />
-              ${textAreas.map(a => `
-                <rect x="${a.x}" y="${a.y}" width="${a.width}" height="${a.height}" fill="rgba(79, 70, 229, 0.15)" stroke="#4f46e5" stroke-width="2" stroke-dasharray="3,3" />
-                <text x="${a.x + a.width/2}" y="${a.y + a.height/2 + 6}" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="bold" fill="#4338ca">${escapeHtml(nameVal)}</text>
-              `).join('')}
-            </svg>
-          `;
-        }
-      });
-
-      // Download de arquivos já gerados
-      drawer.querySelectorAll('.btn-dl-order-file').forEach(btn => {
-        btn.addEventListener('click', async e => {
-          const fileId = e.target.dataset.fileId;
-          const rec = await fileStorage.getFile(fileId);
-          if (rec && rec.blob) {
-            triggerPdfDownload(rec.blob, rec.metadata?.name || `pedido_${order.number}.pdf`);
-          } else {
-            alert('Arquivo não encontrado no armazenamento local.');
-          }
-        });
-      });
-
-      // Gerar PDF do Pedido
-      const genBtn = drawer.querySelector('#btn-generate-order-pdf');
-      const feedback = drawer.querySelector('#order-pdf-feedback');
-      genBtn?.addEventListener('click', async () => {
-        try {
-          genBtn.disabled = true;
-          genBtn.textContent = 'Gerando...';
-          feedback.style.display = 'block';
-          feedback.innerHTML = '<span style="color: #4f46e5;">Injetando personalização vetorial e gerando PDF...</span>';
-
-          const prod = (order.productSnapshot && order.productSnapshot.productId) ? {
-            ...order.productSnapshot,
-            id: order.productSnapshot.productId || order.productId,
-            name: order.productSnapshot.productName || order.productTitle
-          } : (getProductById(order.productId) || {
-            ...snap,
-            id: order.productId,
-            name: snap.productName || order.productTitle
-          });
-
-          const file = await generatePersonalizedPdf({
-            product: prod,
-            personalizationData: order.personalization || {},
-            changeOptionsData: order.changeOptions || {},
-            orderId: order.id,
-            orderNumber: order.number,
-            customerName: order.customer
-          });
-
-          addGeneratedFileToOrder(order.id, file);
-          triggerPdfDownload(file.blob, file.fileName);
-
-          feedback.innerHTML = `<span style="color: #059669; font-weight: 600;">✓ PDF "${escapeHtml(file.fileName)}" gerado com sucesso!</span>`;
-          showToast('PDF gerado e salvo com sucesso!');
-
-          // Atualiza gaveta após 600ms para exibir na lista
-          setTimeout(() => {
-            showOrderDetailsDrawer(order.id);
-          }, 600);
-        } catch (err) {
-          genBtn.disabled = false;
-          genBtn.textContent = '🚀 Gerar PDF';
-          feedback.style.display = 'block';
-          feedback.innerHTML = `<span style="color: #dc2626;">⚠ Erro ao gerar PDF: ${escapeHtml(err.message)}</span>`;
-        }
-      });
-    }
-  });
+  showOrderConsultationDrawer(orderId, getOrdersContext());
 }
 
 function openNewOrderDrawer(prefill = {}) {
-  const products = getProducts({ status: 'ativo' });
-  if (products.length === 0) {
-    alert('Cadastre pelo menos um produto antes de criar um pedido.');
-    return;
-  }
-
-  const defaultProd = products.find(p => p.id === prefill.productId) || products[0];
-
-  const contentHtml = `
-    <form id="form-new-order">
-      <div class="form-group">
-        <label class="form-label" for="inp-order-customer">Nome do Cliente *</label>
-        <input class="form-input" id="inp-order-customer" required placeholder="Ex: Juliana Silva" />
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="inp-order-product">Selecionar Produto do Catálogo *</label>
-        <select class="form-select" id="inp-order-product">
-          ${products.map(p => `
-            <option value="${p.id}" ${p.id === defaultProd.id ? 'selected' : ''}>
-              ${escapeHtml(p.name)} (${formatCurrency(p.price)})
-            </option>
-          `).join('')}
-        </select>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-        <div class="form-group">
-          <label class="form-label" for="inp-order-qty">Quantidade *</label>
-          <input type="number" class="form-input" id="inp-order-qty" value="10" min="1" required />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="inp-order-status">Status Inicial</label>
-          <select class="form-select" id="inp-order-status">
-            <option value="yellow" selected>🟡 Aguardando aprovação</option>
-            <option value="blue">🔵 Em produção</option>
-            <option value="orange">🟠 Atenção</option>
-            <option value="red">🔴 Bloqueado por material</option>
-            <option value="green">🟢 Pronto</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="inp-order-delivery">Data de Entrega *</label>
-        <input type="date" class="form-input" id="inp-order-delivery" required />
-      </div>
-
-      <!-- Dynamic Product Customization Fields -->
-      <div id="dynamic-product-fields">
-        <!-- Rendered on product select change -->
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="inp-order-notes">Observações</label>
-        <textarea class="form-textarea" id="inp-order-notes" rows="2" placeholder="Instruções de envio, detalhes especiais..."></textarea>
-      </div>
-    </form>
-  `;
-
-  const footerHtml = `
-    <button class="btn" id="btn-cancel-drawer">Cancelar</button>
-    <button class="btn btn-primary" id="btn-submit-order">Salvar Pedido</button>
-  `;
-
-  openDrawer({
-    title: 'Cadastrar Novo Pedido',
-    contentHtml,
-    footerHtml,
-    onMount: (drawer) => {
-      const prodSelect = drawer.querySelector('#inp-order-product');
-      const dynamicContainer = drawer.querySelector('#dynamic-product-fields');
-
-      // Set default delivery date to 3 days from now
-      const d = new Date();
-      d.setDate(d.getDate() + 3);
-      drawer.querySelector('#inp-order-delivery').value = d.toISOString().split('T')[0];
-
-      function updateDynamicFields(productId) {
-        const prod = getProductById(productId);
-        if (!prod) return;
-
-        const pFields = prod.personalizationFields || [];
-        const cOpts = prod.changeOptions || [];
-
-        dynamicContainer.innerHTML = `
-          <div style="margin: 14px 0; display: flex; flex-direction: column; gap: 12px;">
-            <!-- Box 1: Personalização (Textos) -->
-            <div style="background: rgba(219, 39, 119, 0.05); border: 1px solid rgba(219, 39, 119, 0.2); border-radius: 8px; padding: 12px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-                <h4 style="font-size: 12px; font-weight: 700; color: var(--accent-primary); text-transform: uppercase; margin: 0; display: flex; align-items: center; gap: 4px;">
-                  ✍️ Personalização do Pedido (Textos)
-                </h4>
-                <span style="font-size: 10px; color: var(--text-muted);">Ex: Nome, Idade, Frase</span>
-              </div>
-              ${pFields.length === 0 ? `
-                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Este produto não requer textos personalizados da cliente.</p>
-              ` : pFields.map(f => `
-                <div class="form-group" style="margin-bottom: 8px;">
-                  <label class="form-label" for="field_${f.id}">
-                    ${escapeHtml(f.name)} ${f.required ? '<span style="color: #dc2626; font-weight: 700;">*</span>' : '<span style="color: var(--text-muted); font-weight: 400; font-size: 11px;">(opcional)</span>'}
-                  </label>
-                  ${f.type === 'textarea' ? `
-                    <textarea class="form-textarea" id="field_${f.id}" data-type="p-field" data-id="${f.id}" ${f.required ? 'data-required="true"' : ''} placeholder="${escapeHtml(f.defaultValue || 'Preencha o texto...')}" rows="2"></textarea>
-                  ` : `
-                    <input type="${f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}" class="form-input" id="field_${f.id}" data-type="p-field" data-id="${f.id}" ${f.required ? 'data-required="true"' : ''} value="${escapeHtml(f.defaultValue || '')}" placeholder="${escapeHtml(f.defaultValue || 'Preencha o campo...')}" />
-                  `}
-                </div>
-              `).join('')}
-            </div>
-
-            <!-- Box 2: Opções de Alteração (Variações Físicas) -->
-            <div style="background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px; padding: 12px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-                <h4 style="font-size: 12px; font-weight: 700; color: #4338ca; text-transform: uppercase; margin: 0; display: flex; align-items: center; gap: 4px;">
-                  🎨 Opções de Alteração (Acabamentos)
-                </h4>
-                <span style="font-size: 10px; color: #6366f1;">Ex: Cor, Alça, Material</span>
-              </div>
-              ${cOpts.length === 0 ? `
-                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Este produto é confeccionado em padrão único de material.</p>
-              ` : cOpts.map(opt => `
-                <div class="form-group" style="margin-bottom: 8px;">
-                  <label class="form-label" for="opt_${opt.id}">
-                    ${escapeHtml(opt.name)} ${opt.required ? '<span style="color: #dc2626; font-weight: 700;">*</span>' : ''}
-                  </label>
-                  <select class="form-select" id="opt_${opt.id}" data-type="c-opt" data-id="${opt.id}">
-                    ${(opt.choices || []).map(choice => `
-                      <option value="${escapeHtml(choice)}" ${choice === opt.defaultValue ? 'selected' : ''}>
-                        ${escapeHtml(choice)}
-                      </option>
-                    `).join('')}
-                  </select>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `;
-      }
-
-      prodSelect.addEventListener('change', e => {
-        updateDynamicFields(e.target.value);
-      });
-
-      updateDynamicFields(prodSelect.value);
-
-      drawer.querySelector('#btn-cancel-drawer').addEventListener('click', closeDrawer);
-
-      drawer.querySelector('#btn-submit-order').addEventListener('click', e => {
-        e.preventDefault();
-
-        // Clear previous validation errors
-        drawer.querySelectorAll('.input-invalid').forEach(el => el.classList.remove('input-invalid'));
-        drawer.querySelectorAll('.field-error-msg').forEach(el => el.remove());
-
-        let firstInvalidField = null;
-
-        function markInvalid(inputEl, msg) {
-          if (!inputEl) return;
-          inputEl.classList.add('input-invalid');
-          const errDiv = document.createElement('div');
-          errDiv.className = 'field-error-msg';
-          errDiv.innerHTML = `⚠ ${escapeHtml(msg)}`;
-          inputEl.parentNode.appendChild(errDiv);
-          if (!firstInvalidField) firstInvalidField = inputEl;
-        }
-
-        const customerInp = drawer.querySelector('#inp-order-customer');
-        const customer = customerInp ? customerInp.value.trim() : '';
-        if (!customer) {
-          markInvalid(customerInp, 'O nome do cliente é obrigatório.');
-        }
-
-        const productId = prodSelect ? prodSelect.value : '';
-        if (!productId) {
-          markInvalid(prodSelect, 'Selecione um produto.');
-        }
-
-        const qtyInp = drawer.querySelector('#inp-order-qty');
-        const qtyVal = Number(qtyInp ? qtyInp.value : 0);
-        if (!qtyVal || qtyVal <= 0) {
-          markInvalid(qtyInp, 'A quantidade deve ser maior que zero.');
-        }
-
-        const deliveryInp = drawer.querySelector('#inp-order-delivery');
-        const deliveryDate = deliveryInp ? deliveryInp.value : '';
-        if (!deliveryDate) {
-          markInvalid(deliveryInp, 'A data de entrega é obrigatória.');
-        }
-
-        const status = drawer.querySelector('#inp-order-status').value;
-        const notes = drawer.querySelector('#inp-order-notes').value;
-
-        const personalization = {};
-        const selectedProd = getProductById(productId);
-        const reqPFields = (selectedProd?.personalizationFields || []).filter(f => f.required);
-
-        drawer.querySelectorAll('[data-type="p-field"]').forEach(input => {
-          personalization[input.dataset.id] = input.value;
-          const isReq = reqPFields.some(f => f.id === input.dataset.id);
-          if (isReq && (!input.value || !input.value.trim())) {
-            const fDef = reqPFields.find(f => f.id === input.dataset.id);
-            markInvalid(input, `O campo "${fDef?.name || 'Personalização'}" é obrigatório.`);
-          }
-        });
-
-        const changeOptions = {};
-        drawer.querySelectorAll('[data-type="c-opt"]').forEach(select => {
-          changeOptions[select.dataset.id] = select.value;
-        });
-
-        if (firstInvalidField) {
-          firstInvalidField.focus();
-          firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          showToast('Preencha os campos obrigatórios destacados em vermelho.', '⚠');
-          return;
-        }
-
-        try {
-          const newOrder = createOrder({
-            customer,
-            productId,
-            qty: qtyVal,
-            status,
-            deliveryDate,
-            notes,
-            personalization,
-            changeOptions
-          });
-
-          closeDrawer();
-          if (currentView === 'pedidos') {
-            renderOrdersView();
-          } else {
-            renderDashboard();
-          }
-          showToast(`Pedido ${newOrder.number} cadastrado com sucesso!`);
-        } catch (err) {
-          alert(err.message);
-        }
-      });
-    }
-  });
+  switchView('pedidos-novo');
 }
 
 function openEditOrderDrawer(orderId) {
-  const order = getOrderById(orderId);
-  if (!order) return;
-
-  const contentHtml = `
-    <form id="form-edit-order">
-      <div class="form-group">
-        <label class="form-label">Identificação</label>
-        <input class="form-input" disabled value="Pedido ${order.number || order.id} · ${escapeHtml(order.productTitle)}" />
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="inp-edit-customer">Nome do Cliente *</label>
-        <input class="form-input" id="inp-edit-customer" value="${escapeHtml(order.customer || '')}" required />
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-        <div class="form-group">
-          <label class="form-label" for="inp-edit-qty">Quantidade *</label>
-          <input type="number" class="form-input" id="inp-edit-qty" value="${order.qty || 1}" min="1" required />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="inp-edit-status">Status</label>
-          <select class="form-select" id="inp-edit-status">
-            <option value="yellow" ${order.status === 'yellow' ? 'selected' : ''}>🟡 Aguardando aprovação</option>
-            <option value="blue" ${order.status === 'blue' ? 'selected' : ''}>🔵 Em produção</option>
-            <option value="orange" ${order.status === 'orange' ? 'selected' : ''}>🟠 Atenção / Urgente</option>
-            <option value="red" ${order.status === 'red' ? 'selected' : ''}>🔴 Bloqueado por material</option>
-            <option value="green" ${order.status === 'green' ? 'selected' : ''}>🟢 Pronto</option>
-            <option value="neutral" ${order.status === 'neutral' ? 'selected' : ''}>⚪ Entregue / Concluído</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="inp-edit-delivery">Data de Entrega</label>
-        <input type="date" class="form-input" id="inp-edit-delivery" value="${parseDateBRToISO(order.deliveryDate)}" />
-      </div>
-
-      <!-- Campos de Personalização e Opções de Alteração do Pedido (Snapshot) -->
-      ${(() => {
-        const snap = order.productSnapshot || {};
-        const pFields = snap.personalizationFields || (getProductById(order.productId)?.personalizationFields) || [];
-        const cOpts = snap.changeOptions || (getProductById(order.productId)?.changeOptions) || [];
-        const persData = order.personalization || {};
-        const optsData = order.changeOptions || {};
-
-        if (pFields.length === 0 && cOpts.length === 0) return '';
-
-        return `
-          <div style="background: var(--bg-surface-raised); padding: 12px; border-radius: 8px; margin: 12px 0; border: 1px solid var(--border-subtle);">
-            ${pFields.length > 0 ? `
-              <h4 style="font-size: 12px; font-weight: 700; margin-bottom: 8px; color: var(--accent-primary); text-transform: uppercase;">
-                Personalização do Pedido
-              </h4>
-              ${pFields.map(f => {
-                const currentVal = persData[f.id] !== undefined ? persData[f.id] : (f.defaultValue || '');
-                return `
-                  <div class="form-group" style="margin-bottom: 8px;">
-                    <label class="form-label" for="edit_field_${f.id}">
-                      ${escapeHtml(f.name)} ${f.required ? '*' : ''}
-                    </label>
-                    ${f.type === 'textarea' ? `
-                      <textarea class="form-textarea" id="edit_field_${f.id}" data-type="edit-p-field" data-id="${f.id}" ${f.required ? 'required' : ''}>${escapeHtml(String(currentVal))}</textarea>
-                    ` : `
-                      <input type="${f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}" class="form-input" id="edit_field_${f.id}" data-type="edit-p-field" data-id="${f.id}" ${f.required ? 'required' : ''} value="${escapeHtml(String(currentVal))}" />
-                    `}
-                  </div>
-                `;
-              }).join('')}
-            ` : ''}
-
-            ${cOpts.length > 0 ? `
-              <h4 style="font-size: 12px; font-weight: 700; margin: ${pFields.length > 0 ? '12px' : '0'} 0 8px 0; color: var(--accent-primary); text-transform: uppercase;">
-                Opções de Alteração
-              </h4>
-              ${cOpts.map(opt => {
-                const currentVal = optsData[opt.id] !== undefined ? optsData[opt.id] : (opt.defaultValue || '');
-                return `
-                  <div class="form-group" style="margin-bottom: 8px;">
-                    <label class="form-label" for="edit_opt_${opt.id}">
-                      ${escapeHtml(opt.name)} ${opt.required ? '*' : ''}
-                    </label>
-                    <select class="form-select" id="edit_opt_${opt.id}" data-type="edit-c-opt" data-id="${opt.id}">
-                      ${(opt.choices || []).map(choice => `
-                        <option value="${escapeHtml(choice)}" ${choice === currentVal ? 'selected' : ''}>
-                          ${escapeHtml(choice)}
-                        </option>
-                      `).join('')}
-                    </select>
-                  </div>
-                `;
-              }).join('')}
-            ` : ''}
-          </div>
-        `;
-      })()}
-
-      <div class="form-group">
-        <label class="form-label" for="inp-edit-notes">Observações</label>
-        <textarea class="form-textarea" id="inp-edit-notes" rows="3">${escapeHtml(order.notes || '')}</textarea>
-      </div>
-    </form>
-  `;
-
-  const footerHtml = `
-    <button class="btn" id="btn-cancel-edit-order">Cancelar</button>
-    <button class="btn btn-primary" id="btn-save-edit-order">Salvar Alterações</button>
-  `;
-
-  openDrawer({
-    title: `Editar Pedido ${order.number || order.id}`,
-    contentHtml,
-    footerHtml,
-    onMount: (drawer) => {
-      drawer.querySelector('#btn-cancel-edit-order').addEventListener('click', closeDrawer);
-      drawer.querySelector('#btn-save-edit-order').addEventListener('click', e => {
-        e.preventDefault();
-
-        // Clear previous validation errors
-        drawer.querySelectorAll('.input-invalid').forEach(el => el.classList.remove('input-invalid'));
-        drawer.querySelectorAll('.field-error-msg').forEach(el => el.remove());
-
-        let firstInvalidField = null;
-
-        function markInvalid(inputEl, msg) {
-          if (!inputEl) return;
-          inputEl.classList.add('input-invalid');
-          const errDiv = document.createElement('div');
-          errDiv.className = 'field-error-msg';
-          errDiv.innerHTML = `⚠ ${escapeHtml(msg)}`;
-          inputEl.parentNode.appendChild(errDiv);
-          if (!firstInvalidField) firstInvalidField = inputEl;
-        }
-
-        const customerInp = drawer.querySelector('#inp-edit-customer');
-        const customer = customerInp ? customerInp.value.trim() : '';
-        if (!customer) {
-          markInvalid(customerInp, 'O nome do cliente é obrigatório.');
-        }
-
-        const qtyInp = drawer.querySelector('#inp-edit-qty');
-        const qtyVal = Number(qtyInp ? qtyInp.value : 0);
-        if (!qtyVal || qtyVal <= 0) {
-          markInvalid(qtyInp, 'A quantidade deve ser maior que zero.');
-        }
-
-        const status = drawer.querySelector('#inp-edit-status').value;
-        const deliveryDate = drawer.querySelector('#inp-edit-delivery').value;
-        const notes = drawer.querySelector('#inp-edit-notes').value;
-
-        const personalization = {};
-        const snap = order.productSnapshot || {};
-        const prod = getProductById(order.productId);
-        const pFields = snap.personalizationFields || (prod?.personalizationFields) || [];
-        const reqPFields = pFields.filter(f => f.required);
-
-        drawer.querySelectorAll('[data-type="edit-p-field"]').forEach(input => {
-          personalization[input.dataset.id] = input.value;
-          const isReq = reqPFields.some(f => f.id === input.dataset.id);
-          if (isReq && (!input.value || !input.value.trim())) {
-            const fDef = reqPFields.find(f => f.id === input.dataset.id);
-            markInvalid(input, `O campo "${fDef?.name || 'Personalização'}" é obrigatório.`);
-          }
-        });
-
-        const changeOptions = {};
-        drawer.querySelectorAll('[data-type="edit-c-opt"]').forEach(select => {
-          changeOptions[select.dataset.id] = select.value;
-        });
-
-        if (firstInvalidField) {
-          firstInvalidField.focus();
-          firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          showToast('Preencha os campos obrigatórios destacados em vermelho.', '⚠');
-          return;
-        }
-
-        try {
-          updateOrder(order.id, {
-            customer,
-            qty: qtyVal,
-            status,
-            deliveryDate,
-            notes,
-            personalization,
-            changeOptions
-          });
-          closeDrawer();
-          if (currentView === 'pedidos') {
-            renderOrdersView();
-          } else {
-            renderDashboard();
-          }
-          showToast(`Pedido ${order.number || order.id} atualizado com sucesso`);
-        } catch (err) {
-          alert(err.message);
-        }
-      });
-    }
-  });
+  openEditOrderDrawerModule(orderId, getOrdersContext());
 }
 
 // ==========================================
@@ -2136,16 +1231,21 @@ function openCategoryEditDrawer(catId = null) {
   const cat = isEdit ? getCategories().find(c => c.id === catId) : null;
 
   const contentHtml = `
-    <form id="form-cat">
-      <div class="form-group">
-        <label class="form-label" for="inp-cat-name">Nome da Categoria *</label>
-        <input class="form-input" id="inp-cat-name" value="${cat ? escapeHtml(cat.name) : ''}" required placeholder="Ex: Topos de Bolo" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="inp-cat-desc">Descrição</label>
-        <textarea class="form-textarea" id="inp-cat-desc" rows="2" placeholder="Finalidade ou tipo de produtos...">${cat ? escapeHtml(cat.description || '') : ''}</textarea>
-      </div>
-    </form>
+    <div class="binder-tabs" style="margin-top: 10px;">
+      <div class="binder-tab active">1. Dados da Categoria</div>
+    </div>
+    <div class="binder-panel" style="margin-bottom: 0;">
+      <form id="form-cat">
+        <div class="form-group">
+          <label class="form-label" for="inp-cat-name">Nome da Categoria *</label>
+          <input class="form-input" id="inp-cat-name" value="${cat ? escapeHtml(cat.name) : ''}" required placeholder="Ex: Topos de Bolo" />
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="inp-cat-desc">Descrição</label>
+          <textarea class="form-textarea" id="inp-cat-desc" rows="2" placeholder="Finalidade ou tipo de produtos...">${cat ? escapeHtml(cat.description || '') : ''}</textarea>
+        </div>
+      </form>
+    </div>
   `;
 
   const footerHtml = `
@@ -2327,7 +1427,6 @@ function renderSettingsView() {
     <div class="module-header">
       <div>
         <h2 class="module-title">⚙ Ajustes & Automação Operacional</h2>
-        <p class="module-subtitle">Preferências do ateliê, regras automáticas (Evento → Condição → Ação) e auditoria.</p>
       </div>
     </div>
 
@@ -2625,6 +1724,12 @@ export function switchView(viewName) {
       ordersTab = 'em_andamento';
       renderOrdersView();
       break;
+    case 'pedidos-novo':
+      document.querySelectorAll('#sidebar-nav button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === 'pedidos');
+      });
+      renderNewOrderPage(document.getElementById('view-container'), getOrdersContext());
+      break;
     case 'produtos':
       renderProductsView();
       break;
@@ -2712,6 +1817,24 @@ function initAppAfterAuth() {
   if (quickImport) {
     quickImport.addEventListener('click', () => openImportCSVDrawer('pedidos'));
   }
+
+  // Real-time Global Search Input
+  const globalSearch = document.getElementById('input-global-search');
+  if (globalSearch) {
+    globalSearch.addEventListener('input', e => {
+      orderSearchTerm = e.target.value;
+      if (currentView === 'inicio') {
+        renderDashboardOrdersList();
+      } else if (currentView === 'pedidos') {
+        renderOrdersView();
+      }
+    });
+  }
+
+  // Close three dots dropdown menus on global click
+  window.addEventListener('click', () => {
+    document.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+  });
 
   // Keyboard Shortcuts:
   // - Escape closes open drawer

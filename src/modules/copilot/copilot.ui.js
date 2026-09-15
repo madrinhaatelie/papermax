@@ -11,16 +11,41 @@ let chatHistory = [];
 let isGenerating = false;
 
 export function initCopilotUI() {
-  // Inject trigger button in topbar if present
-  const topbarRight = document.querySelector('.topbar-right');
-  if (topbarRight && !document.getElementById('btn-copilot-trigger')) {
-    const btn = document.createElement('button');
-    btn.id = 'btn-copilot-trigger';
-    btn.className = 'btn';
-    btn.title = 'Abrir Copiloto IA do Paper Max';
-    btn.innerHTML = `<span style="color:var(--accent-primary); font-size:15px;">✨</span> Copiloto IA`;
-    btn.addEventListener('click', openCopilotDrawer);
-    topbarRight.insertBefore(btn, topbarRight.firstChild);
+  // Remove any legacy trigger button from topbar if present
+  const topbarBtn = document.querySelector('.topbar-right #btn-copilot-trigger');
+  if (topbarBtn) {
+    topbarBtn.remove();
+  }
+
+  // Inject discrete floating trigger button at bottom right (FAB) with star icon
+  let floatingBtn = document.getElementById('btn-copilot-trigger');
+  if (!floatingBtn) {
+    floatingBtn = document.createElement('button');
+    floatingBtn.id = 'btn-copilot-trigger';
+    floatingBtn.className = 'btn-copilot-floating';
+    floatingBtn.title = 'Copiloto IA';
+    floatingBtn.setAttribute('aria-label', 'Copiloto IA');
+    floatingBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display:block;">
+        <path d="M12 2l2.6 5.8 6.4.7-4.8 4.3 1.4 6.2L12 16.2 6.4 19.5l1.4-6.2-4.8-4.3 6.4-.7L12 2z"/>
+      </svg>
+    `;
+    floatingBtn.addEventListener('click', openCopilotDrawer);
+    floatingBtn.dataset.listenerAttached = 'true';
+    document.body.appendChild(floatingBtn);
+  } else {
+    floatingBtn.className = 'btn-copilot-floating';
+    floatingBtn.title = 'Copiloto IA';
+    floatingBtn.setAttribute('aria-label', 'Copiloto IA');
+    floatingBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display:block;">
+        <path d="M12 2l2.6 5.8 6.4.7-4.8 4.3 1.4 6.2L12 16.2 6.4 19.5l1.4-6.2-4.8-4.3 6.4-.7L12 2z"/>
+      </svg>
+    `;
+    if (!floatingBtn.dataset.listenerAttached) {
+      floatingBtn.addEventListener('click', openCopilotDrawer);
+      floatingBtn.dataset.listenerAttached = 'true';
+    }
   }
 
   // Inject Drawer HTML if not present

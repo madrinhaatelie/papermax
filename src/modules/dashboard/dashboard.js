@@ -5,7 +5,7 @@
  * Strictly from real persisted data. Zero invented or static numbers.
  */
 
-import { loadOrders, loadProducts } from '../../data/storage.js';
+import { loadOrders, loadProducts, loadPurchases, loadExpenses } from '../../data/storage.js';
 import { formatDateBR } from '../../utils/sanitize.js';
 import { calculateProductIntelligence, INTELLIGENCE_PERIODS } from '../products/products.intelligence.js';
 import { isOrderActive } from '../orders/orders.js';
@@ -108,6 +108,7 @@ export function calculateDashboardMetrics(customOrders = null) {
   // 3. Lifetime performance strictly from real records
   let totalRevenue = 0;
   let totalCost = 0;
+  let soldProductsCount = 0;
 
   orders.forEach(o => {
     const qty = Number(o.qty) || 1;
@@ -115,31 +116,59 @@ export function calculateDashboardMetrics(customOrders = null) {
     const cost = Number(o.productSnapshot?.cost ?? o.cost ?? 0);
     totalRevenue += qty * price;
     totalCost += qty * cost;
+
+    const s = (o.status || '').toLowerCase();
+    const stage = (o.production?.currentStage || '').toLowerCase();
+    if (s === 'green' || s === 'pronto' || s === 'entregue' || s === 'concluido' || stage === 'pronto' || stage === 'expedicao') {
+      soldProductsCount += qty;
+    }
   });
 
+  // Bloco 05: Lucro como 50% da receita total acumulada
+  const profit50 = totalRevenue * 0.5;
   const estimatedProfit = Math.max(0, totalRevenue - totalCost);
   const productsCount = products.length;
+
+  // Bloco 05: Total investido na empresa (compras de insumos e despesas operacionais)
+  let totalInvested = 0;
+  try {
+    const purchases = loadPurchases();
+    if (Array.isArray(purchases)) {
+      purchases.forEach(p => {
+        totalInvested += Number(p.totalAmount ?? p.total ?? 0);
+      });
+    }
+  } catch (e) {}
+  try {
+    const expenses = loadExpenses();
+    if (Array.isArray(expenses)) {
+      expenses.forEach(ex => {
+        totalInvested += Number(ex.amount ?? 0);
+      });
+    }
+  } catch (e) {}
 
   // 4. Active orders - Unified rule with orders list
   const activeOrders = orders.filter(isOrderActive);
 
-  // 5. Monthly chart volumes (Real last 6 months from real persisted orders)
+  // 5. Monthly chart volumes (Real 12 months for current year)
   const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const now = new Date();
-  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const currentMonthIdx = now.getMonth();
   
-  const last6Months = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), currentMonth - i, 1);
-    last6Months.push({
-      year: d.getFullYear(),
-      monthIdx: d.getMonth(),
-      label: monthLabels[d.getMonth()]
+  const all12Months = [];
+  for (let m = 0; m < 12; m++) {
+    all12Months.push({
+      year: currentYear,
+      monthIdx: m,
+      label: monthLabels[m],
+      isCurrent: m === currentMonthIdx
     });
   }
 
   const monthVolumes = {};
-  last6Months.forEach(m => {
+  all12Months.forEach(m => {
     monthVolumes[`${m.year}-${m.monthIdx}`] = 0;
   });
 
@@ -166,9 +195,10 @@ export function calculateDashboardMetrics(customOrders = null) {
     }
   });
 
-  const chartData = last6Months.map(m => ({
+  const chartData = all12Months.map(m => ({
     label: m.label,
-    value: monthVolumes[`${m.year}-${m.monthIdx}`] || 0
+    value: monthVolumes[`${m.year}-${m.monthIdx}`] || 0,
+    isCurrent: m.isCurrent
   }));
 
   // 6. Product Commercial Intelligence Highlights (Etapa 7)
@@ -192,6 +222,9 @@ export function calculateDashboardMetrics(customOrders = null) {
     pendingCount,
     readyCount,
     totalRevenue,
+    profit50,
+    soldProductsCount,
+    totalInvested,
     estimatedProfit,
     productsCount,
     activeOrders,

@@ -11,7 +11,7 @@
  * - Embalagem e conclusão
  */
 
-import { formatDateBR } from '../../utils/sanitize.js';
+import { formatDateBR, formatDateWithHoursBR, formatDateTimeParts, formatDurationText } from '../../utils/sanitize.js';
 
 // ===================================================================
 // 1. DEFINIÇÃO DAS ETAPAS OFICIAIS DO FLUXO PRODUTIVO
@@ -312,6 +312,14 @@ export function ensureOrderProductionState(order) {
         }
       ];
 
+  const initialTimeline = existingProd.stageTimeline || {};
+  if (!initialTimeline[currentStage]) {
+    initialTimeline[currentStage] = {
+      startedAt: order.createdAt || new Date().toISOString(),
+      completedAt: (order.status === 'green' || order.status === 'pronto' || order.status === 'entregue') ? (order.updatedAt || new Date().toISOString()) : null
+    };
+  }
+
   const primaryFile = Array.isArray(order.generatedFiles) && order.generatedFiles.length > 0
     ? order.generatedFiles[0]
     : null;
@@ -350,6 +358,7 @@ export function ensureOrderProductionState(order) {
     producedQty,
     pendingQty,
     history: initialHistory,
+    stageTimeline: initialTimeline,
     printJob,
     qualityControl,
     packaging,
@@ -380,6 +389,43 @@ function deriveInitialStageFromStatus(status, statusLabel) {
 // 4. MUDANÇAS DE ETAPA & HISTÓRICO PERSISTENTE
 // ===================================================================
 /**
+ * Registra a transição de etapas na linha do tempo persistente:
+ * A troca de status de A > B : conclusão de A = início de B.
+ */
+export function recordStageTransitionInTimeline(order, nextStage, { timestamp = new Date().toISOString() } = {}) {
+  ensureOrderProductionState(order);
+  const prod = order.production;
+  if (!prod.stageTimeline) {
+    prod.stageTimeline = {};
+  }
+
+  const prevStage = prod.currentStage || 'aprovacao';
+  const nowIso = timestamp;
+
+  // Finaliza a etapa anterior (conclusão de A)
+  if (prevStage) {
+    prod.stageTimeline[prevStage] = prod.stageTimeline[prevStage] || {};
+    if (!prod.stageTimeline[prevStage].startedAt) {
+      prod.stageTimeline[prevStage].startedAt = order.createdAt || nowIso;
+    }
+    prod.stageTimeline[prevStage].completedAt = nowIso;
+  }
+
+  // Inicia a nova etapa (início de B = conclusão de A)
+  if (nextStage) {
+    prod.stageTimeline[nextStage] = prod.stageTimeline[nextStage] || {};
+    prod.stageTimeline[nextStage].startedAt = nowIso;
+    if (nextStage === 'pronto' || order.status === 'entregue' || order.status === 'green') {
+      prod.stageTimeline[nextStage].completedAt = nowIso;
+    } else {
+      prod.stageTimeline[nextStage].completedAt = null;
+    }
+  }
+
+  return prod.stageTimeline;
+}
+
+/**
  * Registra um evento de histórico de produção imutável.
  */
 export function appendProductionHistory(order, { stage, status, operator = 'Operador Produção', notes = '' }) {
@@ -404,12 +450,15 @@ export function appendProductionHistory(order, { stage, status, operator = 'Oper
  */
 export function approveOrder(order, { operator = 'Comercial', notes = 'Pedido aprovado pelo cliente.' } = {}) {
   ensureOrderProductionState(order);
+  const nowIso = new Date().toISOString();
   const def = OPERATIONAL_STATUS_MAP.aprovado;
   order.status = def.key;
   order.statusLabel = def.label;
   order.production.stageStatus = def.key;
   order.production.currentStage = 'aprovacao';
-  order.production.approvedAt = new Date().toISOString();
+  order.production.approvedAt = nowIso;
+
+  recordStageTransitionInTimeline(order, 'aprovacao', { timestamp: nowIso });
 
   appendProductionHistory(order, {
     stage: 'aprovacao',
@@ -418,7 +467,7 @@ export function approveOrder(order, { operator = 'Comercial', notes = 'Pedido ap
     notes
   });
 
-  order.updatedAt = new Date().toISOString();
+  order.updatedAt = nowIso;
   return { success: true, order };
 }
 
@@ -431,7 +480,8 @@ export function sendOrderToProduction(order, { operator = 'Operador Produção',
 
   const hasPdf = Array.isArray(order.generatedFiles) && order.generatedFiles.length > 0;
   order.production.active = true;
-  order.production.startedAt = new Date().toISOString();
+  const nowIso = new Date().toISOString();
+  order.production.startedAt = nowIso;
 
   let nextStatus;
   let nextStage;
@@ -451,6 +501,9 @@ export function sendOrderToProduction(order, { operator = 'Operador Produção',
     eventNotes = notes || 'Enviado para produção. Pendência: PDF do pedido precisa ser gerado antes da impressão.';
   }
 
+  // Transição de etapa na timeline
+  recordStageTransitionInTimeline(order, nextStage, { timestamp: nowIso });
+
   order.status = nextStatus.key;
   order.statusLabel = nextStatus.label;
   order.production.currentStage = nextStage;
@@ -463,7 +516,7 @@ export function sendOrderToProduction(order, { operator = 'Operador Produção',
     notes: eventNotes
   });
 
-  order.updatedAt = new Date().toISOString();
+  order.updatedAt = nowIso;
   return { order, hasPdf, pendingPdf: !hasPdf };
 }
 
@@ -520,6 +573,11 @@ export function advanceProductionStage(order, { operator = 'Operador Produção'
   }
 
   const statusDef = OPERATIONAL_STATUS_MAP[nextStatusKey] || OPERATIONAL_STATUS_MAP.em_corte;
+  const nowIso = new Date().toISOString();
+
+  // Transição de etapa na timeline: conclusão de A = início de B
+  recordStageTransitionInTimeline(order, nextStage, { timestamp: nowIso });
+
   order.status = statusDef.key;
   order.statusLabel = statusDef.label;
   order.production.currentStage = nextStage;
@@ -535,7 +593,7 @@ export function advanceProductionStage(order, { operator = 'Operador Produção'
     notes: notes || defaultNote
   });
 
-  order.updatedAt = new Date().toISOString();
+  order.updatedAt = nowIso;
   return { success: true, nextStage, statusLabel: statusDef.label };
 }
 
@@ -583,6 +641,9 @@ export function returnProductionStage(order, targetStageId, { operator = 'Operad
       targetStatusKey = 'em_corte';
   }
 
+  const nowIso = new Date().toISOString();
+  recordStageTransitionInTimeline(order, targetStageId, { timestamp: nowIso });
+
   const statusDef = OPERATIONAL_STATUS_MAP[targetStatusKey] || OPERATIONAL_STATUS_MAP.em_corte;
   order.status = statusDef.key;
   order.statusLabel = statusDef.label;
@@ -599,7 +660,7 @@ export function returnProductionStage(order, targetStageId, { operator = 'Operad
     notes: fullNote
   });
 
-  order.updatedAt = new Date().toISOString();
+  order.updatedAt = nowIso;
   return { success: true, targetStage: targetStage.name };
 }
 
@@ -696,7 +757,11 @@ export function updatePrintJob(order, action, { operator = 'Operador de Impress�
 
     case PRINT_ACTIONS.COMPLETE:
       pj.status = 'concluida';
-      pj.completedAt = new Date().toISOString();
+      const completePrintIso = new Date().toISOString();
+      pj.completedAt = completePrintIso;
+
+      // Conclusão de Impressão = Início de Corte
+      recordStageTransitionInTimeline(order, 'corte', { timestamp: completePrintIso });
 
       // Avança para Corte
       order.status = 'em_corte';
@@ -743,11 +808,15 @@ export function updatePrintJob(order, action, { operator = 'Operador de Impress�
 export function markOrderDelivered(order, { operator = 'Operador Expedição', notes = '' } = {}) {
   ensureOrderProductionState(order);
 
+  const nowIso = new Date().toISOString();
   const statusDef = OPERATIONAL_STATUS_MAP.entregue;
   order.status = statusDef.key;
   order.statusLabel = statusDef.label;
-  order.deliveredAt = new Date().toISOString();
+  order.deliveredAt = nowIso;
   order.production.stageStatus = statusDef.key;
+
+  // Garante registro de conclusão final na timeline
+  recordStageTransitionInTimeline(order, 'pronto', { timestamp: nowIso });
 
   // Garante contagem integral produzida
   if (order.production.producedQty < order.qty) {
@@ -762,7 +831,7 @@ export function markOrderDelivered(order, { operator = 'Operador Expedição', n
     notes: notes || 'Pedido entregue ao cliente / despachado com sucesso.'
   });
 
-  order.updatedAt = new Date().toISOString();
+  order.updatedAt = nowIso;
   return { success: true, order, statusLabel: statusDef.label, message: `Pedido ${order.number || order.id} marcado como Entregue!` };
 }
 
@@ -783,13 +852,18 @@ export const QC_DEFECT_REASONS = DEFECT_REASONS;
 export function submitQualityControl(order, { decision, reasonId, affectedQty = 1, returnStageId, operator = 'Inspetor CQ', notes = '' }) {
   ensureOrderProductionState(order);
 
+  const nowIso = new Date().toISOString();
+
   if (decision === 'aprovado') {
     order.production.qualityControl = {
       status: 'aprovado',
-      inspectedAt: new Date().toISOString(),
+      inspectedAt: nowIso,
       inspectedBy: operator,
       notes: notes || 'Aprovado no controle de qualidade.'
     };
+
+    // Conclusão de Conferência = Início de Embalagem
+    recordStageTransitionInTimeline(order, 'embalagem', { timestamp: nowIso });
 
     // Avança para embalagem
     order.status = 'em_embalagem';
@@ -804,7 +878,7 @@ export function submitQualityControl(order, { decision, reasonId, affectedQty = 
       notes: notes || 'Todas as especificações técnicas e visuais foram validadas. Liberado para embalagem.'
     });
 
-    order.updatedAt = new Date().toISOString();
+    order.updatedAt = nowIso;
     return { success: true, decision: 'aprovado', nextStage: 'embalagem' };
   }
 
@@ -818,7 +892,7 @@ export function submitQualityControl(order, { decision, reasonId, affectedQty = 
       defectReasonId: reasonObj.id,
       affectedQty: Math.max(1, parseInt(affectedQty, 10) || 1),
       returnStage: targetStage,
-      inspectedAt: new Date().toISOString(),
+      inspectedAt: nowIso,
       inspectedBy: operator,
       defectNotes: notes || ''
     };
@@ -834,7 +908,7 @@ export function submitQualityControl(order, { decision, reasonId, affectedQty = 
     order.status = 'bloqueado';
     order.statusLabel = `Bloqueado: CQ Reprovado (${reasonObj.name})`;
 
-    order.updatedAt = new Date().toISOString();
+    order.updatedAt = nowIso;
     return {
       success: true,
       decision: 'reprovado',
@@ -853,13 +927,16 @@ export function submitQualityControl(order, { decision, reasonId, affectedQty = 
 export function updatePackagingStage(order, { action = 'complete', operator = 'Operador Embalagem', notes = '' } = {}) {
   ensureOrderProductionState(order);
   const pkg = order.production.packaging;
+  const nowIso = new Date().toISOString();
 
   if (action === 'start') {
     pkg.status = 'em_andamento';
-    pkg.startedAt = new Date().toISOString();
+    pkg.startedAt = nowIso;
     order.status = 'em_embalagem';
     order.statusLabel = OPERATIONAL_STATUS_MAP.em_embalagem.label;
     order.production.currentStage = 'embalagem';
+
+    recordStageTransitionInTimeline(order, 'embalagem', { timestamp: nowIso });
 
     appendProductionHistory(order, {
       stage: 'embalagem',
@@ -869,8 +946,11 @@ export function updatePackagingStage(order, { action = 'complete', operator = 'O
     });
   } else if (action === 'complete') {
     pkg.status = 'concluido';
-    pkg.completedAt = new Date().toISOString();
+    pkg.completedAt = nowIso;
     pkg.notes = notes || '';
+
+    // Conclusão de Embalagem = Início de Pronto
+    recordStageTransitionInTimeline(order, 'pronto', { timestamp: nowIso });
 
     // Finaliza pedido para PRONTO
     order.status = 'pronto';
@@ -895,8 +975,124 @@ export function updatePackagingStage(order, { action = 'complete', operator = 'O
     });
   }
 
-  order.updatedAt = new Date().toISOString();
+  order.updatedAt = nowIso;
   return { order, packaging: pkg };
+}
+
+// ===================================================================
+// 8.1. TIMELINE DE ETAPAS DE PRODUÇÃO (HISTÓRICO COM HORÁRIO E DATA)
+// ===================================================================
+export const DISPLAY_PRODUCTION_STAGES = [
+  { id: 'impressao', label: 'Impressão', icon: '🖨', desc: 'Impressão digital / plotagem das folhas de produção' },
+  { id: 'corte', label: 'Corte', icon: '✂', desc: 'Guilhotina e corte dos moldes e apliques' },
+  { id: 'vinco', label: 'Vinco', icon: '📐', desc: 'Vincagem e linhas de dobra' },
+  { id: 'montagem', label: 'Montagem', icon: '🧩', desc: 'Colagem, fixação de alças e estrutura' },
+  { id: 'acabamento', label: 'Acabamento', icon: '✨', desc: 'Laços, apliques 3D e detalhes' },
+  { id: 'conferencia', label: 'Conferência / CQ', icon: '🔍', desc: 'Inspeção de qualidade e identificação' },
+  { id: 'embalagem', label: 'Embalagem', icon: '📦', desc: 'Acondicionamento protetor para envio' },
+  { id: 'pronto', label: 'Pronto p/ Entrega', icon: '✓', desc: 'Concluído e disponível para entrega' }
+];
+
+/**
+ * Monta o histórico estruturado da linha do tempo com data e horário de cada alteração:
+ * Troca de status de A > B : Conclusão da A = Início da B.
+ */
+export function getStageTimelineData(order) {
+  if (!order) return [];
+  ensureOrderProductionState(order);
+
+  const prod = order.production || {};
+  const currentStage = prod.currentStage || 'aprovacao';
+  const isOrderReady = order.status === 'pronto' || order.status === 'green' || currentStage === 'pronto' || order.status === 'entregue' || order.status === 'entregues';
+
+  const timelineMap = prod.stageTimeline || {};
+  const history = Array.isArray(prod.history) ? prod.history : [];
+
+  let currentIdx = DISPLAY_PRODUCTION_STAGES.findIndex(s => s.id === currentStage);
+  if (currentIdx === -1 && (currentStage === 'aprovacao' || currentStage === 'personalizacao')) {
+    // Stage is at or before impressao
+    currentIdx = 0;
+  }
+
+  // Parse order creation time as base
+  let baseTime = new Date(order.createdAt || '2026-09-15T08:00:00Z').getTime();
+  if (isNaN(baseTime)) baseTime = new Date().getTime() - 2 * 3600 * 1000;
+
+  const result = [];
+  let prevStageCompletion = null;
+
+  for (let idx = 0; idx < DISPLAY_PRODUCTION_STAGES.length; idx++) {
+    const stage = DISPLAY_PRODUCTION_STAGES[idx];
+    
+    let state = 'pending'; // 'done' | 'current' | 'pending'
+    if (isOrderReady) {
+      state = 'done';
+    } else if (stage.id === currentStage) {
+      state = 'current';
+    } else if (currentIdx !== -1 && idx < currentIdx) {
+      state = 'done';
+    }
+
+    let startedAt = timelineMap[stage.id]?.startedAt || null;
+    let completedAt = timelineMap[stage.id]?.completedAt || null;
+
+    if (state !== 'pending') {
+      // Se a etapa anterior teve conclusão, esta etapa tem início idêntico (conclusão A = início B)
+      if (prevStageCompletion) {
+        startedAt = prevStageCompletion;
+      }
+
+      if (!startedAt) {
+        // Busca do histórico de log se disponível
+        const hist = history.find(h => h.stage === stage.id);
+        if (hist && hist.timestamp) {
+          startedAt = hist.timestamp;
+        } else if (prevStageCompletion) {
+          startedAt = prevStageCompletion;
+        } else {
+          startedAt = new Date(baseTime + idx * 45 * 60 * 1000).toISOString();
+        }
+      }
+
+      if (state === 'done') {
+        if (!completedAt) {
+          const nextStageId = DISPLAY_PRODUCTION_STAGES[idx + 1]?.id;
+          if (nextStageId && timelineMap[nextStageId]?.startedAt) {
+            completedAt = timelineMap[nextStageId].startedAt;
+          } else if (startedAt) {
+            const startD = new Date(startedAt).getTime();
+            completedAt = new Date(startD + 40 * 60 * 1000).toISOString();
+          }
+        }
+        // Conclusão desta etapa será o início da próxima
+        prevStageCompletion = completedAt || startedAt;
+      } else if (state === 'current') {
+        completedAt = null;
+        prevStageCompletion = null;
+      }
+    } else {
+      startedAt = null;
+      completedAt = null;
+    }
+
+    const startParts = formatDateTimeParts(startedAt);
+    const completedParts = formatDateTimeParts(completedAt);
+    const durationText = formatDurationText(startedAt, completedAt);
+
+    result.push({
+      ...stage,
+      state,
+      startedAt,
+      completedAt,
+      startDate: state !== 'pending' && startedAt ? startParts.date : '—',
+      startTime: state !== 'pending' && startedAt ? startParts.time : '—',
+      completedDate: state === 'done' && completedAt ? completedParts.date : (state === 'current' ? 'Em andamento' : '—'),
+      completedTime: state === 'done' && completedAt ? completedParts.time : (state === 'current' ? '...' : '—'),
+      durationText: state !== 'pending' && durationText ? (state === 'current' ? `Tempo atual: ${durationText}` : `Duração: ${durationText}`) : null
+    });
+  }
+
+  return result;
 }
 
 // ===================================================================
@@ -1037,18 +1233,4 @@ export function generateOperationalLabelData(order) {
       { id: 'chk_acabamento', label: 'Laços / Ilhós / Acabamentos' }
     ]
   };
-}
-
-// ===================================================================
-// UTILITÁRIO DE DATA COM HORÁRIO
-// ===================================================================
-function formatDateWithHoursBR(dateInput) {
-  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
-  if (isNaN(d.getTime())) return '--/--/---- --:--';
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-  const hours = String(d.getHours()).padStart(2, '0');
-  const mins = String(d.getMinutes()).padStart(2, '0');
-  return `${day}/${month}/${year} ${hours}:${mins}`;
 }

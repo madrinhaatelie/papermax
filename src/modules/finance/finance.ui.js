@@ -86,9 +86,6 @@ export function renderFinanceModule() {
         <h2 class="module-title" style="margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
           💰 Gestão Financeira Integrada
         </h2>
-        <p class="module-subtitle" style="margin: 4px 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">
-          Fluxo de caixa, vendas derivadas, contas a pagar/receber, custos técnicos e apuração de resultados.
-        </p>
       </div>
       <div class="header-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
         <button class="btn btn-secondary" id="btn-finance-export-csv" title="Exportar dados da aba atual para CSV">
@@ -1256,64 +1253,69 @@ function openExpenseDrawer(expenseId = null) {
             <button class="btn-close" id="btn-close-drawer" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
           </div>
 
-          <form id="form-expense" style="display: flex; flex-direction: column; gap: 14px;">
-            <div>
-              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição da Despesa *</label>
-              <input type="text" id="exp-desc" class="form-input" required placeholder="Ex: Energia do ateliê, internet, frete..." value="${escapeHtml(expense.description)}" />
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="binder-tabs">
+            <div class="binder-tab active">1. Dados da Despesa</div>
+          </div>
+          <div class="binder-panel" style="margin-bottom: 0;">
+            <form id="form-expense" style="display: flex; flex-direction: column; gap: 14px;">
               <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Categoria</label>
-                <select id="exp-cat" class="form-select">
-                  ${EXPENSE_CATEGORIES.map(cat => `
-                    <option value="${cat}" ${expense.category === cat ? 'selected' : ''}>${cat}</option>
-                  `).join('')}
-                </select>
+                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição da Despesa *</label>
+                <input type="text" id="exp-desc" class="form-input" required placeholder="Ex: Energia do ateliê, internet, frete..." value="${escapeHtml(expense.description)}" />
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Categoria</label>
+                  <select id="exp-cat" class="form-select">
+                    ${EXPENSE_CATEGORIES.map(cat => `
+                      <option value="${cat}" ${expense.category === cat ? 'selected' : ''}>${cat}</option>
+                    `).join('')}
+                  </select>
+                </div>
+
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$) *</label>
+                  <input type="number" step="0.01" min="0.01" id="exp-amount" class="form-input" required placeholder="0.00" value="${expense.amount || ''}" />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data Emissão</label>
+                  <input type="text" id="exp-date" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(expense.date || '')}" />
+                </div>
+
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data Vencimento</label>
+                  <input type="text" id="exp-duedate" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(expense.dueDate || '')}" />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
+                  <select id="exp-status" class="form-select">
+                    <option value="aberto" ${expense.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
+                    <option value="pago" ${expense.status === 'pago' ? 'selected' : ''}>Pago</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
+                  <select id="exp-method" class="form-select">
+                    ${PAYMENT_METHODS.map(m => `
+                      <option value="${m}" ${expense.paymentMethod === m ? 'selected' : ''}>${m}</option>
+                    `).join('')}
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$) *</label>
-                <input type="number" step="0.01" min="0.01" id="exp-amount" class="form-input" required placeholder="0.00" value="${expense.amount || ''}" />
+                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
+                <textarea id="exp-notes" class="form-input" rows="3" placeholder="Informações adicionais...">${escapeHtml(expense.notes || '')}</textarea>
               </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data Emissão</label>
-                <input type="text" id="exp-date" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(expense.date || '')}" />
-              </div>
-
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data Vencimento</label>
-                <input type="text" id="exp-duedate" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(expense.dueDate || '')}" />
-              </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
-                <select id="exp-status" class="form-select">
-                  <option value="aberto" ${expense.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
-                  <option value="pago" ${expense.status === 'pago' ? 'selected' : ''}>Pago</option>
-                </select>
-              </div>
-
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
-                <select id="exp-method" class="form-select">
-                  ${PAYMENT_METHODS.map(m => `
-                    <option value="${m}" ${expense.paymentMethod === m ? 'selected' : ''}>${m}</option>
-                  `).join('')}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
-              <textarea id="exp-notes" class="form-input" rows="3" placeholder="Informações adicionais...">${escapeHtml(expense.notes || '')}</textarea>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 24px;">
@@ -1559,53 +1561,58 @@ function openReceivableDrawer(recId) {
             <button class="btn-close" id="btn-close-rec-drawer" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
           </div>
 
-          <form id="form-edit-rec" style="display: flex; flex-direction: column; gap: 14px;">
-            <div>
-              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Cliente</label>
-              <input type="text" id="rec-customer" class="form-input" value="${escapeHtml(rec.customer)}" />
-            </div>
-
-            <div>
-              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição</label>
-              <input type="text" id="rec-description" class="form-input" value="${escapeHtml(rec.description)}" />
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="binder-tabs">
+            <div class="binder-tab active">1. Dados da Conta</div>
+          </div>
+          <div class="binder-panel" style="margin-bottom: 0;">
+            <form id="form-edit-rec" style="display: flex; flex-direction: column; gap: 14px;">
               <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$)</label>
-                <input type="number" step="0.01" min="0.01" id="rec-amount" class="form-input" value="${rec.amount}" />
+                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Cliente</label>
+                <input type="text" id="rec-customer" class="form-input" value="${escapeHtml(rec.customer)}" />
               </div>
 
               <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Vencimento</label>
-                <input type="text" id="rec-duedate" class="form-input" value="${escapeHtml(rec.dueDate || '')}" />
+                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição</label>
+                <input type="text" id="rec-description" class="form-input" value="${escapeHtml(rec.description)}" />
               </div>
-            </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$)</label>
+                  <input type="number" step="0.01" min="0.01" id="rec-amount" class="form-input" value="${rec.amount}" />
+                </div>
+
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Vencimento</label>
+                  <input type="text" id="rec-duedate" class="form-input" value="${escapeHtml(rec.dueDate || '')}" />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
+                  <select id="rec-status" class="form-select">
+                    <option value="aberto" ${rec.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
+                    <option value="recebido" ${rec.status === 'recebido' ? 'selected' : ''}>Recebido</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
+                  <select id="rec-method" class="form-select">
+                    ${PAYMENT_METHODS.map(m => `
+                      <option value="${m}" ${rec.paymentMethod === m ? 'selected' : ''}>${m}</option>
+                    `).join('')}
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
-                <select id="rec-status" class="form-select">
-                  <option value="aberto" ${rec.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
-                  <option value="recebido" ${rec.status === 'recebido' ? 'selected' : ''}>Recebido</option>
-                </select>
+                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
+                <textarea id="rec-notes" class="form-input" rows="3">${escapeHtml(rec.notes || '')}</textarea>
               </div>
-
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
-                <select id="rec-method" class="form-select">
-                  ${PAYMENT_METHODS.map(m => `
-                    <option value="${m}" ${rec.paymentMethod === m ? 'selected' : ''}>${m}</option>
-                  `).join('')}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
-              <textarea id="rec-notes" class="form-input" rows="3">${escapeHtml(rec.notes || '')}</textarea>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 24px;">

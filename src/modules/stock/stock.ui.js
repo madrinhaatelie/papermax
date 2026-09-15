@@ -63,7 +63,6 @@ export function renderStockModule() {
     <div class="module-header">
       <div>
         <h2 class="module-title">📦 Gestão de Estoque & Suprimentos</h2>
-        <p class="module-subtitle">Controle de insumos, componentes, ordens de compra e capacidade produtiva.</p>
       </div>
       <div class="header-actions">
         <button class="btn btn-secondary" id="btn-export-stock-csv">⬇ Exportar CSV</button>
@@ -143,7 +142,6 @@ function renderOverviewTab(balanceData, products, materials, components) {
       <div class="panel-header">
         <div>
           <h3 class="panel-title">⚡ Calculadora de Capacidade Produtiva</h3>
-          <span class="card-subtext">Descubra quantas unidades você consegue produzir com seu estoque atual antes de faltar material.</span>
         </div>
       </div>
       <div style="display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap;">
@@ -302,7 +300,6 @@ function renderInventoryTab(materials, components) {
       <div class="panel-header">
         <div>
           <h3 class="panel-title">📋 Sessão de Contagem & Inventário Físico</h3>
-          <span class="card-subtext">Compare o estoque físico real com o estoque do sistema e aplique ajustes rastreáveis.</span>
         </div>
         <button class="btn btn-primary" id="btn-start-inventory-session">Iniciar Nova Conferência</button>
       </div>
@@ -324,7 +321,6 @@ function renderAlertsTab(balanceData) {
       <div class="panel-header">
         <div>
           <h3 class="panel-title">🚨 Painel de Alertas & Reposição</h3>
-          <span class="card-subtext">Materiais com estoque insuficiente para pedidos ou abaixo do mínimo de segurança.</span>
         </div>
         <span class="badge-count" style="background: ${critical.length > 0 ? '#fee2e2' : '#dcfce7'}; color: ${critical.length > 0 ? '#dc2626' : '#166534'};">
           ${critical.length} ${critical.length === 1 ? 'item requer' : 'itens requerem'} atenção
@@ -868,68 +864,73 @@ function openDrawer(title, contentHtml, onMounted) {
 function openMaterialDrawer(material = null, suppliers = []) {
   const isEdit = !!material;
   const content = `
-    <form id="form-material" style="display: flex; flex-direction: column; gap: 14px;">
-      <div class="form-group">
-        <label class="form-label">Nome do Insumo *</label>
-        <input class="form-input" id="inp-mat-name" required value="${escapeHtml(material?.name || '')}" placeholder="Ex: Papel Kraft 180g A4, Fita de Cetim Rosa 22mm" />
-      </div>
+    <div class="binder-tabs">
+      <div class="binder-tab active">1. Dados do Insumo / Estoque</div>
+    </div>
+    <div class="binder-panel" style="margin-bottom: 0;">
+      <form id="form-material" style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="form-group">
+          <label class="form-label">Nome do Insumo *</label>
+          <input class="form-input" id="inp-mat-name" required value="${escapeHtml(material?.name || '')}" placeholder="Ex: Papel Kraft 180g A4, Fita de Cetim Rosa 22mm" />
+        </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <div class="form-group">
-          <label class="form-label">Unidade Base *</label>
-          <select class="form-input" id="inp-mat-unit">
-            ${BASE_UNITS.map(u => `<option value="${u.key}" ${material?.baseUnit === u.key ? 'selected' : ''}>${escapeHtml(u.label)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Fornecedor Principal</label>
-          <select class="form-input" id="inp-mat-supplier">
-            <option value="">Nenhum / Diversos</option>
-            ${suppliers.map(s => `<option value="${s.id}" ${material?.supplierId === s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <div class="form-group">
-          <label class="form-label">Estoque Físico Atual *</label>
-          <input type="number" step="any" class="form-input" id="inp-mat-stock" required value="${material?.currentStock ?? 0}" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Estoque Mínimo de Segurança</label>
-          <input type="number" step="any" class="form-input" id="inp-mat-min" value="${material?.minStock ?? 0}" />
-        </div>
-      </div>
-
-      <div class="panel" style="background: var(--bg-surface-raised); padding: 12px;">
-        <div style="font-weight: 700; font-size: 13px; margin-bottom: 8px;">💰 Custo de Compra Comercial</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
-          <div>
-            <label class="form-label" style="font-size: 11px;">Preço Embalagem (R$)</label>
-            <input type="number" step="any" class="form-input" id="inp-mat-cost" value="${material?.purchaseCost ?? 0}" />
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Unidade Base *</label>
+            <select class="form-input" id="inp-mat-unit">
+              ${BASE_UNITS.map(u => `<option value="${u.key}" ${material?.baseUnit === u.key ? 'selected' : ''}>${escapeHtml(u.label)}</option>`).join('')}
+            </select>
           </div>
-          <div>
-            <label class="form-label" style="font-size: 11px;">Qtd por Embalagem</label>
-            <input type="number" step="any" class="form-input" id="inp-mat-pack-qty" value="${material?.packQuantity ?? 1}" />
-          </div>
-          <div>
-            <label class="form-label" style="font-size: 11px;">Unidade Embalagem</label>
-            <input class="form-input" id="inp-mat-pack-unit" value="${material?.purchaseUnit || material?.baseUnit || 'un'}" />
+          <div class="form-group">
+            <label class="form-label">Fornecedor Principal</label>
+            <select class="form-input" id="inp-mat-supplier">
+              <option value="">Nenhum / Diversos</option>
+              ${suppliers.map(s => `<option value="${s.id}" ${material?.supplierId === s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+            </select>
           </div>
         </div>
-        <div id="cost-preview-box" style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);"></div>
-      </div>
 
-      <div class="form-group">
-        <label class="form-label">Observações</label>
-        <textarea class="form-input" id="inp-mat-notes" rows="2">${escapeHtml(material?.notes || '')}</textarea>
-      </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Estoque Físico Atual *</label>
+            <input type="number" step="any" class="form-input" id="inp-mat-stock" required value="${material?.currentStock ?? 0}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estoque Mínimo de Segurança</label>
+            <input type="number" step="any" class="form-input" id="inp-mat-min" value="${material?.minStock ?? 0}" />
+          </div>
+        </div>
 
-      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
-        <button type="button" class="btn btn-secondary" id="btn-cancel-drawer">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Salvar Insumo</button>
-      </div>
-    </form>
+        <div class="panel" style="background: var(--bg-surface-raised); padding: 12px;">
+          <div style="font-weight: 700; font-size: 13px; margin-bottom: 8px;">💰 Custo de Compra Comercial</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+            <div>
+              <label class="form-label" style="font-size: 11px;">Preço Embalagem (R$)</label>
+              <input type="number" step="any" class="form-input" id="inp-mat-cost" value="${material?.purchaseCost ?? 0}" />
+            </div>
+            <div>
+              <label class="form-label" style="font-size: 11px;">Qtd por Embalagem</label>
+              <input type="number" step="any" class="form-input" id="inp-mat-pack-qty" value="${material?.packQuantity ?? 1}" />
+            </div>
+            <div>
+              <label class="form-label" style="font-size: 11px;">Unidade Embalagem</label>
+              <input class="form-input" id="inp-mat-pack-unit" value="${material?.purchaseUnit || material?.baseUnit || 'un'}" />
+            </div>
+          </div>
+          <div id="cost-preview-box" style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Observações</label>
+          <textarea class="form-input" id="inp-mat-notes" rows="2">${escapeHtml(material?.notes || '')}</textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-drawer">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Insumo</button>
+        </div>
+      </form>
+    </div>
   `;
 
   openDrawer(isEdit ? 'Editar Insumo' : 'Novo Insumo', content, (drawer, close) => {
@@ -1005,43 +1006,48 @@ function openComponentDrawer(component = null, materials = []) {
   const items = component?.items ? JSON.parse(JSON.stringify(component.items)) : [];
 
   const content = `
-    <form id="form-component" style="display: flex; flex-direction: column; gap: 14px;">
-      <div class="form-group">
-        <label class="form-label">Nome do Componente Fabricado *</label>
-        <input class="form-input" id="inp-comp-name" required value="${escapeHtml(component?.name || '')}" placeholder="Ex: Flor de Cetim Rosa, Par de Alças, Laço Duplo" />
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+    <div class="binder-tabs">
+      <div class="binder-tab active">1. Ficha Técnica do Componente</div>
+    </div>
+    <div class="binder-panel" style="margin-bottom: 0;">
+      <form id="form-component" style="display: flex; flex-direction: column; gap: 14px;">
         <div class="form-group">
-          <label class="form-label">Rendimento (unidades produzidas)</label>
-          <input type="number" step="any" class="form-input" id="inp-comp-yield" required value="${component?.yield || 1}" />
+          <label class="form-label">Nome do Componente Fabricado *</label>
+          <input class="form-input" id="inp-comp-name" required value="${escapeHtml(component?.name || '')}" placeholder="Ex: Flor de Cetim Rosa, Par de Alças, Laço Duplo" />
         </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Rendimento (unidades produzidas)</label>
+            <input type="number" step="any" class="form-input" id="inp-comp-yield" required value="${component?.yield || 1}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estoque Físico Pronto</label>
+            <input type="number" step="any" class="form-input" id="inp-comp-stock" value="${component?.currentStock || 0}" />
+          </div>
+        </div>
+
+        <!-- Ficha Técnica / Receita -->
+        <div class="panel" style="background: var(--bg-surface-raised); padding: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="font-weight: 700; font-size: 13px;">🧩 Ficha Técnica (Insumos Consumidos)</div>
+            <button type="button" class="btn btn-secondary" id="btn-add-comp-insumo" style="font-size: 11px; padding: 4px 8px;">+ Adicionar Insumo</button>
+          </div>
+          <div id="comp-items-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
+          <div id="comp-cost-total" style="margin-top: 10px; font-weight: 700; font-size: 13px; color: var(--accent-primary); text-align: right;"></div>
+        </div>
+
         <div class="form-group">
-          <label class="form-label">Estoque Físico Pronto</label>
-          <input type="number" step="any" class="form-input" id="inp-comp-stock" value="${component?.currentStock || 0}" />
+          <label class="form-label">Observações de Fabricação</label>
+          <textarea class="form-input" id="inp-comp-notes" rows="2">${escapeHtml(component?.notes || '')}</textarea>
         </div>
-      </div>
 
-      <!-- Ficha Técnica / Receita -->
-      <div class="panel" style="background: var(--bg-surface-raised); padding: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div style="font-weight: 700; font-size: 13px;">🧩 Ficha Técnica (Insumos Consumidos)</div>
-          <button type="button" class="btn btn-secondary" id="btn-add-comp-insumo" style="font-size: 11px; padding: 4px 8px;">+ Adicionar Insumo</button>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-drawer">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Componente</button>
         </div>
-        <div id="comp-items-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
-        <div id="comp-cost-total" style="margin-top: 10px; font-weight: 700; font-size: 13px; color: var(--accent-primary); text-align: right;"></div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Observações de Fabricação</label>
-        <textarea class="form-input" id="inp-comp-notes" rows="2">${escapeHtml(component?.notes || '')}</textarea>
-      </div>
-
-      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
-        <button type="button" class="btn btn-secondary" id="btn-cancel-drawer">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Salvar Componente</button>
-      </div>
-    </form>
+      </form>
+    </div>
   `;
 
   openDrawer(isEdit ? 'Editar Componente' : 'Novo Componente (Ficha Técnica)', content, (drawer, close) => {
@@ -1251,49 +1257,54 @@ function openManualMovementDrawer(materials, components, preselectedId = null, p
 function openSupplierDrawer(supplier = null) {
   const isEdit = !!supplier;
   const content = `
-    <form id="form-supplier" style="display: flex; flex-direction: column; gap: 14px;">
-      <div class="form-group">
-        <label class="form-label">Nome Fantasia do Fornecedor *</label>
-        <input class="form-input" id="inp-sup-name" required value="${escapeHtml(supplier?.name || '')}" placeholder="Ex: Casa da Fita, Papéis & Cia" />
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Razão Social</label>
-        <input class="form-input" id="inp-sup-company" value="${escapeHtml(supplier?.companyName || '')}" />
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+    <div class="binder-tabs">
+      <div class="binder-tab active">1. Dados do Fornecedor</div>
+    </div>
+    <div class="binder-panel" style="margin-bottom: 0;">
+      <form id="form-supplier" style="display: flex; flex-direction: column; gap: 14px;">
         <div class="form-group">
-          <label class="form-label">Pessoa de Contato</label>
-          <input class="form-input" id="inp-sup-contact" value="${escapeHtml(supplier?.contact || '')}" />
+          <label class="form-label">Nome Fantasia do Fornecedor *</label>
+          <input class="form-input" id="inp-sup-name" required value="${escapeHtml(supplier?.name || '')}" placeholder="Ex: Casa da Fita, Papéis & Cia" />
         </div>
-        <div class="form-group">
-          <label class="form-label">Telefone / WhatsApp</label>
-          <input class="form-input" id="inp-sup-phone" value="${escapeHtml(supplier?.phone || '')}" />
-        </div>
-      </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
         <div class="form-group">
-          <label class="form-label">Email</label>
-          <input type="email" class="form-input" id="inp-sup-email" value="${escapeHtml(supplier?.email || '')}" />
+          <label class="form-label">Razão Social</label>
+          <input class="form-input" id="inp-sup-company" value="${escapeHtml(supplier?.companyName || '')}" />
         </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Pessoa de Contato</label>
+            <input class="form-input" id="inp-sup-contact" value="${escapeHtml(supplier?.contact || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Telefone / WhatsApp</label>
+            <input class="form-input" id="inp-sup-phone" value="${escapeHtml(supplier?.phone || '')}" />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" id="inp-sup-email" value="${escapeHtml(supplier?.email || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Site / Loja Virtual</label>
+            <input class="form-input" id="inp-sup-url" value="${escapeHtml(supplier?.storeUrl || '')}" placeholder="https://..." />
+          </div>
+        </div>
+
         <div class="form-group">
-          <label class="form-label">Site / Loja Virtual</label>
-          <input class="form-input" id="inp-sup-url" value="${escapeHtml(supplier?.storeUrl || '')}" placeholder="https://..." />
+          <label class="form-label">Observações</label>
+          <textarea class="form-input" id="inp-sup-notes" rows="2">${escapeHtml(supplier?.notes || '')}</textarea>
         </div>
-      </div>
 
-      <div class="form-group">
-        <label class="form-label">Observações</label>
-        <textarea class="form-input" id="inp-sup-notes" rows="2">${escapeHtml(supplier?.notes || '')}</textarea>
-      </div>
-
-      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
-        <button type="button" class="btn btn-secondary" id="btn-cancel-drawer">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Salvar Fornecedor</button>
-      </div>
-    </form>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-drawer">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Fornecedor</button>
+        </div>
+      </form>
+    </div>
   `;
 
   openDrawer(isEdit ? 'Editar Fornecedor' : 'Novo Fornecedor', content, (drawer, close) => {
@@ -1360,34 +1371,39 @@ export function openPurchaseDrawer(purchase = null, suppliers = [], materials = 
     : (purchase?.supplierId || suppliers[0]?.id || '');
 
   const content = `
-    <form id="form-purchase" style="display: flex; flex-direction: column; gap: 14px;">
-      <div class="form-group">
-        <label class="form-label">Fornecedor *</label>
-        <select class="form-input" id="inp-pur-supplier" required>
-          ${suppliers.map(s => `<option value="${s.id}" ${s.id === defaultSupId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
-        </select>
-      </div>
-
-      <!-- Market List of items -->
-      <div class="panel" style="background: var(--bg-surface-raised); padding: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div style="font-weight: 700; font-size: 13px;">🛒 Itens do Pedido de Compra</div>
-          <button type="button" class="btn btn-secondary" id="btn-add-pur-item" style="font-size: 11px; padding: 4px 8px;">+ Adicionar Item</button>
+    <div class="binder-tabs">
+      <div class="binder-tab active">1. Ordem de Compra</div>
+    </div>
+    <div class="binder-panel" style="margin-bottom: 0;">
+      <form id="form-purchase" style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="form-group">
+          <label class="form-label">Fornecedor *</label>
+          <select class="form-input" id="inp-pur-supplier" required>
+            ${suppliers.map(s => `<option value="${s.id}" ${s.id === defaultSupId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+          </select>
         </div>
-        <div id="purchase-items-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
-        <div id="purchase-total-box" style="margin-top: 10px; font-weight: 700; font-size: 14px; color: var(--accent-primary); text-align: right;">Total: R$ 0,00</div>
-      </div>
 
-      <div class="form-group">
-        <label class="form-label">Observações da Compra</label>
-        <textarea class="form-input" id="inp-pur-notes" rows="2"></textarea>
-      </div>
+        <!-- Market List of items -->
+        <div class="panel" style="background: var(--bg-surface-raised); padding: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="font-weight: 700; font-size: 13px;">🛒 Itens do Pedido de Compra</div>
+            <button type="button" class="btn btn-secondary" id="btn-add-pur-item" style="font-size: 11px; padding: 4px 8px;">+ Adicionar Item</button>
+          </div>
+          <div id="purchase-items-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
+          <div id="purchase-total-box" style="margin-top: 10px; font-weight: 700; font-size: 14px; color: var(--accent-primary); text-align: right;">Total: R$ 0,00</div>
+        </div>
 
-      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
-        <button type="button" class="btn btn-secondary" id="btn-cancel-drawer">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Registrar Compra</button>
-      </div>
-    </form>
+        <div class="form-group">
+          <label class="form-label">Observações da Compra</label>
+          <textarea class="form-input" id="inp-pur-notes" rows="2"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-drawer">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Registrar Compra</button>
+        </div>
+      </form>
+    </div>
   `;
 
   openDrawer('Nova Ordem de Compra', content, (drawer, close) => {

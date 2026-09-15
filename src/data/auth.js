@@ -4,6 +4,36 @@
  */
 
 const AUTH_KEY = 'papermax.auth.user.v1';
+const PHRASE_KEY = 'papermax.phrase.idx';
+
+export const GREETING_PHRASES = [
+  'criar lembranças mágicas e encantar clientes.',
+  'produzir sonhos em papel e superar metas.',
+  'transformar ideias brilhantes em peças inesquecíveis.',
+  'encantar cada cliente com corte e acabamento impecáveis.',
+  'fazer a criatividade florescer em cada detalhe.',
+  'entregar carinho, perfeição e muita dedicação.',
+  'transformar papel em momentos de pura emoção.',
+  'elevar o padrão de excelência de cada encomenda.'
+];
+
+export function getGreetingPhrase() {
+  try {
+    const raw = localStorage.getItem(PHRASE_KEY);
+    const idx = raw ? parseInt(raw, 10) : 0;
+    return GREETING_PHRASES[Math.abs(idx) % GREETING_PHRASES.length];
+  } catch (e) {
+    return GREETING_PHRASES[0];
+  }
+}
+
+export function rotateGreetingPhrase() {
+  try {
+    const raw = localStorage.getItem(PHRASE_KEY);
+    const current = raw ? parseInt(raw, 10) : 0;
+    localStorage.setItem(PHRASE_KEY, (current + 1).toString());
+  } catch (e) {}
+}
 
 export function getAuthenticatedUser() {
   try {
@@ -25,6 +55,7 @@ export function setAuthenticatedUser(userObj) {
 export function logoutUser() {
   try {
     localStorage.removeItem(AUTH_KEY);
+    rotateGreetingPhrase();
   } catch (e) {}
 }
 

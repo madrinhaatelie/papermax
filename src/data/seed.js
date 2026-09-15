@@ -553,8 +553,8 @@ export const SEED_ORDERS = [
     productId: 'prod_caixa_milk',
     productTitle: 'Caixa Milk Luxo',
     qty: 30,
-    orderDate: '07/09/2026',
-    deliveryDate: '12/09/2026',
+    orderDate: '15/09/2026',
+    deliveryDate: '18/09/2026',
     status: 'blue',
     statusLabel: 'Em produção',
     personalization: {
@@ -565,10 +565,86 @@ export const SEED_ORDERS = [
       opt_laco: 'Dourado',
       opt_aplique: '3D Duplo'
     },
-    notes: 'Impressão concluída, em fase de corte e vinco na plotter.',
+    notes: 'Impressão concluída, em fase de montagem.',
     productSnapshot: createSnapshotFromProduct(SEED_PRODUCTS[1]),
-    createdAt: '2026-09-07T14:15:00Z',
-    updatedAt: '2026-09-07T14:15:00Z'
+    production: {
+      active: true,
+      operationalCode: 'OP-1049',
+      currentStage: 'montagem',
+      stageStatus: 'em_montagem',
+      totalQty: 30,
+      producedQty: 18,
+      pendingQty: 12,
+      stageTimeline: {
+        impressao: {
+          startedAt: '2026-09-15T08:03:00Z',
+          completedAt: '2026-09-15T12:02:00Z'
+        },
+        corte: {
+          startedAt: '2026-09-15T12:02:00Z',
+          completedAt: '2026-09-15T13:15:00Z'
+        },
+        vinco: {
+          startedAt: '2026-09-15T13:15:00Z',
+          completedAt: '2026-09-15T14:00:00Z'
+        },
+        montagem: {
+          startedAt: '2026-09-15T14:00:00Z',
+          completedAt: null
+        }
+      },
+      history: [
+        {
+          id: 'hist_1049_1',
+          stage: 'impressao',
+          status: 'Impressão iniciada',
+          timestamp: '2026-09-15T08:03:00Z',
+          formattedTime: '15/09/2026 08:03',
+          operator: 'Operador de Impressão',
+          notes: 'Plotagem de 30 folhas de arte personalizada.'
+        },
+        {
+          id: 'hist_1049_2',
+          stage: 'impressao',
+          status: 'Impressão concluída',
+          timestamp: '2026-09-15T12:02:00Z',
+          formattedTime: '15/09/2026 12:02',
+          operator: 'Operador de Impressão',
+          notes: 'Impressão finalizada. Enviado para corte.'
+        },
+        {
+          id: 'hist_1049_3',
+          stage: 'corte',
+          status: 'Corte concluído',
+          timestamp: '2026-09-15T13:15:00Z',
+          formattedTime: '15/09/2026 13:15',
+          operator: 'Operador de Corte',
+          notes: 'Corte e refile de gabaritos finalizado.'
+        },
+        {
+          id: 'hist_1049_4',
+          stage: 'vinco',
+          status: 'Vinco concluído',
+          timestamp: '2026-09-15T14:00:00Z',
+          formattedTime: '15/09/2026 14:00',
+          operator: 'Operador de Vinco',
+          notes: 'Vincagem estrutural finalizada. Iniciando montagem.'
+        },
+        {
+          id: 'hist_1049_5',
+          stage: 'montagem',
+          status: 'Montagem em andamento',
+          timestamp: '2026-09-15T14:00:00Z',
+          formattedTime: '15/09/2026 14:00',
+          operator: 'Operador de Montagem',
+          notes: 'Colagem e estrutura 3D em progresso.'
+        }
+      ],
+      stockDeducted: true,
+      stockDeductedAt: '2026-09-15T08:03:00Z'
+    },
+    createdAt: '2026-09-15T08:00:00Z',
+    updatedAt: '2026-09-15T14:00:00Z'
   },
   {
     id: 1050,

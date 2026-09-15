@@ -8,6 +8,8 @@ import {
   PRODUCTION_STAGES,
   PRODUCTION_STAGE_ORDER,
   DEFECT_REASONS,
+  DISPLAY_PRODUCTION_STAGES,
+  getStageTimelineData,
   generateOperationalLabelData
 } from './production.engine.js';
 import {
@@ -24,52 +26,68 @@ import {
 import { escapeHtml, formatDateBR } from '../../utils/sanitize.js';
 
 /**
- * Generates the visual Production Stepper HTML
+ * Generates the visual Production Stepper HTML (Vertical Timeline with Date and Time History)
  */
 export function renderTimelineStepperHtml(order) {
   const prod = order.production || {};
   const currentStage = prod.currentStage || 'aprovacao';
 
-  // Stages displayed in the linear stepper (excluding aprovacao which is initial)
-  const displayStages = [
-    { id: 'impressao', label: 'Impressão', icon: '🖨' },
-    { id: 'corte', label: 'Corte', icon: '✂' },
-    { id: 'vinco', label: 'Vinco', icon: '📐' },
-    { id: 'montagem', label: 'Montagem', icon: '🧩' },
-    { id: 'acabamento', label: 'Acabamento', icon: '✨' },
-    { id: 'conferencia', label: 'Conferência', icon: '🔍' },
-    { id: 'embalagem', label: 'Embalagem', icon: '📦' },
-    { id: 'pronto', label: 'Pronto', icon: '✓' }
-  ];
-
-  const currentIdx = displayStages.findIndex(s => s.id === currentStage);
-  const isReady = order.status === 'pronto' || order.status === 'green' || currentStage === 'pronto' || currentStage === 'concluido';
+  const timelineStages = getStageTimelineData(order);
+  const isReady = order.status === 'pronto' || order.status === 'green' || currentStage === 'pronto' || currentStage === 'concluido' || order.status === 'entregue' || order.status === 'entregues';
+  const currentStageDef = DISPLAY_PRODUCTION_STAGES.find(s => s.id === currentStage);
 
   return `
-    <div class="prod-stepper-wrap" id="order-stepper-wrap">
+    <div class="prod-stepper-wrap vertical-stepper-wrap" id="order-stepper-wrap">
       <div class="prod-stepper-title">
-        <span>Linha do Tempo de Produção</span>
-        <span style="font-size: 11px; font-weight: 700; color: var(--accent-primary);">
-          ${escapeHtml(prod.operationalCode || `OP-${order.number}`)}
+        <span style="display: flex; align-items: center; gap: 6px;">
+          <span>📋</span> Linha do Tempo de Produção
+        </span>
+        <span style="font-size: 11px; font-weight: 600; color: var(--accent-primary); background: #fdf2f8; padding: 2px 8px; border-radius: 999px;">
+          ${isReady ? '✓ Concluído' : (currentStageDef ? currentStageDef.label : 'Em Produção')}
         </span>
       </div>
-      <div class="prod-stepper">
-        ${displayStages.map((stage, idx) => {
-          let stateClass = '';
-          if (isReady) {
-            stateClass = 'done';
-          } else if (stage.id === currentStage) {
-            stateClass = 'current';
-          } else if (currentIdx !== -1 && idx < currentIdx) {
-            stateClass = 'done';
-          }
+      <div class="prod-stepper-vertical">
+        ${timelineStages.map((stage, idx) => {
+          const stateClass = stage.state; // 'done' | 'current' | 'pending'
+          const badgeText = stage.state === 'done' ? 'Concluída' : (stage.state === 'current' ? 'Em Andamento' : 'Pendente');
+          const isLast = idx === timelineStages.length - 1;
 
           return `
-            <div class="prod-step ${stateClass}" title="${stage.label}">
-              <div class="prod-step-dot">
-                ${stateClass === 'done' ? '✓' : stage.icon}
+            <div class="prod-step-vertical-item ${stateClass}">
+              <div class="prod-step-vertical-left">
+                <div class="prod-step-dot ${stateClass}">
+                  ${stateClass === 'done' ? '✓' : stage.icon}
+                </div>
+                ${!isLast ? '<div class="prod-step-vertical-line"></div>' : ''}
               </div>
-              <span class="prod-step-label">${stage.label}</span>
+              <div class="prod-step-vertical-content">
+                <div class="prod-step-vertical-header">
+                  <span class="prod-step-label">${escapeHtml(stage.label)}</span>
+                  <span class="prod-step-vertical-badge ${stateClass}">${badgeText}</span>
+                </div>
+
+                <!-- Histórico Detalhado com Horário e Data de Cada Alteração -->
+                <div class="prod-step-timeline-box">
+                  <div class="prod-timeline-row">
+                    <span class="timeline-row-label">Início</span>
+                    <span class="timeline-row-date ${stage.startDate === '—' ? 'text-muted' : ''}">${escapeHtml(stage.startDate)}</span>
+                    <span class="timeline-row-time ${stage.startTime === '—' ? 'text-muted' : ''}">${escapeHtml(stage.startTime)}</span>
+                  </div>
+                  <div class="prod-timeline-row">
+                    <span class="timeline-row-label">Concluída</span>
+                    <span class="timeline-row-date ${stage.completedDate === '—' ? 'text-muted' : ''}">${escapeHtml(stage.completedDate)}</span>
+                    <span class="timeline-row-time ${stage.completedTime === '—' ? 'text-muted' : ''}">${escapeHtml(stage.completedTime)}</span>
+                  </div>
+                  ${stage.durationText ? `
+                    <div class="prod-timeline-duration">
+                      <span>⏱</span>
+                      <span>${escapeHtml(stage.durationText)}</span>
+                    </div>
+                  ` : ''}
+                </div>
+
+                <div class="prod-step-vertical-desc">${escapeHtml(stage.desc)}</div>
+              </div>
             </div>
           `;
         }).join('')}
@@ -677,7 +695,19 @@ export function openQCModal({ order, onSubmit, openDrawer, closeDrawer }) {
 /**
  * Modal to view and print the Operational Production Label
  */
-export function openOperationalLabelModal({ order, openDrawer, closeDrawer }) {
+export function openOperationalLabelModal(arg1, arg2, arg3) {
+  let order, openDrawer, closeDrawer;
+  if (arg1 && typeof arg1 === 'object' && 'order' in arg1) {
+    order = arg1.order;
+    openDrawer = arg1.openDrawer;
+    closeDrawer = arg1.closeDrawer;
+  } else {
+    order = arg1;
+    openDrawer = arg2;
+    closeDrawer = arg3;
+  }
+
+  if (!order) return;
   const labelData = generateOperationalLabelData(order);
 
   const contentHtml = `
@@ -762,3 +792,5 @@ export function openOperationalLabelModal({ order, openDrawer, closeDrawer }) {
     }
   });
 }
+
+export const openLabelPrintModal = openOperationalLabelModal;
