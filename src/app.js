@@ -2661,12 +2661,22 @@ function initAppAfterAuth() {
   initClock();
   initCopilotUI();
 
+  // Close sidebar when clicking main content
+  const sidebar = document.getElementById('main-sidebar');
+  const mainContent = document.getElementById('main-content');
+  if (sidebar && mainContent) {
+    mainContent.addEventListener('click', () => {
+      sidebar.classList.remove('expanded');
+    });
+  }
+
   // Navigation click listeners
   const sidebarNav = document.getElementById('sidebar-nav');
   if (sidebarNav) {
     sidebarNav.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-view]');
       if (btn && btn.dataset.view) {
+        if (sidebar) sidebar.classList.remove('expanded');
         switchView(btn.dataset.view);
       }
     });

@@ -81,7 +81,6 @@ export function calculateDashboardMetrics(customOrders = null) {
       conferenciaCount++;
     }
     if (stage === 'embalagem' || s === 'em_embalagem') {
-      packagingCount++;
       embalagemCount++;
     }
     if (stage === 'pronto' || s === 'green' || s === 'pronto') {
@@ -202,13 +201,16 @@ export function calculateDashboardMetrics(customOrders = null) {
     operational: {
       awaitingCount,
       impressaoCount,
+      printQueueCount: impressaoCount,
       corteCount,
+      finishingCount: corteCount,
       vincoCount,
       montagemCount,
       acabamentoCount,
       conferenciaCount,
       embalagemCount,
       prontoCount,
+      readyCount: prontoCount,
       blockedCount,
       pendingPdfOrders,
       qcAlertOrders,

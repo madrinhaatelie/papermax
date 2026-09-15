@@ -83,26 +83,29 @@ export function renderLoginScreen(onSuccess) {
       position: relative;
     ">
       <div style="
-        font-family: 'Mea Culpa', cursive;
-        font-size: 52px;
-        color: var(--accent-primary, #db2777);
-        margin-bottom: 2px;
-        text-shadow: 0 2px 10px rgba(219, 39, 119, 0.2);
-        line-height: 1.1;
-      ">PaperMax</div>
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        background: linear-gradient(135deg, #db2777 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 6px;
+        line-height: 1.2;
+      ">PAPER MAX</div>
       
       <div style="
         font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.15em;
-        color: var(--text-muted, #9f1239);
+        letter-spacing: 0.12em;
+        color: var(--text-secondary, #475569);
         margin-bottom: 24px;
         font-weight: 600;
-      ">O Sistema Operacional da Papelaria Artesanal</div>
+      ">O Sistema Operacional da Papelaria Personalizada</div>
 
       <p style="
         font-size: 13px;
-        color: var(--text-secondary, #9d174d);
+        color: var(--text-secondary, #475569);
         margin-bottom: 24px;
         line-height: 1.5;
       ">
