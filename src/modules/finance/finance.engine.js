@@ -345,7 +345,7 @@ export function syncPayablesWithPurchases() {
   purchases.forEach(pur => {
     const purIdStr = String(pur.id);
     if (!payMap.has(purIdStr)) {
-      const isReceived = pur.status === 'recebida';
+      const isReceived = pur.status === 'recebido' || pur.status === 'recebida';
       const amount = Number(pur.totalAmount) || 0;
       const purDateBR = pur.date ? formatDateBR(pur.date) : formatDateBR(new Date());
 

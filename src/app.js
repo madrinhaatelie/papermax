@@ -87,10 +87,12 @@ import {
   renderOrdersView as renderOrdersModuleView,
   renderNewOrderPage,
   showOrderConsultationDrawer,
-  openEditOrderDrawer as openEditOrderDrawerModule
+  openEditOrderDrawer as openEditOrderDrawerModule,
+  showConfirmDialog
 } from './modules/orders/orders.ui.js';
+import { renderOrderApprovalPage } from './modules/orders/order.approval.ui.js';
 import { fileStorage } from './data/filestorage.js';
-import { escapeHtml, formatCurrency, formatDateBR, formatDateShortBR, parseDateBRToISO, generateId } from './utils/sanitize.js';
+import { escapeHtml, formatCurrency, formatDateBR, formatDateShortBR, parseDateBRToISO, generateId, formatNumberXX } from './utils/sanitize.js';
 import { initCopilotUI } from './modules/copilot/copilot.ui.js';
 
 // Application State
@@ -181,7 +183,37 @@ function initClock() {
 // ==========================================
 // DRAWER CONTROLLER
 // ==========================================
-export function openDrawer({ title, contentHtml, footerHtml = '', onMount = null }) {
+export function openDrawer(arg1, arg2, arg3, arg4) {
+  let title = '';
+  let contentHtml = '';
+  let footerHtml = '';
+  let onMount = null;
+  let panelClass = '';
+
+  if (typeof arg1 === 'object' && arg1 !== null) {
+    title = arg1.title || '';
+    contentHtml = arg1.contentHtml || '';
+    footerHtml = arg1.footerHtml || '';
+    onMount = arg1.onMount || null;
+    panelClass = arg1.className || arg1.panelClass || arg1.size || '';
+  } else {
+    title = typeof arg1 === 'string' ? arg1 : '';
+    contentHtml = typeof arg2 === 'string' ? arg2 : '';
+    if (typeof arg3 === 'function') {
+      onMount = arg3;
+      panelClass = typeof arg4 === 'string' ? arg4 : '';
+    } else if (typeof arg3 === 'string') {
+      footerHtml = arg3;
+      if (typeof arg4 === 'function') {
+        onMount = arg4;
+      } else if (typeof arg4 === 'string') {
+        panelClass = arg4;
+      }
+    } else if (typeof arg4 === 'function') {
+      onMount = arg4;
+    }
+  }
+
   let drawer = document.getElementById('app-drawer');
   if (!drawer || !drawer.querySelector('#drawer-panel')) {
     if (drawer) drawer.remove();
@@ -204,10 +236,18 @@ export function openDrawer({ title, contentHtml, footerHtml = '', onMount = null
   const titleEl = document.getElementById('drawer-title');
   const bodyEl = document.getElementById('drawer-body');
   const footerEl = document.getElementById('drawer-footer');
+  const panelEl = document.getElementById('drawer-panel');
 
-  if (titleEl) titleEl.textContent = title;
-  if (bodyEl) bodyEl.innerHTML = contentHtml;
-  if (footerEl) footerEl.innerHTML = footerHtml;
+  if (panelEl) {
+    panelEl.className = 'app-drawer-panel' + (panelClass ? ` ${panelClass}` : '');
+  }
+
+  if (titleEl) titleEl.textContent = title || 'Detalhes';
+  if (bodyEl) bodyEl.innerHTML = contentHtml || '';
+  if (footerEl) {
+    footerEl.innerHTML = footerHtml || '';
+    footerEl.style.display = footerHtml ? 'flex' : 'none';
+  }
 
   drawer.className = 'app-drawer-backdrop active';
   document.body.style.overflow = 'hidden';
@@ -220,7 +260,7 @@ export function openDrawer({ title, contentHtml, footerHtml = '', onMount = null
   };
 
   if (typeof onMount === 'function') {
-    onMount(drawer);
+    onMount(drawer, closeDrawer);
   }
 }
 
@@ -249,33 +289,29 @@ function renderDashboard() {
       <div class="card" id="card-metric-today">
         <div class="card-top">
           <span class="card-label">Pedidos hoje</span>
-          <span class="card-icon-badge">📋</span>
         </div>
-        <div class="card-value" id="val-orders-today">${metrics.todayCount}</div>
+        <div class="card-value" id="val-orders-today">${formatNumberXX(metrics.todayCount)}</div>
       </div>
 
       <div class="card" id="card-metric-prod">
         <div class="card-top">
           <span class="card-label">Em produção</span>
-          <span class="card-icon-badge">⚙</span>
         </div>
-        <div class="card-value" id="val-orders-prod">${metrics.inProdCount}</div>
+        <div class="card-value" id="val-orders-prod">${formatNumberXX(metrics.inProdCount)}</div>
       </div>
 
       <div class="card" id="card-metric-pending">
         <div class="card-top">
           <span class="card-label">Pendências</span>
-          <span class="card-icon-badge">⚠️</span>
         </div>
-        <div class="card-value" id="val-orders-pending">${metrics.pendingCount}</div>
+        <div class="card-value" id="val-orders-pending">${formatNumberXX(metrics.pendingCount)}</div>
       </div>
 
       <div class="card" id="card-metric-ready">
         <div class="card-top">
           <span class="card-label">Liberado Para Entrega</span>
-          <span class="card-icon-badge">✓</span>
         </div>
-        <div class="card-value" id="val-orders-ready">${metrics.readyCount}</div>
+        <div class="card-value" id="val-orders-ready">${formatNumberXX(metrics.readyCount)}</div>
       </div>
     </section>
 
@@ -283,76 +319,73 @@ function renderDashboard() {
     <section class="operational-strip" id="sec-operational-pipeline">
       <div class="operational-strip-header">
         <div class="operational-strip-title" style="display: flex; align-items: center; gap: 10px;">
-          <span>🏭 O que vou produzir hoje?</span>
+          <span>O que vou produzir hoje?</span>
           ${dashboardStageFilter ? `<span style="font-size: 11px; font-weight: 600; color: var(--accent-primary); background: #e0e7ff; padding: 2px 8px; border-radius: 999px;">Filtro: ${escapeHtml(dashboardStageFilter)} · <a href="#" id="link-clear-stage-filter" style="text-decoration: underline; color: inherit;">Limpar</a></span>` : ''}
         </div>
-        <button class="btn btn-sm" id="btn-dash-open-print-queue" style="font-size: 11px; padding: 4px 10px; font-weight: 600;">
-          🖨 Resumo diário (${metrics.operational.printQueueCount})
-        </button>
       </div>
 
       <div class="pipeline-grid">
         <div class="pipeline-card ${dashboardStageFilter === 'aguardando' ? 'active-filter' : ''}" data-dash-tab="aguardando" title="Filtrar pedidos aguardando" style="cursor: pointer; ${dashboardStageFilter === 'aguardando' ? 'border: 2px solid #eab308; background: #fefce8;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">🟡 Aguardando</span>
+            <span class="pipeline-card-label">Aguardando</span>
           </div>
-          <div class="pipeline-card-count">${metrics.operational.awaitingCount}</div>
+          <div class="pipeline-card-count">${formatNumberXX(metrics.operational.awaitingCount)}</div>
         </div>
 
         <div class="pipeline-card ${dashboardStageFilter === 'impressao' ? 'active-filter' : ''}" data-dash-tab="impressao" title="Filtrar pedidos em Impressão" style="cursor: pointer; ${dashboardStageFilter === 'impressao' ? 'border: 2px solid #3b82f6; background: #eff6ff;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">🖨 Impressão</span>
+            <span class="pipeline-card-label">Impressão</span>
           </div>
-          <div class="pipeline-card-count" style="color: var(--accent-primary);">${metrics.operational.impressaoCount}</div>
+          <div class="pipeline-card-count" style="color: var(--accent-primary);">${formatNumberXX(metrics.operational.impressaoCount)}</div>
         </div>
 
         <div class="pipeline-card ${dashboardStageFilter === 'corte' ? 'active-filter' : ''}" data-dash-tab="corte" title="Filtrar pedidos em Corte" style="cursor: pointer; ${dashboardStageFilter === 'corte' ? 'border: 2px solid #2563eb; background: #eff6ff;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">✂ Corte</span>
+            <span class="pipeline-card-label">Corte</span>
           </div>
-          <div class="pipeline-card-count">${metrics.operational.corteCount}</div>
+          <div class="pipeline-card-count">${formatNumberXX(metrics.operational.corteCount)}</div>
         </div>
 
         <div class="pipeline-card ${dashboardStageFilter === 'vinco' ? 'active-filter' : ''}" data-dash-tab="vinco" title="Filtrar pedidos em Vinco" style="cursor: pointer; ${dashboardStageFilter === 'vinco' ? 'border: 2px solid #9333ea; background: #faf5ff;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">📐 Vinco</span>
+            <span class="pipeline-card-label">Vinco</span>
           </div>
-          <div class="pipeline-card-count">${metrics.operational.vincoCount}</div>
+          <div class="pipeline-card-count">${formatNumberXX(metrics.operational.vincoCount)}</div>
         </div>
 
         <div class="pipeline-card ${dashboardStageFilter === 'montagem' ? 'active-filter' : ''}" data-dash-tab="montagem" title="Filtrar pedidos em Montagem" style="cursor: pointer; ${dashboardStageFilter === 'montagem' ? 'border: 2px solid #4f46e5; background: #eef2ff;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">🧩 Montagem</span>
+            <span class="pipeline-card-label">Montagem</span>
           </div>
-          <div class="pipeline-card-count">${metrics.operational.montagemCount}</div>
+          <div class="pipeline-card-count">${formatNumberXX(metrics.operational.montagemCount)}</div>
         </div>
 
         <div class="pipeline-card ${dashboardStageFilter === 'acabamento' ? 'active-filter' : ''}" data-dash-tab="acabamento" title="Filtrar pedidos em Acabamento" style="cursor: pointer; ${dashboardStageFilter === 'acabamento' ? 'border: 2px solid #0284c7; background: #f0f9ff;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">✨ Acabamento</span>
+            <span class="pipeline-card-label">Acabamento</span>
           </div>
-          <div class="pipeline-card-count">${metrics.operational.acabamentoCount}</div>
+          <div class="pipeline-card-count">${formatNumberXX(metrics.operational.acabamentoCount)}</div>
         </div>
 
         <div class="pipeline-card ${dashboardStageFilter === 'conferencia' ? 'active-filter' : ''}" data-dash-tab="conferencia" title="Filtrar pedidos em CQ / Conferência" style="cursor: pointer; ${dashboardStageFilter === 'conferencia' ? 'border: 2px solid #ea580c; background: #fff7ed;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">🔍 CQ / Conferência</span>
+            <span class="pipeline-card-label">CQ / Conferência</span>
           </div>
-          <div class="pipeline-card-count" style="color: #c2410c;">${metrics.operational.conferenciaCount}</div>
+          <div class="pipeline-card-count" style="color: #c2410c;">${formatNumberXX(metrics.operational.conferenciaCount)}</div>
         </div>
 
         <div class="pipeline-card ${dashboardStageFilter === 'embalagem' ? 'active-filter' : ''}" data-dash-tab="embalagem" title="Filtrar pedidos em Embalagem" style="cursor: pointer; ${dashboardStageFilter === 'embalagem' ? 'border: 2px solid #0d9488; background: #f0fdfa;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">📦 Embalagem</span>
+            <span class="pipeline-card-label">Embalagem</span>
           </div>
-          <div class="pipeline-card-count">${metrics.operational.embalagemCount}</div>
+          <div class="pipeline-card-count">${formatNumberXX(metrics.operational.embalagemCount)}</div>
         </div>
 
         <div class="pipeline-card ${dashboardStageFilter === 'pronto' ? 'active-filter' : ''}" data-dash-tab="pronto" title="Filtrar pedidos Prontos" style="cursor: pointer; ${dashboardStageFilter === 'pronto' ? 'border: 2px solid #10b981; background: #ecfdf5;' : ''}">
           <div class="pipeline-card-top">
-            <span class="pipeline-card-label">✓ Pronto</span>
+            <span class="pipeline-card-label">Pronto</span>
           </div>
-          <div class="pipeline-card-count" style="color: #059669;">${metrics.operational.prontoCount}</div>
+          <div class="pipeline-card-count" style="color: #059669;">${formatNumberXX(metrics.operational.prontoCount)}</div>
         </div>
       </div>
     </section>
@@ -363,7 +396,7 @@ function renderDashboard() {
       <div class="panel" id="panel-orders">
         <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
           <h2 class="panel-title" id="title-orders" style="margin: 0;">Pedidos ativos</h2>
-          <span class="badge-count" id="badge-orders-count" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">(${metrics.activeOrders.length} pedidos)</span>
+          <span class="badge-count" id="badge-orders-count" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">(${formatNumberXX(metrics.activeOrders.length)} pedidos)</span>
         </div>
 
         <div class="orders" id="dashboard-orders-list">
@@ -379,46 +412,46 @@ function renderDashboard() {
         <div class="alerts" id="alerts-list">
           ${metrics.commercial?.highestGrowth ? `
             <div class="alert-card alert-blue" style="cursor: pointer;" id="dash-alert-growth" title="Clique para ver o ranking de produtos">
-              <div class="alert-title">🚀 Maior Crescimento: ${escapeHtml(metrics.commercial.highestGrowth.name)} (+${metrics.commercial.highestGrowth.growthQtyPct.toFixed(1)}%)</div>
+              <div class="alert-title">Maior Crescimento: ${escapeHtml(metrics.commercial.highestGrowth.name)} (+${metrics.commercial.highestGrowth.growthQtyPct.toFixed(1)}%)</div>
               <div class="alert-desc">${metrics.commercial.highestGrowth.qty} un vendidas nos últimos 30 dias (${formatCurrency(metrics.commercial.highestGrowth.revenue)}). Clique para ver ranking.</div>
             </div>
           ` : ''}
           ${metrics.commercial?.highestMargin ? `
             <div class="alert-card alert-green" style="cursor: pointer;" id="dash-alert-margin" title="Clique para ver produtos">
-              <div class="alert-title">💎 Destaque de Rentabilidade: ${escapeHtml(metrics.commercial.highestMargin.name)} (${metrics.commercial.highestMargin.marginPct.toFixed(1)}% de margem)</div>
+              <div class="alert-title">Destaque de Rentabilidade: ${escapeHtml(metrics.commercial.highestMargin.name)} (${metrics.commercial.highestMargin.marginPct.toFixed(1)}% de margem)</div>
               <div class="alert-desc">Lucro de ${formatCurrency(metrics.commercial.highestMargin.profit)} com preço de ${formatCurrency(metrics.commercial.highestMargin.price)}.</div>
             </div>
           ` : ''}
           ${metrics.commercial?.stockAlerts?.length > 0 ? `
             <div class="alert-card alert-orange" style="cursor: pointer;" id="dash-alert-stock" title="Clique para ver a capacidade de produção">
-              <div class="alert-title">⚠ Alerta Demanda × Estoque (${metrics.commercial.stockAlerts.length} produto(s) críticos)</div>
+              <div class="alert-title">Alerta Demanda × Estoque (${metrics.commercial.stockAlerts.length} produto(s) críticos)</div>
               <div class="alert-desc">${escapeHtml(metrics.commercial.stockAlerts.map(p => p.name).join(', '))} com estoque abaixo do volume de vendas.</div>
             </div>
           ` : ''}
           ${metrics.operational.qcAlertOrders.length > 0 ? `
             <div class="alert-card alert-red">
-              <div class="alert-title">🔴 ${metrics.operational.qcAlertOrders.length} pedido(s) com não conformidades no CQ</div>
-              <div class="alert-desc">${escapeHtml(metrics.operational.qcAlertOrders.map(o => `Pedido ${o.number || o.id}`).join(', '))} necessitam de retrabalho na linha de produção.</div>
+              <div class="alert-title">${metrics.operational.qcAlertOrders.length} pedido(s) com não conformidades no CQ</div>
+              <div class="alert-desc">${escapeHtml(metrics.operational.qcAlertOrders.map(o => `${o.number || o.id}`).join(', '))} necessitam de retrabalho na linha de produção.</div>
             </div>
           ` : ''}
           ${metrics.operational.pendingPdfOrders.length > 0 ? `
             <div class="alert-card alert-yellow">
-              <div class="alert-title">🟡 ${metrics.operational.pendingPdfOrders.length} pedido(s) sem PDF gerado</div>
+              <div class="alert-title">${metrics.operational.pendingPdfOrders.length} pedido(s) sem PDF gerado</div>
               <div class="alert-desc">Avisos de corte e impressão pendentes de arquivo vetorial.</div>
             </div>
           ` : ''}
           ${metrics.operational.urgentOrders.length > 0 ? `
             <div class="alert-card alert-orange">
-              <div class="alert-title">🟠 ${metrics.operational.urgentOrders.length} pedido(s) urgentes / entrega hoje</div>
+              <div class="alert-title">${metrics.operational.urgentOrders.length} pedido(s) urgentes / entrega hoje</div>
               <div class="alert-desc">Prioridades imediatas para conferência final e empacotamento.</div>
             </div>
           ` : ''}
           <div class="alert-card alert-blue">
-            <div class="alert-title">🔵 ${metrics.inProdCount} pedido(s) na linha operacional</div>
+            <div class="alert-title">${metrics.inProdCount} pedido(s) na linha operacional</div>
             <div class="alert-desc">Impressão, corte, vinco, montagem e acabamento em andamento.</div>
           </div>
           <div class="alert-card alert-green">
-            <div class="alert-title">🟢 ${metrics.readyCount} pedido(s) liberados para entrega</div>
+            <div class="alert-title">${metrics.readyCount} pedido(s) liberados para entrega</div>
             <div class="alert-desc">Embalagem final conferida e prontos para liberação ao cliente.</div>
           </div>
         </div>
@@ -441,7 +474,7 @@ function renderDashboard() {
         </div>
         <div class="life-card" id="life-card-prods">
           <span class="life-label">Produtos</span>
-          <b class="life-val" id="val-lifetime-products">${metrics.soldProductsCount} un</b>
+          <b class="life-val" id="val-lifetime-products">${formatNumberXX(metrics.soldProductsCount)}</b>
         </div>
         <div class="life-card" id="life-card-invest">
           <span class="life-label">Investimento</span>
@@ -608,7 +641,7 @@ function renderDashboardOrdersList() {
   container.innerHTML = orders.map(order => {
     const statusDef = ORDER_STATUS_MAP[order.status] || ORDER_STATUS_MAP.yellow;
     const statusClass = `status-${statusDef.colorClass || order.status}`;
-    const orderTitleFormatted = `Pedido ${order.number || order.id} · ${escapeHtml(order.productTitle || order.title || 'Personalizado')}`;
+    const orderTitleFormatted = `${order.number || order.id} · ${escapeHtml(order.productTitle || order.title || 'Personalizado')}`;
     const customer = escapeHtml(order.customer || 'Cliente');
     const qty = order.qty || 1;
     const date = order.deliveryDate || order.date || '--/--/--';
@@ -701,11 +734,22 @@ function renderDashboardOrdersList() {
       container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
       const order = getOrderById(btn.dataset.id);
       if (!order) return;
-      if (confirm(`Tem certeza que deseja excluir o Pedido ${order.number || order.id}?`)) {
-        deleteOrder(btn.dataset.id);
-        renderDashboard();
-        showToast('Pedido excluído');
-      }
+      const orderNum = order.number || order.id;
+      showConfirmDialog({
+        title: 'Excluir Pedido',
+        message: `Tem certeza que deseja excluir o <b>Pedido #${orderNum}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
+        confirmText: 'Sim, Excluir Pedido',
+        isDanger: true,
+        onConfirm: () => {
+          try {
+            deleteOrder(btn.dataset.id);
+            renderDashboard();
+            showToast(`Pedido #${orderNum} excluído com sucesso!`, '✅');
+          } catch (err) {
+            showToast(err.message, '⚠');
+          }
+        }
+      });
     });
   });
 
@@ -759,30 +803,27 @@ function renderProductsView() {
       </div>
       <div class="module-actions">
         <button class="btn btn-primary" id="btn-products-new">+ Novo produto</button>
-        <button class="btn" id="btn-products-bulk" style="font-weight: 600;">⚡ Personalização em massa</button>
-        <button class="btn" id="btn-manage-categories">Gerenciar Categorias</button>
-        <button class="btn" id="btn-products-export">Exportar CSV</button>
-        <button class="btn" id="btn-products-template">Modelo CSV</button>
-        <button class="btn" id="btn-products-import">Importar CSV</button>
       </div>
-    </div>
-
-    <!-- Products Tabs Submenu -->
-    <div class="subtabs" id="products-subtabs">
-      <button class="subtab-btn ${productsTab === 'todos' ? 'active' : ''}" data-tab="todos">Todos</button>
-      <button class="subtab-btn ${productsTab === 'vitrine' ? 'active' : ''}" data-tab="vitrine">Vitrine</button>
-      <button class="subtab-btn ${productsTab === 'ranking' ? 'active' : ''}" data-tab="ranking">🏆 Ranking</button>
-      <button class="subtab-btn ${productsTab === 'tendencias' ? 'active' : ''}" data-tab="tendencias">📈 Tendências</button>
-      <button class="subtab-btn ${productsTab === 'capacidade' ? 'active' : ''}" data-tab="capacidade">📦 Capacidade</button>
-      <button class="subtab-btn ${productsTab === 'categorias' ? 'active' : ''}" data-tab="categorias">Categorias (${categories.length})</button>
     </div>
 
     <!-- Search & Filters -->
-    <div class="filter-bar">
-      <div class="search-wrapper flex-1">
+    <div class="filter-bar" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <div class="search-wrapper flex-1" style="min-width: 240px;">
         <span class="search-icon">🔍</span>
         <input class="search w-full" id="input-products-search" placeholder="Buscar por nome do produto, descrição ou categoria..." value="${escapeHtml(productSearchTerm)}" />
       </div>
+      
+      <div style="min-width: 180px;">
+        <select class="form-select" id="select-products-tab" style="width: 100%; height: 38px; font-size: 13px; font-weight: 600; cursor: pointer; background-color: #fff;">
+          <option value="todos" ${productsTab === 'todos' ? 'selected' : ''}>Todos os Produtos</option>
+          <option value="vitrine" ${productsTab === 'vitrine' ? 'selected' : ''}>Vitrine</option>
+          <option value="ranking" ${productsTab === 'ranking' ? 'selected' : ''}>🏆 Ranking</option>
+          <option value="tendencias" ${productsTab === 'tendencias' ? 'selected' : ''}>📈 Tendências</option>
+          <option value="capacidade" ${productsTab === 'capacidade' ? 'selected' : ''}>📦 Capacidade</option>
+          <option value="categorias" ${productsTab === 'categorias' ? 'selected' : ''}>Categorias (${categories.length})</option>
+        </select>
+      </div>
+
       <span class="badge-count">${products.length} produtos</span>
     </div>
 
@@ -807,14 +848,14 @@ function renderProductsView() {
     renderCategoriesManagerInline(tabContent, categories);
   }
 
-
-  // Bind subtabs
-  container.querySelectorAll('#products-subtabs button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      productsTab = btn.dataset.tab;
+  // Bind view select filter
+  const selectTab = container.querySelector('#select-products-tab');
+  if (selectTab) {
+    selectTab.addEventListener('change', e => {
+      productsTab = e.target.value;
       renderProductsView();
     });
-  });
+  }
 
   // Search
   const searchInput = document.getElementById('input-products-search');
@@ -827,106 +868,137 @@ function renderProductsView() {
 
   // Action Buttons
   document.getElementById('btn-products-new').addEventListener('click', () => openNewProductDrawer());
-  
-  const prodBulkBtn = document.getElementById('btn-products-bulk');
-  if (prodBulkBtn) {
-    prodBulkBtn.addEventListener('click', () => {
-      openBulkPersonalizationModal(openDrawer, closeDrawer);
-    });
-  }
-
-  document.getElementById('btn-manage-categories').addEventListener('click', () => {
-    productsTab = 'categorias';
-    renderProductsView();
-  });
-
-  document.getElementById('btn-products-export').addEventListener('click', () => {
-    const csv = exportProductsCSV();
-    downloadCSVFile(`produtos_${Date.now()}.csv`, csv);
-    showToast('CSV de Produtos exportado com sucesso');
-  });
-
-  document.getElementById('btn-products-template').addEventListener('click', () => {
-    const csv = exportProductsCSVTemplate();
-    downloadCSVFile(`modelo_produtos.csv`, csv);
-    showToast('Modelo CSV baixado');
-  });
-
-  document.getElementById('btn-products-import').addEventListener('click', () => {
-    openImportCSVDrawer('produtos');
-  });
 }
 
 function renderProductsTable(container, products, categories) {
   const catMap = new Map(categories.map(c => [c.id, c.name]));
 
   container.innerHTML = `
-    <div class="list-group" style="display: flex; flex-direction: column; gap: 8px;">
+    <div class="products-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px;">
       ${products.length === 0 ? `
-        <div style="text-align: center; padding: 36px; color: var(--text-muted); background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-subtle);">
+        <div style="grid-column: 1 / -1; text-align: center; padding: 36px; color: var(--text-muted); background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-subtle);">
           Nenhum produto cadastrado no catálogo.
         </div>
       ` : products.map(p => {
-        const catName = catMap.get(p.categoryId) || 'Geral';
-        const pFieldsCount = (p.personalizationFields || []).length;
-        const cOptsCount = (p.changeOptions || []).length;
         const isMold = isSmartMold(p);
         const statusClass = p.status === 'ativo' ? 'status-green' : 'status-neutral';
         const statusLabel = p.status === 'ativo' ? 'Ativo' : 'Inativo';
 
+        const unitPrice = Number(p.price) || 0;
+        const unitCost = Number(p.cost) || 0;
+        const unitProfit = Math.max(0, unitPrice - unitCost);
+        const marginPct = unitPrice > 0 ? ((unitProfit / unitPrice) * 100).toFixed(0) : 0;
+
         return `
-          <div class="list-row ${statusClass}">
-            <div class="list-main" style="cursor: pointer;" data-action="view-product" data-id="${p.id}">
-              <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
-                ${escapeHtml(p.name)}
-                ${isMold ? '<span class="badge-count" style="background: #e0e7ff; color: #3730a3; font-size: 10px;">✨ Molde</span>' : ''}
+          <div class="list-row ${statusClass}" data-action="view-product-card" data-id="${p.id}" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); transition: all 0.15s ease; cursor: pointer;">
+            
+            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+              <!-- Foto do Produto -->
+              <div class="product-thumb" style="width: 46px; height: 46px; border-radius: 8px; overflow: hidden; background: #f8fafc; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; border: 1px solid var(--border-subtle);">
+                ${p.imageUrl || p.image || p.photo 
+                  ? `<img src="${escapeHtml(p.imageUrl || p.image || p.photo)}" alt="${escapeHtml(p.name)}" style="width: 100%; height: 100%; object-fit: cover;" />`
+                  : (p.categoryId === 'cat_sacolas' ? '🛍️' : p.categoryId === 'cat_festas' ? '🎉' : p.categoryId === 'cat_caixas' ? '📦' : p.categoryId === 'cat_agendas' ? '📔' : '✨')
+                }
               </div>
-              <div class="list-meta">
-                ${escapeHtml(catName)} · ${pFieldsCount} campos · ${cOptsCount} opções
+
+              <!-- Nome & Subtítulo: Lucro -->
+              <div class="list-main" style="flex: 1; min-width: 0;">
+                <div class="list-title" style="display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  <span style="overflow: hidden; text-overflow: ellipsis;">${escapeHtml(p.name)}</span>
+                </div>
+                <div class="list-meta" style="font-size: 11.5px; margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <span style="color: #16a34a; font-weight: 600;">Lucro: R$ ${unitProfit.toFixed(2)} (${marginPct}%)</span>
+                </div>
               </div>
             </div>
-            <div style="text-align: right; min-width: 120px;">
-                <span style="font-weight: 600; font-size: 13px;">${formatCurrency(p.price)}</span>
-                <div style="font-size: 11px; color: var(--text-muted);">${statusLabel}</div>
+
+            <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+              <div style="text-align: right;">
+                <span style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: block;">${formatCurrency(p.price)}</span>
+                <span style="font-size: 10.5px; color: var(--text-muted); font-weight: 500;">${statusLabel}</span>
+              </div>
+
+              <div class="actions" style="position: relative;">
+                <button class="action-btn btn-dots-menu" data-action="toggle-dots-prod" data-id="${p.id}" title="Ações do produto" style="padding: 4px 8px; font-weight: bold; font-size: 14px; line-height: 1; cursor: pointer;">⋮</button>
+                <div class="dots-dropdown-menu" id="dots-prod-menu-${p.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 130px; padding: 4px 0;">
+                  <button class="dots-menu-item" data-action="edit-product" data-id="${p.id}">✏️ Editar</button>
+                  <button class="dots-menu-item" data-action="dup-product" data-id="${p.id}">📋 Duplicar</button>
+                  <button class="dots-menu-item" data-action="intel-product" data-id="${p.id}">📊 Intel</button>
+                  <button class="dots-menu-item" data-action="bulk-product" data-id="${p.id}">⚡ Lote</button>
+                  <button class="dots-menu-item" data-action="hide-product" data-id="${p.id}">👁️ Ocultar</button>
+                  <div style="height: 1px; background: var(--border-subtle); margin: 4px 0;"></div>
+                  <button class="dots-menu-item" data-action="del-product" data-id="${p.id}" style="color: #ef4444;">🗑️ Excluir</button>
+                </div>
+              </div>
             </div>
-            <div class="actions">
-                <button class="action-btn" data-action="intel-product" data-id="${p.id}" title="Inteligência Comercial" style="color: #4f46e5;">📊 Intel</button>
-                <button class="action-btn" data-action="bulk-product" data-id="${p.id}" title="Personalização em Massa" style="color: var(--accent-primary);">⚡ Lote</button>
-                <button class="action-btn" data-action="edit-product" data-id="${p.id}" title="Editar produto">✏️ Editar</button>
-                <button class="action-btn" data-action="dup-product" data-id="${p.id}" title="Duplicar produto">📋 Duplicar</button>
-                <button class="action-btn btn-danger" data-action="del-product" data-id="${p.id}" title="Excluir produto" style="color: #ef4444;">🗑️ Excluir</button>
-                <button class="action-btn" data-action="hide-product" data-id="${p.id}" title="Ocultar produto">👁️ Ocultar</button>
-            </div>
+
           </div>
         `;
       }).join('')}
     </div>
   `;
 
+  // Click on entire card opens product details
+  container.querySelectorAll('[data-action="view-product-card"]').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.closest('.actions') || e.target.closest('.dots-dropdown-menu')) {
+        return;
+      }
+      showProductDetailsDrawer(card.dataset.id);
+    });
+  });
+
+  // Toggle dots menu
+  container.querySelectorAll('[data-action="toggle-dots-prod"]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const menu = container.querySelector(`#dots-prod-menu-${id}`);
+      const isVisible = menu && menu.style.display === 'block';
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      if (menu && !isVisible) {
+        menu.style.display = 'block';
+      }
+    });
+  });
+
   // Bind Actions
   container.querySelectorAll('[data-action="intel-product"]').forEach(el => {
-    el.addEventListener('click', () => openProductIntelligenceDrawer({ productId: el.dataset.id, openDrawer, closeDrawer }));
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      openProductIntelligenceDrawer({ productId: el.dataset.id, openDrawer, closeDrawer });
+    });
   });
 
   container.querySelectorAll('[data-action="bulk-product"]').forEach(el => {
-    el.addEventListener('click', () => openBulkPersonalizationModal(openDrawer, closeDrawer, el.dataset.id));
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      openBulkPersonalizationModal(openDrawer, closeDrawer, el.dataset.id);
+    });
   });
-
 
   container.querySelectorAll('[data-action="view-product"]').forEach(el => {
     el.addEventListener('click', () => showProductDetailsDrawer(el.dataset.id));
   });
 
   container.querySelectorAll('[data-action="edit-product"]').forEach(el => {
-    el.addEventListener('click', () => openEditProductDrawer(el.dataset.id));
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      openEditProductDrawer(el.dataset.id);
+    });
   });
 
   container.querySelectorAll('[data-action="dup-product"]').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
       try {
         const dup = duplicateProduct(el.dataset.id);
         renderProductsView();
-        showToast(`Produto "${dup.name}" duplicado`);
+        showToast(`Produto "${dup.name}" duplicado com sucesso!`, '📋');
       } catch (err) {
         showToast(err.message, '⚠');
       }
@@ -936,23 +1008,35 @@ function renderProductsTable(container, products, categories) {
   container.querySelectorAll('[data-action="del-product"]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
       const p = getProductById(el.dataset.id);
       if (!p) return;
-      if (confirm(`Deseja excluir o produto "${p.name}"?`)) {
-        const res = deleteProduct(p.id);
-        if (!res.success) {
-          alert(res.message);
-        } else {
-          renderProductsView();
-          showToast(res.message);
+      showConfirmDialog({
+        title: 'Excluir Produto',
+        message: `Tem certeza que deseja excluir o produto <b>"${escapeHtml(p.name)}"</b> do catálogo?<br><br>Esta ação não pode ser desfeita.`,
+        confirmText: 'Sim, Excluir Produto',
+        isDanger: true,
+        onConfirm: () => {
+          const res = deleteProduct(p.id);
+          if (!res.success) {
+            showToast(res.message, '⚠');
+          } else {
+            renderProductsView();
+            showToast(res.message || 'Produto excluído com sucesso', '🗑️');
+          }
         }
-      }
+      });
     });
   });
 
   container.querySelectorAll('[data-action="hide-product"]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      const row = el.closest('.list-row');
+      if (row) {
+        row.style.display = 'none';
+      }
       showToast('Produto ocultado da visualização.');
     });
   });
@@ -1108,88 +1192,176 @@ function showProductDetailsDrawer(productId) {
 
   const categories = getCategories();
   const cat = categories.find(c => c.id === p.categoryId);
+  const price = Number(p.price) || 0;
+  const priceFrom = Number(p.priceFrom) || price;
+  const cost = Number(p.cost) || 0;
+  const profit = Math.max(0, price - cost);
+  const marginPct = price > 0 ? ((profit / price) * 100).toFixed(0) : 0;
+  const history = p.priceHistory || [{ price: price, date: '16/09/2026' }];
 
-  const contentHtml = `
-    <div class="drawer-detail-section">
-      <span class="badge-count">${cat ? escapeHtml(cat.name) : 'Geral'}</span>
-      <h2 style="font-size: 20px; font-weight: 700; margin: 8px 0 4px 0;">${escapeHtml(p.name)}</h2>
-      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
-        ${escapeHtml(p.description || 'Sem descrição cadastrada.')}
-      </p>
-      <div class="detail-grid">
-        <div class="detail-item">
-          <span class="detail-label">Preço de Venda</span>
-          <span class="detail-val"><b>${formatCurrency(p.price)}</b></span>
+  let currentAngle = 'front';
+
+  function getMockupHtml(angle) {
+    const labels = { front: 'Frente', angle: 'Frente / Lateral', back: 'Verso' };
+    const photo = p.mockups?.[angle] || (angle === 'front' ? (p.imageUrl || p.image || p.photo) : '');
+    return `
+      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">Preview Mockup 3D Estático (03 Posições)</span>
+          <span class="badge-count" style="font-size: 9.5px; background: #e0e7ff; color: #4338ca;">${labels[angle]}</span>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">Custo Base Estimado</span>
-          <span class="detail-val">${formatCurrency(p.cost)}</span>
+        <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+          <button type="button" class="btn btn-sm ${angle === 'front' ? 'btn-primary' : ''}" data-view-mockup="front" style="flex: 1; font-size: 11px;">1. Frente</button>
+          <button type="button" class="btn btn-sm ${angle === 'angle' ? 'btn-primary' : ''}" data-view-mockup="angle" style="flex: 1; font-size: 11px;">2. Frente / Lateral</button>
+          <button type="button" class="btn btn-sm ${angle === 'back' ? 'btn-primary' : ''}" data-view-mockup="back" style="flex: 1; font-size: 11px;">3. Verso</button>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">Tempo de Produção</span>
-          <span class="detail-val">${p.productionTime || 1} dias</span>
+        <div style="height: 140px; background: #ffffff; border: 1px dashed var(--border-subtle); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+          ${photo ? `
+            <img src="${escapeHtml(photo)}" alt="${escapeHtml(p.name)}" style="height: 100%; object-fit: contain;" />
+          ` : `
+            <div style="text-align: center; color: var(--text-muted);">
+              <div style="font-size: 32px; margin-bottom: 2px;">${angle === 'front' ? '🛍️' : angle === 'angle' ? '📦' : '✨'}</div>
+              <div style="font-size: 11px; font-weight: 600;">Mockup 3D: ${labels[angle]}</div>
+            </div>
+          `}
         </div>
-        <div class="detail-item">
-          <span class="detail-label">Versão de Configuração</span>
-          <span class="detail-val">v${p.configurationVersion || 1}</span>
+        <div style="margin-top: 10px; padding: 8px 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 11px; color: #166534; display: flex; align-items: center; gap: 6px;">
+          <span>🔗</span>
+          <span><b>Link para o cliente:</b> O link interativo de visualização 3D é gerado automaticamente no Pedido após o preenchimento.</span>
         </div>
       </div>
-    </div>
+    `;
+  }
 
-    <div class="drawer-detail-section">
-      <h4 class="drawer-subtitle">Campos de Personalização (${(p.personalizationFields || []).length})</h4>
-      ${(p.personalizationFields || []).length === 0 ? `
-        <div style="font-size: 13px; color: var(--text-muted);">Nenhum campo configurado.</div>
-      ` : `
+  function getDrawerHtml() {
+    return `
+      <!-- Mockup 3D Estático 3 Posições -->
+      <div id="mockup-viewer-container">
+        ${getMockupHtml(currentAngle)}
+      </div>
+
+      <div class="drawer-detail-section">
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+          <span class="badge-count">${cat ? escapeHtml(cat.name) : 'Geral'}</span>
+          ${p.subcategoryId ? `<span class="badge-count" style="background: #eef2ff; color: #4338ca;">${escapeHtml(p.subcategoryId)}</span>` : ''}
+          <span class="badge-count" style="background: ${p.status === 'ativo' ? '#dcfce7' : '#f1f5f9'}; color: ${p.status === 'ativo' ? '#15803d' : '#64748b'};">
+            ${p.status === 'ativo' ? 'Ativo' : 'Desativado'}
+          </span>
+        </div>
+        <h2 style="font-size: 18px; font-weight: 700; margin: 6px 0 4px 0;">${escapeHtml(p.name)}</h2>
+        <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+          ${escapeHtml(p.description || 'Sem descrição cadastrada.')}
+        </p>
         <div class="detail-grid">
-          ${p.personalizationFields.map(f => `
-            <div class="detail-item">
-              <span class="detail-label">${escapeHtml(f.name)} (${f.type})</span>
-              <span class="detail-val">${f.required ? 'Obrigatório' : 'Opcional'}</span>
+          <div class="detail-item">
+            <span class="detail-label">Preço "POR" (Venda)</span>
+            <span class="detail-val"><b style="color: #16a34a;">${formatCurrency(price)}</b></span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Preço "DE" (Tabela)</span>
+            <span class="detail-val" style="text-decoration: ${priceFrom > price ? 'line-through' : 'none'}; color: var(--text-muted);">${formatCurrency(priceFrom)}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Custo Base Estimado</span>
+            <span class="detail-val">${formatCurrency(cost)}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Lucro Unitário</span>
+            <span class="detail-val"><b style="color: #16a34a;">${formatCurrency(profit)} (${marginPct}%)</b></span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Dias de Produção</span>
+            <span class="detail-val">${p.productionTime || 1} dias</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Versão do Molde</span>
+            <span class="detail-val">v${p.configurationVersion || 1}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Histórico de Valor -->
+      <div class="drawer-detail-section">
+        <h4 class="drawer-subtitle">Histórico de Valor</h4>
+        <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 11.5px; display: flex; flex-direction: column; gap: 4px;">
+          ${history.map((h, i) => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0; border-bottom: ${i < history.length - 1 ? '1px dashed var(--border-subtle)' : 'none'};">
+              <span style="font-weight: 700; color: #16a34a;">- R$ ${Number(h.price || 0).toFixed(2).replace('.', ',')}</span>
+              <span style="color: var(--text-secondary);">${escapeHtml(h.date || '')}</span>
             </div>
           `).join('')}
         </div>
-      `}
-    </div>
-
-    <div class="drawer-detail-section">
-      <h4 class="drawer-subtitle">Opções de Alteração (${(p.changeOptions || []).length})</h4>
-      ${(p.changeOptions || []).length === 0 ? `
-        <div style="font-size: 13px; color: var(--text-muted);">Nenhuma opção configurada.</div>
-      ` : `
-        <div class="detail-grid">
-          ${p.changeOptions.map(opt => `
-            <div class="detail-item">
-              <span class="detail-label">${escapeHtml(opt.name)}</span>
-              <span class="detail-val">${(opt.choices || []).join(', ')}</span>
-            </div>
-          `).join('')}
-        </div>
-      `}
-    </div>
-
-    <div class="drawer-detail-section">
-      <h4 class="drawer-subtitle">Estrutura do Molde Inteligente</h4>
-      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
-        <div>Áreas de Texto vinculadas: <b>${(p.editor?.textAreas || []).length}</b></div>
-        <div>Áreas de Cor / Elemento: <b>${((p.editor?.elementAreas || []).length + (p.editor?.colorAreas || []).length)}</b></div>
-        <div>Gabarito Base PDF: <b>${p.basePdfMetadata ? escapeHtml(p.basePdfMetadata.name) : 'Gabarito Padrão'}</b></div>
       </div>
-    </div>
-  `;
+
+      <!-- Molde do Produto: Personalização + Opções -->
+      <div class="drawer-detail-section">
+        <h4 class="drawer-subtitle">Campos de Personalização (${(p.personalizationFields || []).length})</h4>
+        ${(p.personalizationFields || []).length === 0 ? `
+          <div style="font-size: 12px; color: var(--text-muted);">Nenhum texto configurado.</div>
+        ` : `
+          <div class="detail-grid">
+            ${p.personalizationFields.map(f => `
+              <div class="detail-item">
+                <span class="detail-label">${escapeHtml(f.name)} (${f.type || 'text'})</span>
+                <span class="detail-val">${f.required ? 'Obrigatório' : 'Opcional'}</span>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+
+      <div class="drawer-detail-section">
+        <h4 class="drawer-subtitle">Opções de Alteração / Variações (${(p.changeOptions || []).length})</h4>
+        ${(p.changeOptions || []).length === 0 ? `
+          <div style="font-size: 12px; color: var(--text-muted);">Nenhuma opção configurada.</div>
+        ` : `
+          <div class="detail-grid">
+            ${p.changeOptions.map(opt => `
+              <div class="detail-item">
+                <span class="detail-label">${escapeHtml(opt.name)}</span>
+                <span class="detail-val">${(opt.choices || []).join(', ')}</span>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+
+      <div class="drawer-detail-section">
+        <h4 class="drawer-subtitle">PDF + Gabarito (Molde do Produto)</h4>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          <div>Áreas de Texto mapeadas: <b>${(p.editor?.textAreas || []).length}</b></div>
+          <div>Gabarito Base: <b>${p.basePdfMetadata ? escapeHtml(p.basePdfMetadata.name) : 'Gabarito Padrão'}</b></div>
+        </div>
+      </div>
+    `;
+  }
 
   const footerHtml = `
     <button class="btn" id="btn-prod-intel-drawer" style="color: #4f46e5; font-weight: 600;">📊 Inteligência Comercial</button>
     <button class="btn" id="btn-prod-bulk-drawer" style="font-weight: 600;">⚡ Personalização em Massa</button>
-    <button class="btn" id="btn-edit-prod-drawer">⚙ Configurar Molde</button>
+    <button class="btn" id="btn-edit-prod-drawer">⚙ Editar Produto</button>
     <button class="btn btn-primary" id="btn-close-prod-drawer">Fechar</button>
   `;
 
   openDrawer({
-    title: `Detalhes do Produto · ${p.name}`,
-    contentHtml,
+    title: `Resumo do Produto · ${p.name}`,
+    contentHtml: `<div id="product-detail-body">${getDrawerHtml()}</div>`,
     footerHtml,
     onMount: (drawer) => {
+      const bindMockupClicks = () => {
+        drawer.querySelectorAll('[data-view-mockup]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            currentAngle = btn.dataset.viewMockup;
+            const container = drawer.querySelector('#mockup-viewer-container');
+            if (container) {
+              container.innerHTML = getMockupHtml(currentAngle);
+              bindMockupClicks();
+            }
+          });
+        });
+      };
+      bindMockupClicks();
+
       drawer.querySelector('#btn-close-prod-drawer').addEventListener('click', closeDrawer);
       drawer.querySelector('#btn-prod-intel-drawer').addEventListener('click', () => {
         closeDrawer();
@@ -1205,7 +1377,6 @@ function showProductDetailsDrawer(productId) {
       });
     }
   });
-
 }
 
 function openNewProductDrawer() {
@@ -1707,13 +1878,21 @@ function renderSettingsView() {
 // ==========================================
 // VIEW SWITCHER
 // ==========================================
-export function switchView(viewName) {
+export function switchView(viewName, payload = null) {
   currentView = viewName;
 
   // Update active sidebar nav button
   document.querySelectorAll('#sidebar-nav button').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === viewName);
+    const isActive = (btn.dataset.view === viewName) || 
+      ((viewName === 'pedidos-novo' || viewName === 'pedidos-editar') && btn.dataset.view === 'pedidos');
+    btn.classList.toggle('active', isActive);
   });
+
+  // Ações rápidas fixas apenas no Dashboard (Início)
+  const quickActionsBar = document.getElementById('quick-actions-bar');
+  if (quickActionsBar) {
+    quickActionsBar.style.display = (viewName === 'inicio') ? 'flex' : 'none';
+  }
 
   // Switch rendering
   switch (viewName) {
@@ -1725,10 +1904,10 @@ export function switchView(viewName) {
       renderOrdersView();
       break;
     case 'pedidos-novo':
-      document.querySelectorAll('#sidebar-nav button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.view === 'pedidos');
-      });
-      renderNewOrderPage(document.getElementById('view-container'), getOrdersContext());
+      renderNewOrderPage(document.getElementById('view-container'), getOrdersContext(), null);
+      break;
+    case 'pedidos-editar':
+      renderNewOrderPage(document.getElementById('view-container'), getOrdersContext(), payload);
       break;
     case 'produtos':
       renderProductsView();
@@ -1741,6 +1920,9 @@ export function switchView(viewName) {
       break;
     case 'ajustes':
       renderSettingsView();
+      break;
+    case 'aprovar-arte':
+      renderOrderApprovalPage(document.getElementById('view-container'), payload || 1048, () => switchView('pedidos'));
       break;
     default:
       renderDashboard();
@@ -1880,8 +2062,24 @@ function initAppAfterAuth() {
     if (currentView === 'financeiro') renderFinanceView();
   });
 
-  // Start at initial view
-  switchView('inicio');
+  // Hash Routing (ex: #/aprovar-arte/1048)
+  function handleHashRoute() {
+    const hash = window.location.hash || '';
+    if (hash.startsWith('#/aprovar-arte/') || hash.startsWith('#aprovar-arte/')) {
+      const parts = hash.split('/');
+      const orderId = parts[parts.length - 1];
+      switchView('aprovar-arte', orderId);
+      return true;
+    }
+    return false;
+  }
+
+  window.addEventListener('hashchange', handleHashRoute);
+
+  // Start at initial view or route
+  if (!handleHashRoute()) {
+    switchView('inicio');
+  }
 
   // Register PWA Service Worker
   if ('serviceWorker' in navigator) {
@@ -1896,4 +2094,55 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
 } else {
   initApp();
+}
+
+export function openContextMenu(event, options) {
+  event.stopPropagation();
+  const existing = document.getElementById('app-context-menu');
+  if (existing) existing.remove();
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.id = 'app-context-menu';
+  menu.style.position = 'fixed';
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.style.left = `${Math.min(rect.left, window.innerWidth - 200)}px`;
+  menu.style.background = '#ffffff';
+  menu.style.border = '1px solid var(--border-subtle)';
+  menu.style.borderRadius = '8px';
+  menu.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
+  menu.style.zIndex = '99999';
+  menu.style.minWidth = '170px';
+  menu.style.padding = '4px';
+  menu.style.display = 'flex';
+  menu.style.flexDirection = 'column';
+  menu.style.gap = '2px';
+
+  menu.innerHTML = options.map((opt, idx) => `
+    <button class="context-menu-item" data-idx="${idx}" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: transparent; border: none; border-radius: 6px; text-align: left; font-size: 13px; font-weight: 500; cursor: pointer; color: ${opt.danger ? '#ef4444' : 'var(--text-primary)'};">
+      <span>${opt.icon || ''}</span>
+      <span>${opt.label}</span>
+    </button>
+  `).join('');
+
+  document.body.appendChild(menu);
+
+  menu.querySelectorAll('.context-menu-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.remove();
+      const idx = Number(btn.getAttribute('data-idx'));
+      if (options[idx] && typeof options[idx].action === 'function') {
+        options[idx].action();
+      }
+    });
+  });
+
+  const closeListener = (e) => {
+    if (!menu.contains(e.target)) {
+      menu.remove();
+      document.removeEventListener('click', closeListener);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeListener), 0);
 }

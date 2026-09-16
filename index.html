@@ -753,10 +753,28 @@
       opacity: 0.8;
     }
 
-    /* CARD OFF: VERDE ESCURO C/ LETRAS BRANCAS (Entregues) */
-    .list-row.status-entregues,
-    .list-row.status-entregue,
+    /* CARD NEUTRAL: BRANCO COM LETRAS ESCURAS */
     .list-row.status-neutral {
+      background: #ffffff !important;
+      border: 1px solid #e2e8f0 !important;
+      border-left: 6px solid #cbd5e1 !important;
+      color: var(--text-primary) !important;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03) !important;
+    }
+    .list-row.status-neutral .list-title {
+      color: var(--text-primary) !important;
+    }
+    .list-row.status-neutral .list-meta {
+      color: var(--text-secondary) !important;
+    }
+    .list-row.status-neutral span,
+    .list-row.status-neutral b {
+      color: var(--text-primary) !important;
+    }
+
+    /* CARD ENTREGUE: VERDE ESCURO C/ LETRAS BRANCAS */
+    .list-row.status-entregues,
+    .list-row.status-entregue {
       background: #14532d !important;
       border: 1px solid #166534 !important;
       border-left: 6px solid #22c55e !important;
@@ -765,16 +783,12 @@
     }
     .list-row.status-entregues .list-title,
     .list-row.status-entregue .list-title,
-    .list-row.status-neutral .list-title,
     .list-row.status-entregues .list-meta,
     .list-row.status-entregue .list-meta,
-    .list-row.status-neutral .list-meta,
     .list-row.status-entregues span,
     .list-row.status-entregue span,
-    .list-row.status-neutral span,
     .list-row.status-entregues b,
-    .list-row.status-entregue b,
-    .list-row.status-neutral b {
+    .list-row.status-entregue b {
       color: #f0fdf4 !important;
     }
     .list-row.status-entregues .action-btn-kebab,
@@ -1379,6 +1393,9 @@
     }
 
     .form-input, .form-select, .form-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      display: block;
       background: #ffffff;
       border: 1px solid var(--border-strong);
       border-radius: 8px;
@@ -1653,6 +1670,7 @@
       background: #ffffff;
       color: var(--accent-primary);
       border-bottom: 1px solid #ffffff;
+      border-top: 2.5px solid var(--accent-primary);
       z-index: 1;
     }
     .binder-panel {
@@ -1662,6 +1680,124 @@
       border-radius: 0 0 10px 10px;
       padding: 16px;
       margin-bottom: 16px;
+    }
+
+    /* Divisórias Interativas de Fichário (Seções com Destaque e Recolhimento) */
+    .divisoria-card {
+      margin-bottom: 14px;
+      border-radius: 12px;
+      background: #ffffff;
+      border: 1.5px solid var(--border-subtle);
+      overflow: hidden;
+      transition: all 0.25s ease;
+    }
+
+    /* Divisória Ativa em Destaque */
+    .divisoria-card.active {
+      border-color: var(--accent-primary);
+      box-shadow: 0 6px 20px rgba(219, 39, 119, 0.12);
+    }
+
+    /* Divisória Recolhida (Cor Cinza) */
+    .divisoria-card.collapsed {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+    }
+
+    .divisoria-header-btn {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      text-align: left;
+      transition: all 0.2s ease;
+      user-select: none;
+      outline: none;
+    }
+
+    /* Header quando em DESTAQUE */
+    .divisoria-card.active .divisoria-header-btn {
+      background: #ffffff;
+      border-bottom: 1.5px solid #fce7f3;
+    }
+    .divisoria-card.active .divisoria-title-text {
+      color: var(--accent-primary);
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .divisoria-card.active .divisoria-tab-tag {
+      background: #fdf2f8;
+      color: var(--accent-primary);
+      border: 1px solid #fbcfe8;
+      font-weight: 700;
+      font-size: 11px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      box-shadow: 0 1px 3px rgba(219, 39, 119, 0.1);
+    }
+    .divisoria-card.active .divisoria-chevron {
+      background: #fdf2f8;
+      color: var(--accent-primary);
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    /* Header quando em COR CINZA E RECOLHIDA */
+    .divisoria-card.collapsed .divisoria-header-btn {
+      background: #f1f5f9;
+    }
+    .divisoria-card.collapsed .divisoria-header-btn:hover {
+      background: #e2e8f0;
+    }
+    .divisoria-card.collapsed .divisoria-title-text {
+      color: #64748b;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .divisoria-card.collapsed .divisoria-tab-tag {
+      background: #e2e8f0;
+      color: #64748b;
+      border: 1px solid #cbd5e1;
+      font-weight: 600;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+    }
+    .divisoria-card.collapsed .divisoria-chevron {
+      background: #e2e8f0;
+      color: #94a3b8;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+
+    /* Página expandida de preenchimento */
+    .divisoria-content-page {
+      padding: 20px;
+      background: #ffffff;
+      animation: fadeInDivisoria 0.22s ease-in-out;
+    }
+
+    @keyframes fadeInDivisoria {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     /* Vitrine Grid */

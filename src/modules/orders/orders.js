@@ -337,13 +337,55 @@ export function createOrder(payload) {
     
     generatedFiles: Array.isArray(payload.generatedFiles) ? payload.generatedFiles : [],
     notes: (payload.notes || '').trim(),
+
+    payments: Array.isArray(payload.payments)
+      ? payload.payments
+      : (Array.isArray(payload.financial?.payments)
+          ? payload.financial.payments
+          : (payload.paymentMethod ? [{
+              id: 'pay_' + nextNum + '_1',
+              method: payload.paymentMethod.toUpperCase(),
+              amount: Number(payload.paidAmount || 0),
+              date: orderDateFormatted,
+              time: '12:00',
+              datetime: `${orderDateFormatted} às 12:00`,
+              timestamp: new Date().toISOString()
+            }] : [])),
     
+    paidAmount: Array.isArray(payload.payments) && payload.payments.length > 0
+      ? Number(payload.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toFixed(2))
+      : Number(payload.paidAmount || payload.financial?.paidAmount || 0),
+
+    remainingAmount: (payload.remainingAmount !== undefined)
+      ? Number(payload.remainingAmount)
+      : Math.max(0, Number((totalCalculated - (
+          Array.isArray(payload.payments) && payload.payments.length > 0
+            ? payload.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+            : (payload.paidAmount || 0)
+        )).toFixed(2))),
+
+    paymentStatus: (
+      (Array.isArray(payload.payments) && payload.payments.length > 0
+        ? payload.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        : (payload.paidAmount || 0)) >= totalCalculated
+    ) ? 'pago' : ((Array.isArray(payload.payments) && payload.payments.length > 0
+        ? payload.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        : (payload.paidAmount || 0)) > 0 ? 'parcial' : 'pendente'),
+
     financial: payload.financial || {
       totalAmount: totalCalculated,
-      paidAmount: payload.paidAmount || 0,
-      remainingAmount: (payload.remainingAmount !== undefined) ? payload.remainingAmount : totalCalculated,
+      paidAmount: Array.isArray(payload.payments) && payload.payments.length > 0
+        ? Number(payload.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toFixed(2))
+        : Number(payload.paidAmount || 0),
+      remainingAmount: (payload.remainingAmount !== undefined)
+        ? Number(payload.remainingAmount)
+        : Math.max(0, Number((totalCalculated - (
+            Array.isArray(payload.payments) && payload.payments.length > 0
+              ? payload.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+              : (payload.paidAmount || 0)
+          )).toFixed(2))),
       discount: payload.discount || 0,
-      paymentMethods: payload.paymentMethod ? [{ method: payload.paymentMethod, amount: payload.paidAmount || 0 }] : []
+      payments: Array.isArray(payload.payments) ? payload.payments : []
     },
 
     createdAt: new Date().toISOString(),
@@ -361,14 +403,24 @@ export function createOrder(payload) {
 
 export function updateOrder(id, payload) {
   const orders = loadOrders();
-  const index = orders.findIndex(o => o.id === id || o.id === Number(id) || o.number === Number(id));
+  const strId = String(id).trim();
+  const numId = Number(id);
+
+  const index = orders.findIndex(o => {
+    const oIdStr = String(o.id ?? '').trim();
+    const oNumStr = String(o.number ?? '').trim();
+    if (oIdStr === strId || oNumStr === strId) return true;
+    if (!isNaN(numId) && (o.id === numId || o.number === numId)) return true;
+    return false;
+  });
+
   if (index === -1) {
     throw new Error('Pedido não encontrado.');
   }
 
   const existing = orders[index];
   const customer = payload.customer !== undefined ? (payload.customer || '').trim() : existing.customer;
-  if (!customer) {
+  if (!customer && payload.customerType !== 'PJ') {
     throw new Error('Informe o Nome do cliente.');
   }
 
@@ -380,11 +432,20 @@ export function updateOrder(id, payload) {
   const statusKey = payload.status && ORDER_STATUS_MAP[payload.status] ? payload.status : existing.status;
   const statusLabel = payload.statusLabel || (ORDER_STATUS_MAP[statusKey] ? ORDER_STATUS_MAP[statusKey].label : existing.statusLabel);
 
+  const productTitle = payload.productTitle || (
+    Array.isArray(payload.items) && payload.items.length === 1
+      ? payload.items[0].productTitle
+      : (Array.isArray(payload.items) && payload.items.length > 1 ? `${payload.items.length} itens no pedido` : existing.productTitle)
+  );
+
   const updatedOrder = {
     ...existing,
-    customer,
+    ...payload,
+    customer: customer || existing.customer,
     qty,
-    deliveryDate: payload.deliveryDate ? formatDateBR(payload.deliveryDate) : existing.deliveryDate,
+    productTitle: productTitle || existing.productTitle,
+    deliveryDate: payload.deliveryDate ? (payload.deliveryDate.includes('/') ? payload.deliveryDate : formatDateBR(payload.deliveryDate)) : existing.deliveryDate,
+    eventDate: payload.eventDate ? (payload.eventDate.includes('/') ? payload.eventDate : formatDateBR(payload.eventDate)) : existing.eventDate,
     status: statusKey,
     statusLabel,
     personalization: payload.personalization !== undefined ? payload.personalization : existing.personalization,
@@ -392,7 +453,7 @@ export function updateOrder(id, payload) {
     generatedFiles: payload.generatedFiles !== undefined ? payload.generatedFiles : (existing.generatedFiles || []),
     production: payload.production !== undefined ? payload.production : existing.production,
     notes: payload.notes !== undefined ? (payload.notes || '').trim() : existing.notes,
-    title: `Pedido ${existing.number || existing.id} · ${existing.productTitle}`,
+    title: `Pedido ${existing.number || existing.id} · ${productTitle || existing.productTitle || 'Itens'}`,
     updatedAt: new Date().toISOString()
   };
 
@@ -402,6 +463,137 @@ export function updateOrder(id, payload) {
   saveOrders(orders);
   bus.emit('orders:changed', orders);
   return updatedOrder;
+}
+
+/**
+ * Adds a payment record to an existing order and updates financial balances
+ */
+export function addOrderPayment(orderId, paymentInput) {
+  const orders = loadOrders();
+  const index = orders.findIndex(o => o.id === orderId || o.id === Number(orderId) || o.number === Number(orderId));
+  if (index === -1) {
+    throw new Error('Pedido não encontrado.');
+  }
+
+  const amount = Number(paymentInput.amount);
+  if (isNaN(amount) || amount <= 0) {
+    throw new Error('Informe um valor de pagamento válido maior que zero.');
+  }
+
+  const method = (paymentInput.method || 'PIX').trim().toUpperCase();
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = String(now.getFullYear()).slice(-2);
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const formattedDateTime = paymentInput.datetime || `${day}/${month}/${year} às ${hours}:${minutes}`;
+
+  const paymentRecord = {
+    id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    method,
+    amount: Number(amount.toFixed(2)),
+    date: `${day}/${month}/${year}`,
+    time: `${hours}:${minutes}`,
+    datetime: formattedDateTime,
+    timestamp: now.toISOString(),
+    notes: paymentInput.notes || ''
+  };
+
+  const order = orders[index];
+  if (!Array.isArray(order.payments)) {
+    order.payments = [];
+    const prevPaid = Number(order.paidAmount || order.financial?.paidAmount || 0);
+    if (prevPaid > 0) {
+      order.payments.push({
+        id: 'pay_init_' + (order.id || order.number),
+        method: (order.paymentMethod || order.financial?.paymentMethod || 'PIX').toUpperCase(),
+        amount: prevPaid,
+        date: order.orderDate || `${day}/${month}/${year}`,
+        time: '12:00',
+        datetime: `${order.orderDate || `${day}/${month}/${year}`} às 12:00`,
+        timestamp: order.createdAt || now.toISOString()
+      });
+    }
+  }
+
+  order.payments.push(paymentRecord);
+
+  // Recalculate financial breakdown
+  const totalAmount = Number(
+    order.financial?.totalAmount !== undefined 
+      ? order.financial.totalAmount 
+      : (order.totalAmount !== undefined ? order.totalAmount : ((order.qty || 1) * (order.productSnapshot?.price || 0)))
+  );
+  const paidAmount = Number(order.payments.reduce((s, p) => s + Number(p.amount || 0), 0).toFixed(2));
+  const remainingAmount = Math.max(0, Number((totalAmount - paidAmount).toFixed(2)));
+  const paymentStatus = paidAmount >= totalAmount ? 'pago' : (paidAmount > 0 ? 'parcial' : 'pendente');
+
+  order.financial = {
+    ...(order.financial || {}),
+    totalAmount,
+    paidAmount,
+    remainingAmount,
+    payments: order.payments,
+    paymentMethods: order.payments
+  };
+  order.paidAmount = paidAmount;
+  order.remainingAmount = remainingAmount;
+  order.paymentStatus = paymentStatus;
+  order.updatedAt = now.toISOString();
+
+  orders[index] = order;
+  saveOrders(orders);
+  bus.emit('orders:changed', orders);
+
+  return { order, payment: paymentRecord };
+}
+
+/**
+ * Removes a payment record from an existing order and recalculates balances
+ */
+export function removeOrderPayment(orderId, paymentId) {
+  const orders = loadOrders();
+  const index = orders.findIndex(o => o.id === orderId || o.id === Number(orderId) || o.number === Number(orderId));
+  if (index === -1) {
+    throw new Error('Pedido não encontrado.');
+  }
+
+  const order = orders[index];
+  if (!Array.isArray(order.payments)) {
+    return order;
+  }
+
+  order.payments = order.payments.filter(p => p.id !== paymentId);
+
+  const now = new Date();
+  const totalAmount = Number(
+    order.financial?.totalAmount !== undefined 
+      ? order.financial.totalAmount 
+      : (order.totalAmount !== undefined ? order.totalAmount : ((order.qty || 1) * (order.productSnapshot?.price || 0)))
+  );
+  const paidAmount = Number(order.payments.reduce((s, p) => s + Number(p.amount || 0), 0).toFixed(2));
+  const remainingAmount = Math.max(0, Number((totalAmount - paidAmount).toFixed(2)));
+  const paymentStatus = paidAmount >= totalAmount ? 'pago' : (paidAmount > 0 ? 'parcial' : 'pendente');
+
+  order.financial = {
+    ...(order.financial || {}),
+    totalAmount,
+    paidAmount,
+    remainingAmount,
+    payments: order.payments,
+    paymentMethods: order.payments
+  };
+  order.paidAmount = paidAmount;
+  order.remainingAmount = remainingAmount;
+  order.paymentStatus = paymentStatus;
+  order.updatedAt = now.toISOString();
+
+  orders[index] = order;
+  saveOrders(orders);
+  bus.emit('orders:changed', orders);
+
+  return order;
 }
 
 function triggerOrderStockConsumptionIfPending(order, operator = 'Operador Produção') {
@@ -591,7 +783,16 @@ export function duplicateOrder(id) {
 export function deleteOrder(id) {
   let orders = loadOrders();
   const initialLength = orders.length;
-  orders = orders.filter(o => o.id !== id && o.id !== Number(id) && o.number !== Number(id));
+  const strId = String(id).trim();
+  const numId = Number(id);
+
+  orders = orders.filter(o => {
+    const oIdStr = String(o.id ?? '').trim();
+    const oNumStr = String(o.number ?? '').trim();
+    if (oIdStr === strId || oNumStr === strId) return false;
+    if (!isNaN(numId) && (o.id === numId || o.number === numId)) return false;
+    return true;
+  });
 
   if (orders.length === initialLength) {
     return { success: false, message: 'Pedido não encontrado.' };

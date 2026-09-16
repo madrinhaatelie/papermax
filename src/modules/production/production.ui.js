@@ -23,7 +23,7 @@ import {
   updateOrderPackagingById,
   markOrderDeliveredById
 } from '../orders/orders.js';
-import { escapeHtml, formatDateBR } from '../../utils/sanitize.js';
+import { escapeHtml, formatDateBR, formatNumberXX } from '../../utils/sanitize.js';
 
 /**
  * Generates the visual Production Stepper HTML (Vertical Timeline with Date and Time History)
@@ -248,7 +248,7 @@ export function renderProductionHistoryHtml(order) {
     <div class="drawer-detail-section">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <h4 class="drawer-subtitle" style="margin: 0;">Histórico Operacional de Produção</h4>
-        <span class="badge-count">${history.length} eventos</span>
+        <span class="badge-count">${formatNumberXX(history.length)} eventos</span>
       </div>
 
       ${history.length === 0 ? `
@@ -270,7 +270,7 @@ export function renderProductionHistoryHtml(order) {
                 ` : ''}
                 ${item.producedQty !== undefined ? `
                   <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">
-                    Qtd: ${item.producedQty}/${order.qty} un
+                    Qtd: ${formatNumberXX(item.producedQty)}/${formatNumberXX(order.qty)} un
                   </div>
                 ` : ''}
                 <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">
@@ -733,7 +733,7 @@ export function openOperationalLabelModal(arg1, arg2, arg3) {
           <div>
             <div class="label-info-item"><b>Cliente:</b> ${escapeHtml(labelData.customer)}</div>
             <div class="label-info-item"><b>Produto:</b> ${escapeHtml(labelData.product)}</div>
-            <div class="label-info-item"><b>Quantidade:</b> ${labelData.qty} un</div>
+            <div class="label-info-item"><b>Quantidade:</b> ${formatNumberXX(labelData.qty)} un</div>
             <div class="label-info-item"><b>Entrega:</b> <b>${labelData.deliveryDate}</b></div>
           </div>
           <div style="text-align: center;">

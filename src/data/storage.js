@@ -218,6 +218,37 @@ export function loadOrders() {
             };
       }
       ensureOrderProductionState(o);
+
+      // Hydrate payment history if not already present
+      if (!Array.isArray(o.payments)) {
+        if (Array.isArray(o.financial?.payments) && o.financial.payments.length > 0) {
+          o.payments = o.financial.payments;
+        } else if (Array.isArray(o.financial?.paymentMethods) && o.financial.paymentMethods.length > 0) {
+          o.payments = o.financial.paymentMethods.map((pm, idx) => ({
+            id: 'pay_' + (o.id || o.number) + '_' + idx,
+            method: (pm.method || 'PIX').toUpperCase(),
+            amount: Number(pm.amount || 0),
+            date: o.orderDate || '14/09/26',
+            time: '18:00',
+            datetime: `${o.orderDate || '14/09/26'} às 18:00`,
+            timestamp: o.createdAt || new Date().toISOString()
+          })).filter(p => p.amount > 0);
+        } else if (Number(o.paidAmount || o.financial?.paidAmount || 0) > 0) {
+          const amt = Number(o.paidAmount || o.financial?.paidAmount || 0);
+          o.payments = [{
+            id: 'pay_' + (o.id || o.number) + '_1',
+            method: (o.paymentMethod || o.financial?.paymentMethod || 'PIX').toUpperCase(),
+            amount: amt,
+            date: o.orderDate || '14/09/26',
+            time: '18:00',
+            datetime: `${o.orderDate || '14/09/26'} às 18:00`,
+            timestamp: o.createdAt || new Date().toISOString()
+          }];
+        } else {
+          o.payments = [];
+        }
+      }
+
       return o;
     });
 
@@ -275,10 +306,34 @@ export function loadMaterials() {
       saveMaterials(SEED_MATERIALS, true);
       return SEED_MATERIALS;
     }
-    const parsed = JSON.parse(raw);
+    let parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) {
       saveMaterials(SEED_MATERIALS, true);
       return SEED_MATERIALS;
+    }
+
+    // Guarantee every material has category set
+    let updated = false;
+    parsed = parsed.map(m => {
+      if (!m.category) {
+        updated = true;
+        return { ...m, category: 'producao' };
+      }
+      return m;
+    });
+
+    // If no reposicao items exist in user's saved list, merge seed reposicao items
+    const hasReposicao = parsed.some(m => m.category === 'reposicao');
+    if (!hasReposicao) {
+      const seedReposicao = SEED_MATERIALS.filter(m => m.category === 'reposicao');
+      if (seedReposicao.length > 0) {
+        parsed = [...parsed, ...seedReposicao];
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      saveMaterials(parsed, true);
     }
     return parsed;
   } catch (e) {

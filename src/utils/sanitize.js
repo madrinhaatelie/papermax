@@ -17,6 +17,33 @@ export function formatCurrency(value) {
   return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+/**
+ * Formats numbers to at least 2 digits (XX rule: e.g. 1 -> 01, 2 -> 02, 10 -> 10)
+ */
+export function formatNumberXX(value) {
+  if (value === null || value === undefined || value === '') return '00';
+  const num = Number(value);
+  if (isNaN(num)) return String(value);
+  
+  if (Number.isInteger(num)) {
+    if (num >= 0 && num < 10) {
+      return `0${num}`;
+    }
+    if (num < 0 && num > -10) {
+      return `-0${Math.abs(num)}`;
+    }
+    return String(num);
+  }
+  
+  // Decimals (e.g., 1.5 -> 01,5)
+  const str = String(num);
+  const parts = str.split('.');
+  const intPart = Math.abs(parseInt(parts[0], 10) || 0);
+  const sign = num < 0 ? '-' : '';
+  const paddedInt = intPart < 10 ? `0${intPart}` : `${intPart}`;
+  return `${sign}${paddedInt}${parts[1] !== undefined ? ',' + parts[1] : ''}`;
+}
+
 export function formatDateBR(dateInput) {
   if (!dateInput) return '';
   // If already in DD/MM/AAAA or DD/MM/AA

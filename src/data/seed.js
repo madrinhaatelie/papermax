@@ -346,7 +346,76 @@ export const SEED_MATERIALS = [
     purchaseCost: 65.00,
     supplierId: 'sup_papeis_cia',
     supplierName: 'Papéis & Cia Distribuidora',
+    category: 'producao',
     notes: 'Laminação a quente para capas.',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z'
+  },
+  {
+    id: 'mat_lamina_silhouette_1mm',
+    name: 'Lâmina Silhouette AutoBlade 1mm',
+    baseUnit: 'un',
+    currentStock: 2,
+    minStock: 1,
+    purchasePackType: 'unidade',
+    packQuantity: 1,
+    purchaseUnit: 'un',
+    purchaseCost: 95.00,
+    supplierId: 'sup_papeis_cia',
+    supplierName: 'Silmaq & Plotter Brasil',
+    category: 'reposicao',
+    notes: 'Peça de reposição / maquinário. Vida útil estimada: ~1.000 folhas cortadas.',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z'
+  },
+  {
+    id: 'mat_base_corte_30x30',
+    name: 'Base de Corte Silhouette 30x30cm (Fixação Média)',
+    baseUnit: 'un',
+    currentStock: 3,
+    minStock: 1,
+    purchasePackType: 'unidade',
+    packQuantity: 1,
+    purchaseUnit: 'un',
+    purchaseCost: 65.00,
+    supplierId: 'sup_papeis_cia',
+    supplierName: 'Silmaq & Plotter Brasil',
+    category: 'reposicao',
+    notes: 'Peça de reposição / maquinário. Vida útil estimada: ~400 usos.',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z'
+  },
+  {
+    id: 'mat_refil_guilhotina',
+    name: 'Refil Lâmina de Guilhotina e Refiladora',
+    baseUnit: 'par',
+    currentStock: 2,
+    minStock: 1,
+    purchasePackType: 'par',
+    packQuantity: 1,
+    purchaseUnit: 'par',
+    purchaseCost: 38.00,
+    supplierId: 'sup_papeis_cia',
+    supplierName: 'Papéis & Cia Distribuidora',
+    category: 'reposicao',
+    notes: 'Par de lâminas reserva para corte de folhas.',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z'
+  },
+  {
+    id: 'mat_teflon_prensa',
+    name: 'Manta de Teflon Térmico 40x50cm',
+    baseUnit: 'un',
+    currentStock: 1,
+    minStock: 1,
+    purchasePackType: 'unidade',
+    packQuantity: 1,
+    purchaseUnit: 'un',
+    purchaseCost: 45.00,
+    supplierId: 'sup_papeis_cia',
+    supplierName: 'SubliMix Estamparia',
+    category: 'reposicao',
+    notes: 'Proteção para prensas térmicas e laminação.',
     createdAt: '2026-09-01T00:00:00Z',
     updatedAt: '2026-09-01T00:00:00Z'
   }
@@ -436,7 +505,7 @@ export const SEED_PURCHASES = [
     supplierId: 'sup_casa_fita',
     supplierName: 'Casa da Fita & Aviamentos',
     date: '2026-09-04T10:00:00Z',
-    status: 'recebida',
+    status: 'recebido',
     items: [
       { materialId: 'mat_fita_cetim_rosa_22', materialType: 'insumo', name: 'Fita de Cetim Rosa 22mm', quantity: 200, unit: 'm', packCost: 25.00, packQuantity: 100, unitCost: 0.25, totalCost: 50.00 },
       { materialId: 'mat_fita_cetim_dourada_15', materialType: 'insumo', name: 'Fita de Cetim Dourada 15mm', quantity: 50, unit: 'm', packCost: 18.00, packQuantity: 50, unitCost: 0.36, totalCost: 18.00 }
@@ -477,7 +546,7 @@ export const SEED_MOVEMENTS = [
     unit: 'folha',
     previousStock: 20,
     newStock: 120,
-    origin: 'Compra #COM-099 · Papéis & Cia',
+    origin: 'Compra COM-099 · Papéis & Cia',
     operator: 'Almoxarife',
     notes: 'Entrada de lote inicial',
     createdAt: '2026-09-01T09:00:00Z'
@@ -493,7 +562,7 @@ export const SEED_MOVEMENTS = [
     unit: 'm',
     previousStock: 50,
     newStock: 250,
-    origin: 'Compra #COM-101 · Casa da Fita',
+    origin: 'Compra COM-101 · Casa da Fita',
     operator: 'Almoxarife',
     notes: 'Entrada de rolos para flores',
     createdAt: '2026-09-06T14:30:00Z'
@@ -543,6 +612,18 @@ export const SEED_ORDERS = [
     },
     notes: 'Aguardando confirmação de arte pelo cliente.',
     productSnapshot: createSnapshotFromProduct(SEED_PRODUCTS[0]),
+    payments: [
+      {
+        id: 'pay_1048_1',
+        method: 'DINHEIRO',
+        amount: 35.00,
+        date: '14/09/26',
+        time: '20:00',
+        datetime: '14/09/26 às 20:00',
+        timestamp: '2026-09-14T20:00:00Z'
+      }
+    ],
+    paidAmount: 35.00,
     createdAt: '2026-09-05T10:30:00Z',
     updatedAt: '2026-09-05T10:30:00Z'
   },
@@ -567,6 +648,27 @@ export const SEED_ORDERS = [
     },
     notes: 'Impressão concluída, em fase de montagem.',
     productSnapshot: createSnapshotFromProduct(SEED_PRODUCTS[1]),
+    payments: [
+      {
+        id: 'pay_1049_1',
+        method: 'DINHEIRO',
+        amount: 35.00,
+        date: '14/09/26',
+        time: '20:00',
+        datetime: '14/09/26 às 20:00',
+        timestamp: '2026-09-14T20:00:00Z'
+      },
+      {
+        id: 'pay_1049_2',
+        method: 'PIX',
+        amount: 150.00,
+        date: '10/09/26',
+        time: '18:30',
+        datetime: '10/09/26 às 18:30',
+        timestamp: '2026-09-10T18:30:00Z'
+      }
+    ],
+    paidAmount: 185.00,
     production: {
       active: true,
       operationalCode: 'OP-1049',

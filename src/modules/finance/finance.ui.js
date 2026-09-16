@@ -10,6 +10,7 @@
  * 6. 🧮 Custos & Margens (Estrutura de Custos de Produtos, BOM, Insumos e Pedidos)
  */
 
+import { openContextMenu } from '../../app.js';
 import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
@@ -81,76 +82,78 @@ export function renderFinanceModule() {
 
   container.innerHTML = `
     <!-- Top Header -->
-    <div class="module-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+    <div class="module-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px;">
       <div>
-        <h2 class="module-title" style="margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+        <h2 class="module-title" style="margin: 0; font-size: 1.625rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
           💰 Gestão Financeira Integrada
         </h2>
       </div>
-      <div class="header-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <button class="btn btn-secondary" id="btn-finance-export-csv" title="Exportar dados da aba atual para CSV">
+      <div class="header-actions" style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button class="btn btn-secondary" id="btn-finance-export-csv" title="Exportar dados da aba atual para CSV" style="padding: 8px 14px;">
           ⬇ Exportar CSV
         </button>
-        <button class="btn btn-secondary" id="btn-finance-import-csv" title="Importar dados via planilha CSV">
+        <button class="btn btn-secondary" id="btn-finance-import-csv" title="Importar dados via planilha CSV" style="padding: 8px 14px;">
           ⬆ Importar CSV
         </button>
-        <button class="btn btn-primary" id="btn-quick-new-expense">
+        <button class="btn btn-primary" id="btn-quick-new-expense" style="padding: 8px 16px;">
           + Nova Despesa
         </button>
       </div>
     </div>
 
-    <!-- Period Filter Toolbar -->
-    <div class="card" style="padding: 10px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px;">
-      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <span style="font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">
+    <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 0 0 24px 0;" />
+
+    <!-- Period Filter Toolbar (Select Dropdown) -->
+    <div class="card" style="padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 10px;">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <label for="select-finance-period" style="font-size: 0.875rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px; margin: 0;">
           📅 Período:
-        </span>
-        <div class="btn-group" style="display: flex; gap: 4px;">
-          <button class="btn btn-sm ${currentPeriod === FINANCIAL_PERIODS.ESTE_MES ? 'btn-primary' : 'btn-secondary'}" data-period="${FINANCIAL_PERIODS.ESTE_MES}">Este Mês</button>
-          <button class="btn btn-sm ${currentPeriod === FINANCIAL_PERIODS.MES_ANTERIOR ? 'btn-primary' : 'btn-secondary'}" data-period="${FINANCIAL_PERIODS.MES_ANTERIOR}">Mês Anterior</button>
-          <button class="btn btn-sm ${currentPeriod === FINANCIAL_PERIODS.ULTIMOS_30 ? 'btn-primary' : 'btn-secondary'}" data-period="${FINANCIAL_PERIODS.ULTIMOS_30}">Últimos 30 Dias</button>
-          <button class="btn btn-sm ${currentPeriod === FINANCIAL_PERIODS.TODO_PERIODO ? 'btn-primary' : 'btn-secondary'}" data-period="${FINANCIAL_PERIODS.TODO_PERIODO}">Todo o Período</button>
-          <button class="btn btn-sm ${currentPeriod === FINANCIAL_PERIODS.PERSONALIZADO ? 'btn-primary' : 'btn-secondary'}" data-period="${FINANCIAL_PERIODS.PERSONALIZADO}">Personalizado</button>
-        </div>
+        </label>
+        <select id="select-finance-period" class="form-select" style="padding: 8px 14px; font-size: 0.875rem; font-weight: 600; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); cursor: pointer; min-width: 200px;">
+          <option value="${FINANCIAL_PERIODS.ESTE_MES}" ${currentPeriod === FINANCIAL_PERIODS.ESTE_MES ? 'selected' : ''}>Este Mês</option>
+          <option value="${FINANCIAL_PERIODS.MES_ANTERIOR}" ${currentPeriod === FINANCIAL_PERIODS.MES_ANTERIOR ? 'selected' : ''}>Mês Anterior</option>
+          <option value="${FINANCIAL_PERIODS.ULTIMOS_30}" ${currentPeriod === FINANCIAL_PERIODS.ULTIMOS_30 ? 'selected' : ''}>Últimos 30 Dias</option>
+          <option value="${FINANCIAL_PERIODS.TODO_PERIODO}" ${currentPeriod === FINANCIAL_PERIODS.TODO_PERIODO ? 'selected' : ''}>Todo o Período</option>
+          <option value="${FINANCIAL_PERIODS.PERSONALIZADO}" ${currentPeriod === FINANCIAL_PERIODS.PERSONALIZADO ? 'selected' : ''}>Personalizado</option>
+        </select>
       </div>
 
       ${currentPeriod === FINANCIAL_PERIODS.PERSONALIZADO ? `
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <input type="text" id="custom-start-date" class="form-input" style="width: 110px; padding: 4px 8px; font-size: 0.8125rem;" placeholder="DD/MM/AAAA" value="${escapeHtml(customDateRange.startDate)}" />
-          <span style="color: var(--text-secondary);">até</span>
-          <input type="text" id="custom-end-date" class="form-input" style="width: 110px; padding: 4px 8px; font-size: 0.8125rem;" placeholder="DD/MM/AAAA" value="${escapeHtml(customDateRange.endDate)}" />
-          <button class="btn btn-sm btn-primary" id="btn-apply-custom-date">Aplicar</button>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <input type="text" id="custom-start-date" class="form-input" style="width: 120px; padding: 6px 10px; font-size: 0.8125rem;" placeholder="DD/MM/AAAA" value="${escapeHtml(customDateRange.startDate)}" />
+          <span style="color: var(--text-secondary); font-size: 0.8125rem;">até</span>
+          <input type="text" id="custom-end-date" class="form-input" style="width: 120px; padding: 6px 10px; font-size: 0.8125rem;" placeholder="DD/MM/AAAA" value="${escapeHtml(customDateRange.endDate)}" />
+          <button class="btn btn-sm btn-primary" id="btn-apply-custom-date" style="padding: 6px 14px;">Aplicar</button>
         </div>
       ` : ''}
     </div>
 
     <!-- Navigation Tabs -->
-    <div class="finance-tab-bar" style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; overflow-x: auto;">
-      <button class="tab-btn ${currentFinanceTab === 'visao_geral' ? 'active' : ''}" data-finance-tab="visao_geral">
+    <div class="finance-tab-bar" style="display: flex; gap: 10px; margin-bottom: 24px; border-bottom: 2px solid var(--border-subtle); padding-bottom: 12px; overflow-x: auto;">
+      <button class="tab-btn ${currentFinanceTab === 'visao_geral' ? 'active' : ''}" data-finance-tab="visao_geral" style="padding: 8px 16px; font-weight: 600;">
         📊 Visão Geral
       </button>
-      <button class="tab-btn ${currentFinanceTab === 'vendas' ? 'active' : ''}" data-finance-tab="vendas">
+      <button class="tab-btn ${currentFinanceTab === 'vendas' ? 'active' : ''}" data-finance-tab="vendas" style="padding: 8px 16px; font-weight: 600;">
         🛍️ Vendas Integradas
       </button>
-      <button class="tab-btn ${currentFinanceTab === 'despesas' ? 'active' : ''}" data-finance-tab="despesas">
+      <button class="tab-btn ${currentFinanceTab === 'despesas' ? 'active' : ''}" data-finance-tab="despesas" style="padding: 8px 16px; font-weight: 600;">
         💸 Despesas Operacionais
       </button>
-      <button class="tab-btn ${currentFinanceTab === 'a_receber' ? 'active' : ''}" data-finance-tab="a_receber">
+      <button class="tab-btn ${currentFinanceTab === 'a_receber' ? 'active' : ''}" data-finance-tab="a_receber" style="padding: 8px 16px; font-weight: 600;">
         📥 Contas a Receber
-        ${metrics.countReceberVencido > 0 ? `<span class="badge-count" style="background: var(--status-red-bg); color: var(--status-red-text); margin-left: 4px;">${metrics.countReceberVencido}</span>` : ''}
+        ${metrics.countReceberVencido > 0 ? `<span class="badge-count" style="background: var(--status-red-bg); color: var(--status-red-text); margin-left: 6px;">${metrics.countReceberVencido}</span>` : ''}
       </button>
-      <button class="tab-btn ${currentFinanceTab === 'a_pagar' ? 'active' : ''}" data-finance-tab="a_pagar">
+      <button class="tab-btn ${currentFinanceTab === 'a_pagar' ? 'active' : ''}" data-finance-tab="a_pagar" style="padding: 8px 16px; font-weight: 600;">
         📤 Contas a Pagar
-        ${metrics.countPagarVencido > 0 ? `<span class="badge-count" style="background: var(--status-red-bg); color: var(--status-red-text); margin-left: 4px;">${metrics.countPagarVencido}</span>` : ''}
+        ${metrics.countPagarVencido > 0 ? `<span class="badge-count" style="background: var(--status-red-bg); color: var(--status-red-text); margin-left: 6px;">${metrics.countPagarVencido}</span>` : ''}
       </button>
-      <button class="tab-btn ${currentFinanceTab === 'custos' ? 'active' : ''}" data-finance-tab="custos">
+      <button class="tab-btn ${currentFinanceTab === 'custos' ? 'active' : ''}" data-finance-tab="custos" style="padding: 8px 16px; font-weight: 600;">
         🧮 Custos & Margens (BOM)
       </button>
     </div>
 
     <!-- Sub-tab Render Container -->
-    <div id="finance-subtab-container">
+    <div id="finance-subtab-container" style="padding-top: 4px;">
       ${renderActiveFinanceSubtab(metrics)}
     </div>
 
@@ -192,36 +195,36 @@ function renderVisaoGeralTab(metrics) {
   const isPositivePredicted = metrics.resultadoPrevisto >= 0;
 
   return `
-    <div style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 24px;">
       
       <!-- REALIZADO vs PREVISTO Split Cards -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
         
         <!-- Bloco 1: REALIZADO NO CAIXA -->
-        <div class="card" style="padding: 16px; border: 1px solid var(--border-subtle); border-top: 4px solid #10b981; border-radius: 8px; background: var(--bg-card);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 1.125rem;">💵</span>
+        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-top: 4px solid #10b981; border-radius: 10px; background: var(--bg-card);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">💵</span>
               <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-primary);">FLUXO REALIZADO</h3>
             </div>
-            <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 12px;">
+            <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
               Efetivado no Caixa
             </span>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--border-subtle);">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed var(--border-subtle);">
             <div>
-              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Entradas Recebidas</span>
-              <div style="font-size: 1.25rem; font-weight: 700; color: #10b981;">
+              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Entradas Recebidas</span>
+              <div style="font-size: 1.375rem; font-weight: 700; color: #10b981; margin-top: 4px;">
                 ${formatCurrency(metrics.entradasRealizadas)}
               </div>
             </div>
             <div>
-              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Saídas Pagas</span>
-              <div style="font-size: 1.25rem; font-weight: 700; color: #ef4444;">
+              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Saídas Pagas</span>
+              <div style="font-size: 1.375rem; font-weight: 700; color: #ef4444; margin-top: 4px;">
                 ${formatCurrency(metrics.saidasRealizadas)}
               </div>
-              <div style="font-size: 0.6875rem; color: var(--text-secondary); margin-top: 2px;">
+              <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
                 Compras: ${formatCurrency(metrics.saidasCompras)} · Desp: ${formatCurrency(metrics.saidasDespesas)}
               </div>
             </div>
@@ -229,40 +232,40 @@ function renderVisaoGeralTab(metrics) {
 
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Saldo Realizado:</span>
-            <span style="font-size: 1.375rem; font-weight: 800; color: ${isPositiveRealized ? '#10b981' : '#ef4444'};">
+            <span style="font-size: 1.5rem; font-weight: 800; color: ${isPositiveRealized ? '#10b981' : '#ef4444'};">
               ${formatCurrency(metrics.saldoRealizado)}
             </span>
           </div>
         </div>
 
         <!-- Bloco 2: VALORES PREVISTOS (A RECEBER / A PAGAR) -->
-        <div class="card" style="padding: 16px; border: 1px solid var(--border-subtle); border-top: 4px solid #f59e0b; border-radius: 8px; background: var(--bg-card);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 1.125rem;">⏳</span>
+        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-top: 4px solid #f59e0b; border-radius: 10px; background: var(--bg-card);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">⏳</span>
               <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-primary);">PREVISTO / ABERTO</h3>
             </div>
-            <span class="badge" style="background: rgba(245, 158, 11, 0.12); color: #d97706; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 12px;">
+            <span class="badge" style="background: rgba(245, 158, 11, 0.12); color: #d97706; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
               A Vencer / Vencido
             </span>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--border-subtle);">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed var(--border-subtle);">
             <div>
               <div style="display: flex; align-items: center; justify-content: space-between;">
-                <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">A Receber Total</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">A Receber Total</span>
                 ${metrics.countReceberVencido > 0 ? `<span style="font-size: 0.6875rem; color: #ef4444; font-weight: 600;">(${metrics.countReceberVencido} vencidos)</span>` : ''}
               </div>
-              <div style="font-size: 1.25rem; font-weight: 700; color: #f59e0b;">
+              <div style="font-size: 1.375rem; font-weight: 700; color: #f59e0b; margin-top: 4px;">
                 ${formatCurrency(metrics.totalAReceber)}
               </div>
             </div>
             <div>
               <div style="display: flex; align-items: center; justify-content: space-between;">
-                <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">A Pagar Total</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">A Pagar Total</span>
                 ${metrics.countPagarVencido > 0 ? `<span style="font-size: 0.6875rem; color: #ef4444; font-weight: 600;">(${metrics.countPagarVencido} vencidos)</span>` : ''}
               </div>
-              <div style="font-size: 1.25rem; font-weight: 700; color: #8b5cf6;">
+              <div style="font-size: 1.375rem; font-weight: 700; color: #8b5cf6; margin-top: 4px;">
                 ${formatCurrency(metrics.totalAPagar)}
               </div>
             </div>
@@ -270,34 +273,34 @@ function renderVisaoGeralTab(metrics) {
 
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Resultado Previsto:</span>
-            <span style="font-size: 1.375rem; font-weight: 800; color: ${isPositivePredicted ? '#10b981' : '#ef4444'};">
+            <span style="font-size: 1.5rem; font-weight: 800; color: ${isPositivePredicted ? '#10b981' : '#ef4444'};">
               ${formatCurrency(metrics.resultadoPrevisto)}
             </span>
           </div>
         </div>
 
         <!-- Bloco 3: DESEMPENHO ECONÔMICO (COMPETÊNCIA) -->
-        <div class="card" style="padding: 16px; border: 1px solid var(--border-subtle); border-top: 4px solid #3b82f6; border-radius: 8px; background: var(--bg-card);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 1.125rem;">📈</span>
+        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-top: 4px solid #3b82f6; border-radius: 10px; background: var(--bg-card);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">📈</span>
               <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-primary);">DRE DO PERÍODO</h3>
             </div>
-            <span class="badge" style="background: rgba(59, 130, 246, 0.12); color: #2563eb; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 12px;">
+            <span class="badge" style="background: rgba(59, 130, 246, 0.12); color: #2563eb; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
               ${metrics.totalOrdersInPeriod} Pedidos
             </span>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--border-subtle);">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed var(--border-subtle);">
             <div>
-              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Vendas Faturadas</span>
-              <div style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">
+              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Vendas Faturadas</span>
+              <div style="font-size: 1.375rem; font-weight: 700; color: var(--text-primary); margin-top: 4px;">
                 ${formatCurrency(metrics.totalVendas)}
               </div>
             </div>
             <div>
-              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Margem Média</span>
-              <div style="font-size: 1.25rem; font-weight: 700; color: #3b82f6;">
+              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Margem Média</span>
+              <div style="font-size: 1.375rem; font-weight: 700; color: #3b82f6; margin-top: 4px;">
                 ${metrics.margemMediaPercent}%
               </div>
             </div>
@@ -305,7 +308,7 @@ function renderVisaoGeralTab(metrics) {
 
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Lucro Bruto:</span>
-            <span style="font-size: 1.375rem; font-weight: 800; color: #10b981;">
+            <span style="font-size: 1.5rem; font-weight: 800; color: #10b981;">
               ${formatCurrency(metrics.lucroBrutoVendas)}
             </span>
           </div>
@@ -313,43 +316,45 @@ function renderVisaoGeralTab(metrics) {
 
       </div>
 
+      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 8px 0;" />
+
       <!-- DRE Simplificado e Detalhamento de Despesas -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
         
         <!-- Demonstrativo de Resultado -->
-        <div class="card" style="padding: 16px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-card);">
-          <h4 style="margin: 0 0 16px 0; font-size: 0.9375rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-card);">
+          <h4 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
             📑 DRE Gerencial Sintético (${formatPeriodLabel(metrics.period)})
           </h4>
 
-          <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.875rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle);">
+          <div style="display: flex; flex-direction: column; gap: 12px; font-size: 0.875rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
               <span style="font-weight: 600; color: var(--text-primary);">(+) Receita Bruta de Vendas</span>
               <span style="font-weight: 700; color: #10b981;">${formatCurrency(metrics.totalVendas)}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle);">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
               <span style="color: var(--text-secondary);">(-) Custo das Mercadorias Vendidas (CMV)</span>
               <span style="color: #ef4444;">${formatCurrency(metrics.totalCustoMercadorias)}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; background: rgba(59, 130, 246, 0.05); padding-left: 8px; padding-right: 8px; border-radius: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(59, 130, 246, 0.05); border-radius: 6px;">
               <span style="font-weight: 700; color: var(--text-primary); font-size: 0.9375rem;">(=) Lucro Bruto da Produção</span>
               <span style="font-weight: 800; color: #2563eb; font-size: 0.9375rem;">${formatCurrency(metrics.lucroBrutoVendas)}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle);">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
               <span style="color: var(--text-secondary);">(-) Despesas Operacionais Realizadas</span>
               <span style="color: #ef4444;">${formatCurrency(metrics.saidasDespesas)}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: rgba(16, 185, 129, 0.08); border-radius: 6px; margin-top: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: rgba(16, 185, 129, 0.08); border-radius: 8px; margin-top: 6px;">
               <span style="font-weight: 800; color: var(--text-primary); font-size: 1rem;">(=) Resultado Operacional Líquido</span>
-              <span style="font-weight: 800; color: ${metrics.resultadoOperacional >= 0 ? '#059669' : '#ef4444'}; font-size: 1.125rem;">
+              <span style="font-weight: 800; color: ${metrics.resultadoOperacional >= 0 ? '#059669' : '#ef4444'}; font-size: 1.1875rem;">
                 ${formatCurrency(metrics.resultadoOperacional)}
               </span>
             </div>
           </div>
 
           <!-- Didactic Atelier Explanations (Task 3) -->
-          <div style="margin-top: 14px; padding: 12px; background: var(--bg-surface-raised); border-radius: 6px; border: 1px dashed var(--border-subtle); font-size: 11px; color: var(--text-secondary); line-height: 1.5;">
-            <b style="color: var(--text-primary); display: block; margin-bottom: 4px;">💡 Entenda os Termos do Ateliê:</b>
+          <div style="margin-top: 20px; padding: 14px; background: var(--bg-surface-raised); border-radius: 8px; border: 1px dashed var(--border-subtle); font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6;">
+            <b style="color: var(--text-primary); display: block; margin-bottom: 6px; font-size: 0.8125rem;">💡 Entenda os Termos do Ateliê:</b>
             <div>• <b>Receita:</b> Faturamento bruto total obtido com as vendas de pedidos.</div>
             <div>• <b>CMV:</b> Custo dos materiais e papéis utilizados na fabricação dos itens.</div>
             <div>• <b>Lucro Bruto:</b> Quanto sobra das vendas após descontar o custo dos materiais.</div>
@@ -359,28 +364,28 @@ function renderVisaoGeralTab(metrics) {
         </div>
 
         <!-- Composição de Despesas Operacionais por Categoria -->
-        <div class="card" style="padding: 16px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-card);">
-          <h4 style="margin: 0 0 16px 0; font-size: 0.9375rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-card);">
+          <h4 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
             📊 Despesas por Categoria
           </h4>
 
-          <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
             ${Object.entries(metrics.expensesByCategory).map(([cat, val]) => {
               const totalExp = metrics.saidasDespesas > 0 ? metrics.saidasDespesas : (Object.values(metrics.expensesByCategory).reduce((a, b) => a + b, 0) || 1);
               const pct = ((val / totalExp) * 100).toFixed(0);
               if (val === 0) return '';
               return `
-                <div style="margin-bottom: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 0.8125rem; margin-bottom: 4px;">
+                <div style="margin-bottom: 6px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.8125rem; margin-bottom: 6px;">
                     <span style="font-weight: 600; color: var(--text-primary);">${cat}</span>
-                    <span style="color: var(--text-secondary);">${formatCurrency(val)} (${pct}%)</span>
+                    <span style="color: var(--text-secondary); font-weight: 600;">${formatCurrency(val)} (${pct}%)</span>
                   </div>
-                  <div style="width: 100%; height: 6px; background: var(--border-subtle); border-radius: 3px; overflow: hidden;">
-                    <div style="width: ${pct}%; height: 100%; background: #ef4444; border-radius: 3px;"></div>
+                  <div style="width: 100%; height: 8px; background: var(--border-subtle); border-radius: 4px; overflow: hidden;">
+                    <div style="width: ${pct}%; height: 100%; background: #ef4444; border-radius: 4px;"></div>
                   </div>
                 </div>
               `;
-            }).join('') || `<div style="font-size: 0.875rem; color: var(--text-secondary); text-align: center; padding: 24px 0;"><p style="margin: 0; font-weight: 600;">Nenhuma despesa registrada neste período.</p><p style="margin: 4px 0 0 0; font-size: 0.75rem;">As despesas aparecerão aqui conforme os custos operacionais do ateliê forem lançados.</p></div>`}
+            }).join('') || `<div style="font-size: 0.875rem; color: var(--text-secondary); text-align: center; padding: 32px 0;"><p style="margin: 0; font-weight: 600;">Nenhuma despesa registrada neste período.</p><p style="margin: 6px 0 0 0; font-size: 0.75rem;">As despesas aparecerão aqui conforme os custos operacionais do ateliê forem lançados.</p></div>`}
           </div>
         </div>
 
@@ -425,10 +430,10 @@ function renderVendasTab() {
   const avgMargin = totalSalesSum > 0 ? (totalProfitSum / totalSalesSum) * 100 : 0;
 
   return `
-    <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
       
       <!-- Toolbar & Search -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg-card); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border-subtle);">
         <div style="display: flex; align-items: center; gap: 8px;">
           <input 
             type="text" 
@@ -439,7 +444,7 @@ function renderVendasTab() {
             style="width: 280px;"
           />
         </div>
-        <div style="display: flex; gap: 16px; align-items: center; font-size: 0.875rem;">
+        <div style="display: flex; gap: 20px; align-items: center; font-size: 0.875rem;">
           <div><strong>Total Vendas:</strong> <span style="color: #10b981; font-weight: 700;">${formatCurrency(totalSalesSum)}</span></div>
           <div><strong>Custo Total:</strong> <span style="color: #ef4444; font-weight: 600;">${formatCurrency(totalCostSum)}</span></div>
           <div><strong>Lucro:</strong> <span style="color: #2563eb; font-weight: 700;">${formatCurrency(totalProfitSum)}</span></div>
@@ -447,39 +452,37 @@ function renderVendasTab() {
         </div>
       </div>
 
+      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 4px 0;" />
+
       <!-- Sales List -->
       <div class="card" style="padding: 0; background: transparent; border: none; box-shadow: none;">
-        <div class="list-group" style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="list-group" style="display: flex; flex-direction: column; gap: 10px;">
             ${sales.length === 0 ? `
-              <div style="text-align: center; padding: 32px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-secondary);">
+              <div style="text-align: center; padding: 40px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px; color: var(--text-secondary);">
                 Nenhuma venda encontrada para os critérios selecionados.
               </div>
             ` : sales.map(s => {
               const isReceived = s.receivingStatus === 'recebido';
               const statusClass = isReceived ? 'status-green' : 'status-yellow';
               return `
-                <div class="list-row ${statusClass}">
+                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px;">
                   <div class="list-main">
-                    <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
-                      #${s.orderNumber} - ${escapeHtml(s.customer)}
+                    <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
+                      ${s.orderNumber} - ${escapeHtml(s.customer)}
                       ${s.hasSnapshot ? '<span title="Custo e preço fixados no snapshot do pedido" style="font-size: 0.75rem; color: #3b82f6;">📸</span>' : ''}
                     </div>
-                    <div class="list-meta">
+                    <div class="list-meta" style="margin-top: 4px;">
                       ${escapeHtml(s.productTitle)} · ${s.qty} un · Preço Unit: ${formatCurrency(s.unitPrice)}
                     </div>
                   </div>
                   <div style="text-align: right; min-width: 140px;">
-                    <span style="font-weight: 700; font-size: 13px; color: #10b981;">+${formatCurrency(s.totalSale)}</span>
-                    <div style="font-size: 11px; color: var(--text-muted);">
-                      Lucro: <span style="color: ${s.profit >= 0 ? '#10b981' : '#ef4444'};">${formatCurrency(s.profit)}</span> (${s.marginPercent.toFixed(1)}%)
+                    <span style="font-weight: 700; font-size: 14px; color: #10b981;">+${formatCurrency(s.totalSale)}</span>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                      Lucro: <span style="color: ${s.profit >= 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">${formatCurrency(s.profit)}</span> (${s.marginPercent.toFixed(1)}%)
                     </div>
                   </div>
-                  <div class="actions">
-                    ${!isReceived && s.receivableId ? `
-                      <button class="action-btn btn-quick-receive" data-rec-id="${s.receivableId}" style="color: #10b981;">💵 Receber</button>
-                    ` : `
-                      <span style="font-size: 11px; color: var(--text-secondary); padding: 5px 9px;">${s.paidDate || '✓ Pago'}</span>
-                    `}
+                  <div class="actions" onclick="event.stopPropagation();">
+                    <button class="action-btn btn-secondary btn-receivable-menu" data-id="${s.receivableId}" style="padding: 6px 10px; font-size: 14px;" title="Ações">⋮</button>
                   </div>
                 </div>
               `;
@@ -515,11 +518,11 @@ function renderDespesasTab() {
   });
 
   return `
-    <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
       
       <!-- Toolbar & Filters -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg-card); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
           <input 
             type="text" 
             id="input-search-expenses" 
@@ -528,31 +531,33 @@ function renderDespesasTab() {
             value="${escapeHtml(expensesSearchQuery)}"
             style="width: 200px;"
           />
-          <select id="select-category-expenses" class="form-select" style="width: 150px;">
+          <select id="select-category-expenses" class="form-select" style="width: 160px;">
             <option value="todos" ${expensesCategoryFilter === 'todos' ? 'selected' : ''}>Todas Categorias</option>
             ${EXPENSE_CATEGORIES.map(cat => `
               <option value="${cat}" ${expensesCategoryFilter === cat ? 'selected' : ''}>${cat}</option>
             `).join('')}
           </select>
-          <select id="select-status-expenses" class="form-select" style="width: 130px;">
+          <select id="select-status-expenses" class="form-select" style="width: 140px;">
             <option value="todos" ${expensesStatusFilter === 'todos' ? 'selected' : ''}>Todos Status</option>
             <option value="aberto" ${expensesStatusFilter === 'aberto' ? 'selected' : ''}>Aberto</option>
             <option value="pago" ${expensesStatusFilter === 'pago' ? 'selected' : ''}>Pago</option>
           </select>
         </div>
 
-        <div style="display: flex; gap: 16px; align-items: center; font-size: 0.875rem;">
+        <div style="display: flex; gap: 20px; align-items: center; font-size: 0.875rem;">
           <div><strong>Total:</strong> <span style="color: var(--text-primary); font-weight: 700;">${formatCurrency(totalExpensesSum)}</span></div>
           <div><strong>Pago:</strong> <span style="color: #ef4444; font-weight: 700;">${formatCurrency(paidExpensesSum)}</span></div>
           <div><strong>A Pagar:</strong> <span style="color: #f59e0b; font-weight: 700;">${formatCurrency(openExpensesSum)}</span></div>
         </div>
       </div>
 
+      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 4px 0;" />
+
       <!-- Expenses List -->
       <div class="card" style="padding: 0; background: transparent; border: none; box-shadow: none;">
-        <div class="list-group" style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="list-group" style="display: flex; flex-direction: column; gap: 10px;">
             ${expenses.length === 0 ? `
-              <div style="text-align: center; padding: 32px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-secondary);">
+              <div style="text-align: center; padding: 40px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px; color: var(--text-secondary);">
                 Nenhuma despesa encontrada.
               </div>
             ` : expenses.map(e => {
@@ -560,26 +565,22 @@ function renderDespesasTab() {
               const statusClass = isPaid ? 'status-green' : 'status-yellow';
               
               return `
-                <div class="list-row ${statusClass}">
+                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px;">
                   <div class="list-main" style="cursor: pointer;" data-action="edit-expense" data-id="${e.id}">
-                    <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
+                    <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
                       ${escapeHtml(e.description)}
-                      <span class="badge-count" style="background: rgba(100, 116, 139, 0.12); color: var(--text-secondary); font-size: 10px;">${escapeHtml(e.category || 'Operacional')}</span>
+                      <span class="badge-count" style="background: rgba(100, 116, 139, 0.12); color: var(--text-secondary); font-size: 11px; padding: 2px 8px;">${escapeHtml(e.category || 'Operacional')}</span>
                     </div>
-                    <div class="list-meta">
+                    <div class="list-meta" style="margin-top: 4px;">
                       Emissão: ${e.date || '--/--/----'} · Vencimento: ${e.dueDate || '--/--/----'}
                     </div>
                   </div>
-                  <div style="text-align: right; min-width: 120px;">
-                    <span style="font-weight: 700; font-size: 13px; color: #ef4444;">${formatCurrency(e.amount)}</span>
-                    <div style="font-size: 11px; color: var(--text-muted);">${isPaid ? `✓ Pago (${escapeHtml(e.paymentMethod || 'Pix')})` : '⏳ Em Aberto'}</div>
+                  <div style="text-align: right; min-width: 140px;">
+                    <span style="font-weight: 700; font-size: 14px; color: #ef4444;">${formatCurrency(e.amount)}</span>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${isPaid ? `✓ Pago (${escapeHtml(e.paymentMethod || 'Pix')})` : '⏳ Em Aberto'}</div>
                   </div>
-                  <div class="actions">
-                    ${!isPaid ? `<button class="action-btn btn-pay-expense" data-exp-id="${e.id}" style="color: #10b981;">💵 Pagar</button>` : ''}
-                    <button class="action-btn btn-edit-expense" data-exp-id="${e.id}">✏️ Editar</button>
-                    <button class="action-btn" data-action="dup-expense" data-id="${e.id}">📋 Duplicar</button>
-                    <button class="action-btn btn-delete-expense" data-exp-id="${e.id}" style="color: #ef4444;">🗑️ Excluir</button>
-                    <button class="action-btn" data-action="hide-expense" data-id="${e.id}">👁️ Ocultar</button>
+                  <div class="actions" onclick="event.stopPropagation();">
+                    <button class="action-btn btn-secondary btn-expense-menu" data-id="${e.id}" style="padding: 6px 10px; font-size: 14px;" title="Ações">⋮</button>
                   </div>
                 </div>
               `;
@@ -615,11 +616,11 @@ function renderAReceberTab() {
   });
 
   return `
-    <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
       
       <!-- Toolbar & Filters -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg-card); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; align-items: center; gap: 10px;">
           <input 
             type="text" 
             id="input-search-receivables" 
@@ -628,25 +629,27 @@ function renderAReceberTab() {
             value="${escapeHtml(receivablesSearchQuery)}"
             style="width: 260px;"
           />
-          <select id="select-status-receivables" class="form-select" style="width: 140px;">
+          <select id="select-status-receivables" class="form-select" style="width: 150px;">
             <option value="todos" ${receivablesStatusFilter === 'todos' ? 'selected' : ''}>Todos Status</option>
             <option value="aberto" ${receivablesStatusFilter === 'aberto' ? 'selected' : ''}>Em Aberto</option>
             <option value="recebido" ${receivablesStatusFilter === 'recebido' ? 'selected' : ''}>Recebido</option>
           </select>
         </div>
 
-        <div style="display: flex; gap: 16px; align-items: center; font-size: 0.875rem;">
+        <div style="display: flex; gap: 20px; align-items: center; font-size: 0.875rem;">
           <div><strong>Total:</strong> <span style="color: var(--text-primary); font-weight: 700;">${formatCurrency(totalRecSum)}</span></div>
           <div><strong>Recebido:</strong> <span style="color: #10b981; font-weight: 700;">${formatCurrency(receivedSum)}</span></div>
           <div><strong>A Receber:</strong> <span style="color: #f59e0b; font-weight: 700;">${formatCurrency(pendingRecSum)}</span></div>
         </div>
       </div>
 
+      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 4px 0;" />
+
       <!-- Receivables List -->
       <div class="card" style="padding: 0; background: transparent; border: none; box-shadow: none;">
-        <div class="list-group" style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="list-group" style="display: flex; flex-direction: column; gap: 10px;">
             ${receivables.length === 0 ? `
-              <div style="text-align: center; padding: 32px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-secondary);">
+              <div style="text-align: center; padding: 40px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px; color: var(--text-secondary);">
                 Nenhuma conta a receber encontrada.
               </div>
             ` : receivables.map(r => {
@@ -654,25 +657,22 @@ function renderAReceberTab() {
               const statusClass = isReceived ? 'status-green' : 'status-yellow';
               
               return `
-                <div class="list-row ${statusClass}">
+                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px;">
                   <div class="list-main" style="cursor: pointer;" data-action="edit-receivable" data-id="${r.id}">
-                    <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
+                    <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
                       ${escapeHtml(r.customer || 'Cliente')}
-                      ${r.orderId ? `<span class="badge-count" style="background: rgba(59, 130, 246, 0.12); color: #3b82f6; font-size: 10px;">Pedido #${r.orderId}</span>` : ''}
+                      ${r.orderId ? `<span class="badge-count" style="background: rgba(59, 130, 246, 0.12); color: #3b82f6; font-size: 11px; padding: 2px 8px;">Pedido ${r.orderId}</span>` : ''}
                     </div>
-                    <div class="list-meta">
+                    <div class="list-meta" style="margin-top: 4px;">
                       ${escapeHtml(r.description)} · Vencimento: ${r.dueDate || '--/--/----'}
                     </div>
                   </div>
-                  <div style="text-align: right; min-width: 120px;">
-                    <span style="font-weight: 700; font-size: 13px; color: #10b981;">${formatCurrency(r.amount)}</span>
-                    <div style="font-size: 11px; color: var(--text-muted);">${isReceived ? `✓ Recebido (${escapeHtml(r.paymentMethod || 'Pix')})` : '⏳ Em Aberto'}</div>
+                  <div style="text-align: right; min-width: 140px;">
+                    <span style="font-weight: 700; font-size: 14px; color: #10b981;">${formatCurrency(r.amount)}</span>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${isReceived ? `✓ Recebido (${escapeHtml(r.paymentMethod || 'Pix')})` : '⏳ Em Aberto'}</div>
                   </div>
-                  <div class="actions">
-                    ${!isReceived ? `<button class="action-btn btn-quick-receive" data-rec-id="${r.id}" style="color: #10b981;">💵 Receber</button>` : ''}
-                    <button class="action-btn btn-edit-receivable" data-rec-id="${r.id}">✏️ Editar</button>
-                    <button class="action-btn btn-delete-receivable" data-rec-id="${r.id}" style="color: #ef4444;">🗑️ Excluir</button>
-                    <button class="action-btn" data-action="hide-receivable" data-id="${r.id}">👁️ Ocultar</button>
+                  <div class="actions" onclick="event.stopPropagation();">
+                    <button class="action-btn btn-secondary btn-receivable-menu" data-id="${r.id}" style="padding: 6px 10px; font-size: 14px;" title="Ações">⋮</button>
                   </div>
                 </div>
               `;
@@ -707,11 +707,11 @@ function renderAPagarTab() {
   });
 
   return `
-    <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
       
       <!-- Toolbar & Filters -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg-card); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; align-items: center; gap: 10px;">
           <input 
             type="text" 
             id="input-search-payables" 
@@ -720,50 +720,49 @@ function renderAPagarTab() {
             value="${escapeHtml(payablesSearchQuery)}"
             style="width: 260px;"
           />
-          <select id="select-status-payables" class="form-select" style="width: 140px;">
+          <select id="select-status-payables" class="form-select" style="width: 150px;">
             <option value="todos" ${payablesStatusFilter === 'todos' ? 'selected' : ''}>Todos Status</option>
             <option value="aberto" ${payablesStatusFilter === 'aberto' ? 'selected' : ''}>Em Aberto</option>
             <option value="pago" ${payablesStatusFilter === 'pago' ? 'selected' : ''}>Pago</option>
           </select>
         </div>
 
-        <div style="display: flex; gap: 16px; align-items: center; font-size: 0.875rem;">
+        <div style="display: flex; gap: 20px; align-items: center; font-size: 0.875rem;">
           <div><strong>Total:</strong> <span style="color: var(--text-primary); font-weight: 700;">${formatCurrency(totalPaySum)}</span></div>
           <div><strong>Pago:</strong> <span style="color: #ef4444; font-weight: 700;">${formatCurrency(paidSum)}</span></div>
           <div><strong>A Pagar:</strong> <span style="color: #f59e0b; font-weight: 700;">${formatCurrency(pendingPaySum)}</span></div>
         </div>
       </div>
 
+      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 4px 0;" />
+
       <!-- Payables List -->
       <div class="card" style="padding: 0; background: transparent; border: none; box-shadow: none;">
-        <div class="list-group" style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="list-group" style="display: flex; flex-direction: column; gap: 10px;">
             ${payables.length === 0 ? `
-              <div style="text-align: center; padding: 32px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-secondary);">
+              <div style="text-align: center; padding: 40px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px; color: var(--text-secondary);">
                 Nenhuma conta a pagar encontrada.
               </div>
             ` : payables.map(p => {
               const isPaid = p.status === 'pago';
               const statusClass = isPaid ? 'status-green' : 'status-yellow';
               return `
-                <div class="list-row ${statusClass}">
+                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px;">
                   <div class="list-main" style="cursor: pointer;" data-action="edit-payable" data-id="${p.id}">
-                    <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
+                    <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
                       ${escapeHtml(p.supplierName || 'Fornecedor')}
-                      ${p.purchaseId ? `<span class="badge-count" style="background: rgba(139, 92, 246, 0.12); color: #8b5cf6; font-size: 10px;">Compra #${p.purchaseId}</span>` : ''}
+                      ${p.purchaseId ? `<span class="badge-count" style="background: rgba(139, 92, 246, 0.12); color: #8b5cf6; font-size: 11px; padding: 2px 8px;">Compra ${p.purchaseId}</span>` : ''}
                     </div>
-                    <div class="list-meta">
+                    <div class="list-meta" style="margin-top: 4px;">
                       ${escapeHtml(p.description)} · Vencimento: ${p.dueDate || '--/--/----'}
                     </div>
                   </div>
-                  <div style="text-align: right; min-width: 120px;">
-                    <span style="font-weight: 700; font-size: 13px; color: #ef4444;">${formatCurrency(p.amount)}</span>
-                    <div style="font-size: 11px; color: var(--text-muted);">${isPaid ? `✓ Pago (${escapeHtml(p.paymentMethod || 'Pix')})` : '⏳ Em Aberto'}</div>
+                  <div style="text-align: right; min-width: 140px;">
+                    <span style="font-weight: 700; font-size: 14px; color: #ef4444;">${formatCurrency(p.amount)}</span>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${isPaid ? `✓ Pago (${escapeHtml(p.paymentMethod || 'Pix')})` : '⏳ Em Aberto'}</div>
                   </div>
-                  <div class="actions">
-                    ${!isPaid ? `<button class="action-btn btn-quick-pay-payable" data-pay-id="${p.id}" style="color: #10b981;">💵 Pagar</button>` : ''}
-                    <button class="action-btn btn-edit-payable" data-pay-id="${p.id}">✏️ Editar</button>
-                    <button class="action-btn btn-delete-payable" data-pay-id="${p.id}" style="color: #ef4444;">🗑️ Excluir</button>
-                    <button class="action-btn" data-action="hide-payable" data-id="${p.id}">👁️ Ocultar</button>
+                  <div class="actions" onclick="event.stopPropagation();">
+                    <button class="action-btn btn-secondary btn-payable-menu" data-id="${p.id}" style="padding: 6px 10px; font-size: 14px;" title="Ações">⋮</button>
                   </div>
                 </div>
               `;
@@ -782,23 +781,25 @@ function renderCustosTab() {
   const analysis = getDetailedCostsAnalysis();
 
   return `
-    <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
       
       <!-- Sub-filter Switcher -->
-      <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
-        <button class="btn btn-sm ${costsSubFilter === 'produtos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="produtos">
+      <div style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; overflow-x: auto;">
+        <button class="btn btn-sm ${costsSubFilter === 'produtos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="produtos" style="padding: 8px 14px;">
           📦 Custos de Produtos (${analysis.products.length})
         </button>
-        <button class="btn btn-sm ${costsSubFilter === 'componentes' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="componentes">
+        <button class="btn btn-sm ${costsSubFilter === 'componentes' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="componentes" style="padding: 8px 14px;">
           ⚙️ Custos de Componentes BOM (${analysis.components.length})
         </button>
-        <button class="btn btn-sm ${costsSubFilter === 'insumos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="insumos">
+        <button class="btn btn-sm ${costsSubFilter === 'insumos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="insumos" style="padding: 8px 14px;">
           🧵 Custo de Insumos Base (${analysis.materials.length})
         </button>
-        <button class="btn btn-sm ${costsSubFilter === 'pedidos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="pedidos">
+        <button class="btn btn-sm ${costsSubFilter === 'pedidos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="pedidos" style="padding: 8px 14px;">
           📋 Lucratividade por Pedido (${analysis.orders.length})
         </button>
       </div>
+
+      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 0;" />
 
       ${costsSubFilter === 'produtos' ? `
         <div class="card" style="padding: 0; overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
@@ -938,7 +939,7 @@ function renderCustosTab() {
             <tbody>
               ${analysis.orders.map(o => `
                 <tr style="border-bottom: 1px solid var(--border-subtle);">
-                  <td style="padding: 10px 14px; font-weight: 700; color: var(--text-primary);">#${o.orderNumber}</td>
+                  <td style="padding: 10px 14px; font-weight: 700; color: var(--text-primary);">${o.orderNumber}</td>
                   <td style="padding: 10px 14px;">${escapeHtml(o.customer)}</td>
                   <td style="padding: 10px 14px;">${o.qty}x ${escapeHtml(o.productTitle)}</td>
                   <td style="padding: 10px 14px; text-align: right; font-weight: 600; color: #10b981;">${formatCurrency(o.totalSale)}</td>
@@ -973,13 +974,14 @@ function attachFinanceEventListeners() {
     });
   });
 
-  // Period Buttons
-  document.querySelectorAll('[data-period]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      currentPeriod = e.currentTarget.dataset.period;
+  // Period Select Dropdown
+  const selectPeriod = document.getElementById('select-finance-period');
+  if (selectPeriod) {
+    selectPeriod.addEventListener('change', (e) => {
+      currentPeriod = e.target.value;
       renderFinanceModule();
     });
-  });
+  }
 
   // Apply Custom Date Range
   const btnApplyDate = document.getElementById('btn-apply-custom-date');
@@ -1107,116 +1109,107 @@ function attachFinanceEventListeners() {
  * Attaches event listeners to rows and dynamic action buttons inside subtabs.
  */
 function attachSubtabDynamicListeners() {
-  // Quick Receive
-  document.querySelectorAll('.btn-quick-receive').forEach(btn => {
+  document.querySelectorAll('.btn-expense-menu').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const recId = e.currentTarget.dataset.recId;
-      openReceiveModal(recId);
-    });
-  });
+      const id = btn.getAttribute('data-id');
+      const exp = getExpenseById(id);
+      if (!exp) return;
 
-  // Edit / Delete Receivable
-  document.querySelectorAll('.btn-edit-receivable, [data-action="edit-receivable"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const recId = e.currentTarget.dataset.recId || e.currentTarget.dataset.id;
-      openReceivableDrawer(recId);
-    });
-  });
+      const isPaid = exp.status === 'pago';
+      const menuOptions = [];
 
-  document.querySelectorAll('[data-action="hide-receivable"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      alert('Conta a receber ocultada.');
-    });
-  });
-
-  document.querySelectorAll('.btn-delete-receivable, [data-action="del-receivable"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const recId = e.currentTarget.dataset.recId || e.currentTarget.dataset.id;
-      if (confirm('Deseja realmente excluir esta conta a receber?')) {
-        deleteReceivable(recId);
-        renderFinanceModule();
+      if (!isPaid) {
+        menuOptions.push({
+          label: '💵 Pagar',
+          icon: '💵',
+          action: () => openPayExpenseModal(id)
+        });
       }
+      menuOptions.push({ label: '✏️ Editar', icon: '✏️', action: () => openExpenseDrawer(id) });
+      menuOptions.push({
+        label: '🗑️ Excluir',
+        icon: '🗑️',
+        danger: true,
+        action: () => {
+          if (confirm('Excluir esta despesa?')) {
+            deleteExpense(id);
+            renderFinanceModule();
+          }
+        }
+      });
+
+      openContextMenu(e, menuOptions);
     });
   });
 
-  // Pay / Edit / Delete Expense
-  document.querySelectorAll('.btn-pay-expense, [data-action="pay-expense"]').forEach(btn => {
+  document.querySelectorAll('.btn-receivable-menu').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const expId = e.currentTarget.dataset.expId || e.currentTarget.dataset.id;
-      openPayExpenseModal(expId);
-    });
-  });
+      const id = btn.getAttribute('data-id');
+      const recs = getReceivables();
+      const rec = recs.find(x => x.id === id);
+      if (!rec) return;
 
-  document.querySelectorAll('.btn-edit-expense, [data-action="edit-expense"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const expId = e.currentTarget.dataset.expId || e.currentTarget.dataset.id;
-      openExpenseDrawer(expId);
-    });
-  });
+      const isReceived = rec.status === 'recebido' || rec.status === 'recebida';
+      const menuOptions = [];
 
-  document.querySelectorAll('[data-action="dup-expense"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      alert('Despesa duplicada na simulação visual.');
-    });
-  });
-
-  document.querySelectorAll('[data-action="hide-expense"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      alert('Despesa ocultada.');
-    });
-  });
-
-  document.querySelectorAll('.btn-delete-expense, [data-action="del-expense"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const expId = e.currentTarget.dataset.expId || e.currentTarget.dataset.id;
-      if (confirm('Deseja realmente excluir esta despesa operacional?')) {
-        deleteExpense(expId);
-        renderFinanceModule();
+      if (!isReceived) {
+        menuOptions.push({
+          label: '💵 Receber',
+          icon: '💵',
+          action: () => openReceiveModal(id)
+        });
       }
+      menuOptions.push({ label: '✏️ Editar', icon: '✏️', action: () => openReceivableDrawer(id) });
+      menuOptions.push({
+        label: '🗑️ Excluir',
+        icon: '🗑️',
+        danger: true,
+        action: () => {
+          if (confirm('Excluir este recebível?')) {
+            deleteReceivable(id);
+            renderFinanceModule();
+          }
+        }
+      });
+
+      openContextMenu(e, menuOptions);
     });
   });
 
-  // Quick Pay Payable / Edit / Delete
-  document.querySelectorAll('.btn-quick-pay-payable').forEach(btn => {
+  document.querySelectorAll('.btn-payable-menu').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const payId = e.currentTarget.dataset.payId;
-      openPayPayableModal(payId);
-    });
-  });
+      const id = btn.getAttribute('data-id');
+      const pays = getPayables();
+      const pay = pays.find(x => x.id === id);
+      if (!pay) return;
 
-  document.querySelectorAll('.btn-edit-payable, [data-action="edit-payable"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const payId = e.currentTarget.dataset.payId || e.currentTarget.dataset.id;
-      openPayableDrawer(payId);
-    });
-  });
+      const isPaid = pay.status === 'pago';
+      const menuOptions = [];
 
-  document.querySelectorAll('[data-action="hide-payable"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      alert('Conta a pagar ocultada.');
-    });
-  });
-
-  document.querySelectorAll('.btn-delete-payable, [data-action="del-payable"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const payId = e.currentTarget.dataset.payId || e.currentTarget.dataset.id;
-      if (confirm('Deseja realmente excluir esta conta a pagar?')) {
-        deletePayable(payId);
-        renderFinanceModule();
+      if (!isPaid) {
+        menuOptions.push({
+          label: '💵 Pagar',
+          icon: '💵',
+          action: () => openPayPayableModal(id)
+        });
       }
+      menuOptions.push({ label: '✏️ Editar', icon: '✏️', action: () => openPayableDrawer(id) });
+      menuOptions.push({
+        label: '🗑️ Excluir',
+        icon: '🗑️',
+        danger: true,
+        action: () => {
+          if (confirm('Excluir esta conta a pagar?')) {
+            deletePayable(id);
+            renderFinanceModule();
+          }
+        }
+      });
+
+      openContextMenu(e, menuOptions);
     });
   });
 }

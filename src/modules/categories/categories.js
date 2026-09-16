@@ -97,3 +97,24 @@ export function deleteCategory(id) {
   bus.emit('categories:changed', categories);
   return { success: true, message: 'Categoria excluída com sucesso.' };
 }
+
+export function getSubcategories(categoryId) {
+  const cat = getCategoryById(categoryId);
+  return (cat && Array.isArray(cat.subcategories)) ? cat.subcategories : [];
+}
+
+export function createSubcategory(categoryId, name) {
+  const cleanName = (name || '').trim();
+  if (!cleanName) throw new Error('Informe o nome da sub-categoria.');
+  const categories = getCategories();
+  const index = categories.findIndex(c => c.id === categoryId);
+  if (index === -1) throw new Error('Selecione uma categoria principal primeiro.');
+  
+  categories[index].subcategories = categories[index].subcategories || [];
+  if (!categories[index].subcategories.includes(cleanName)) {
+    categories[index].subcategories.push(cleanName);
+    saveCategories(categories);
+    bus.emit('categories:changed', categories);
+  }
+  return cleanName;
+}

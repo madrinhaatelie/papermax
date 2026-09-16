@@ -20,12 +20,14 @@ import {
   exportOrdersCSV,
   exportOrdersCSVTemplate,
   ORDER_STATUS_MAP,
-  isOrderActive
+  isOrderActive,
+  addOrderPayment,
+  removeOrderPayment
 } from './orders.js';
 import { loadProducts, loadMaterials, loadComponents } from '../../data/storage.js';
 import { getProductById } from '../products/products.js';
 import { fileStorage } from '../../data/filestorage.js';
-import { formatDateBR, parseDateBRToISO, escapeHtml } from '../../utils/sanitize.js';
+import { formatDateBR, parseDateBRToISO, escapeHtml, formatNumberXX } from '../../utils/sanitize.js';
 import { downloadCSVFile } from '../../utils/csv.js';
 import { generatePersonalizedPdf, triggerPdfDownload } from '../personalization/pdf.engine.js';
 import {
@@ -38,6 +40,85 @@ import {
 
 let currentOrdersTab = 'em_andamento';
 let currentSearchTerm = '';
+
+/**
+ * Formats various date representations (DD/MM/YYYY or ISO) into YYYY-MM-DD for HTML5 date inputs
+ */
+export function formatDateToInput(dateStr) {
+  if (!dateStr) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+    const parts = dateStr.split('/');
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  if (/^\d{2}\/\d{2}\/\d{2}$/.test(dateStr)) {
+    const parts = dateStr.split('/');
+    return `20${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return '';
+}
+
+/**
+ * Accessible in-app confirmation dialog that works seamlessly in sandboxed iframes
+ */
+export function showConfirmDialog({ title = 'Confirmação', message, confirmText = 'Confirmar', cancelText = 'Cancelar', isDanger = false, onConfirm }) {
+  const existing = document.getElementById('app-confirm-dialog-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'app-confirm-dialog-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    padding: 16px;
+  `;
+
+  overlay.innerHTML = `
+    <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.05); max-width: 440px; width: 100%; overflow: hidden; border: 1px solid var(--border-subtle);">
+      <div style="padding: 18px 22px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 12px;">
+        <div style="width: 38px; height: 38px; border-radius: 50%; background: ${isDanger ? '#fee2e2' : '#e0f2fe'}; color: ${isDanger ? '#dc2626' : '#0284c7'}; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">
+          ${isDanger ? '⚠️' : 'ℹ️'}
+        </div>
+        <div>
+          <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">${escapeHtml(title)}</h3>
+        </div>
+      </div>
+      <div style="padding: 18px 22px; font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+        ${message}
+      </div>
+      <div style="padding: 14px 22px; background: #f8fafc; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" id="confirm-dialog-cancel" class="btn btn-secondary" style="padding: 7px 16px; font-size: 13px; font-weight: 600;">
+          ${escapeHtml(cancelText)}
+        </button>
+        <button type="button" id="confirm-dialog-confirm" class="btn" style="padding: 7px 18px; font-size: 13px; font-weight: 700; background: ${isDanger ? '#dc2626' : 'var(--accent-primary)'}; color: #ffffff; border: none; border-radius: 6px; cursor: pointer;">
+          ${escapeHtml(confirmText)}
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+
+  overlay.querySelector('#confirm-dialog-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+
+  overlay.querySelector('#confirm-dialog-confirm').addEventListener('click', () => {
+    close();
+    if (typeof onConfirm === 'function') {
+      onConfirm();
+    }
+  });
+}
 
 /**
  * Maps order status or stage to specific neon LED CSS class and border color
@@ -187,16 +268,36 @@ export function getOrderFinancials(order) {
   const snap = order.productSnapshot || {};
   const unitPrice = Number(snap.price || 0);
   const qty = Number(order.qty || 1);
-  const totalAmount = Number(order.totalAmount !== undefined ? order.totalAmount : (unitPrice * qty));
-  const paidAmount = Number(order.paidAmount || 0);
-  const remainingAmount = Number(order.remainingAmount !== undefined ? order.remainingAmount : Math.max(0, totalAmount - paidAmount));
+  const totalAmount = Number(
+    order.totalAmount !== undefined 
+      ? order.totalAmount 
+      : (order.financial?.totalAmount !== undefined ? order.financial.totalAmount : (unitPrice * qty))
+  );
+
+  const payments = Array.isArray(order.payments) 
+    ? order.payments 
+    : (Array.isArray(order.financial?.payments) 
+        ? order.financial.payments 
+        : (Array.isArray(order.financial?.paymentMethods) ? order.financial.paymentMethods : []));
+
+  let paidAmount = 0;
+  if (payments.length > 0) {
+    paidAmount = Number(payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toFixed(2));
+  } else {
+    paidAmount = Number(order.paidAmount !== undefined ? order.paidAmount : (order.financial?.paidAmount || 0));
+  }
+
+  const remainingAmount = Number(order.remainingAmount !== undefined ? order.remainingAmount : Math.max(0, Number((totalAmount - paidAmount).toFixed(2))));
+  const methods = payments.map(p => p.method).filter(Boolean);
+  const paymentMethod = methods.length > 0 ? methods.join(', ') : (order.paymentMethod || order.financial?.paymentMethod || 'PIX');
 
   return {
     unitPrice,
     totalAmount,
     paidAmount,
     remainingAmount,
-    paymentMethod: order.paymentMethod || 'PIX',
+    payments,
+    paymentMethod,
     paymentStatus: order.paymentStatus || (paidAmount >= totalAmount ? 'pago' : paidAmount > 0 ? 'parcial' : 'pendente')
   };
 }
@@ -391,6 +492,19 @@ export function renderOrdersView(container, ctx) {
   });
 
   // Kebab Actions
+  container.querySelectorAll('[data-action="share-art"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const shareUrl = `${window.location.origin}${window.location.pathname}#/aprovar-arte/${id}`;
+      navigator.clipboard?.writeText(shareUrl);
+      showToast(`Link de aprovação copiado: ${shareUrl}`, '🔗');
+      if (typeof ctx.switchView === 'function') {
+        ctx.switchView('aprovar-arte', id);
+      }
+    });
+  });
+
   container.querySelectorAll('[data-action="edit-order"]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -416,15 +530,23 @@ export function renderOrdersView(container, ctx) {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const id = btn.dataset.id;
-      if (confirm(`Tem certeza que deseja excluir o pedido ${formatOrderNumber(id)}?`)) {
-        try {
-          deleteOrder(id);
-          showToast('Pedido excluído com sucesso');
-          renderOrdersView(container, ctx);
-        } catch (err) {
-          showToast(err.message, '⚠');
+      const order = getOrderById(id);
+      const orderNum = order ? (order.number || order.id) : id;
+      showConfirmDialog({
+        title: 'Excluir Pedido',
+        message: `Tem certeza que deseja excluir o <b>Pedido #${formatOrderNumber(orderNum)}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
+        confirmText: 'Sim, Excluir Pedido',
+        isDanger: true,
+        onConfirm: () => {
+          try {
+            deleteOrder(id);
+            showToast(`Pedido #${formatOrderNumber(orderNum)} excluído com sucesso!`, '✅');
+            renderOrdersView(container, ctx);
+          } catch (err) {
+            showToast(err.message, '⚠');
+          }
         }
-      }
+      });
     });
   });
 
@@ -474,7 +596,7 @@ function renderOrdersCardListHtml(orders) {
               <!-- Line 1: Order Num + Customer + Product + Delivery Date -->
               <div class="list-title" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 700;">
                 <span style="font-family: monospace; font-size: 13px; background: rgba(15,23,42,0.06); padding: 2px 6px; border-radius: 4px; color: var(--text-primary);">
-                  #${orderNum}
+                  ${orderNum}
                 </span>
                 <span style="color: var(--text-primary); font-weight: 600;">${escapeHtml(order.customer || 'Cliente sem nome')}</span>
                 <span style="color: var(--text-secondary); font-weight: 400;">• ${escapeHtml(order.productTitle || 'Item')}</span>
@@ -502,7 +624,7 @@ function renderOrdersCardListHtml(orders) {
             <!-- Qty Highlight -->
             <div style="text-align: right; white-space: nowrap; padding: 0 8px;">
               <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); display: block;">
-                ${order.qty} <span style="font-size: 11px; font-weight: 500; color: var(--text-secondary);">un</span>
+                ${formatNumberXX(order.qty)} <span style="font-size: 11px; font-weight: 500; color: var(--text-secondary);">un</span>
               </span>
             </div>
 
@@ -512,6 +634,9 @@ function renderOrdersCardListHtml(orders) {
                 ⋮
               </button>
               <div class="dropdown-kebab-menu">
+                <button class="dropdown-kebab-item" data-action="share-art" data-id="${order.id}">
+                  <span style="color: #2563eb;">🔗</span> Compartilhar / Aprovar Arte
+                </button>
                 <button class="dropdown-kebab-item" data-action="edit-order" data-id="${order.id}">
                   <span>✏️</span> Editar dados
                 </button>
@@ -570,11 +695,11 @@ function renderPrintQueueTableHtml(orders) {
             return `
               <tr style="border-bottom: 1px solid var(--border-subtle); font-size: 12px;">
                 <td style="padding: 10px 14px;">
-                  <b>#${orderNum}</b>
+                  <b>${orderNum}</b>
                   <div style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(order.customer || 'Cliente')}</div>
                 </td>
                 <td style="padding: 10px 14px;">${escapeHtml(order.productTitle || 'Item')}</td>
-                <td style="padding: 10px 14px;"><b>${order.qty}</b> un</td>
+                <td style="padding: 10px 14px;"><b>${formatNumberXX(order.qty)}</b> un</td>
                 <td style="padding: 10px 14px;">
                   ${latestFile ? `
                     <button class="btn btn-sm btn-dl-order-file" data-file-id="${latestFile.fileId}" style="font-size: 11px; padding: 3px 8px;">
@@ -619,7 +744,7 @@ function renderPrintQueueTableHtml(orders) {
 /**
  * Dedicated New Order Full Page (Slug: #pedidos/novo / view: 'pedidos-novo')
  */
-export function renderNewOrderPage(container, ctx) {
+export function renderNewOrderPage(container, ctx, editOrderId = null) {
   if (!container) return;
   const { switchView, showToast, openDrawer, closeDrawer } = ctx;
 
@@ -627,33 +752,69 @@ export function renderNewOrderPage(container, ctx) {
   const allMaterials = loadMaterials();
   const allComponents = loadComponents();
 
+  const editingOrder = editOrderId ? getOrderById(editOrderId) : null;
+  const isEditing = Boolean(editingOrder);
+
   // Local state
+  let activeDivisoria = 'section-cliente'; // 'section-cliente' | 'section-produto' | 'section-insumos' | 'section-financeiro'
+
   let orderData = {
-    customerType: 'PF', // PF | PJ
-    customer: '',
-    customerPhone: '',
-    customerBirthDate: '',
-    customerCPF: '',
-    customerCNPJ: '',
-    customerCompany: '',
+    customerType: editingOrder?.customerType || 'PF', // PF | PJ
+    customer: editingOrder?.customer || editingOrder?.customerName || '',
+    customerPhone: editingOrder?.customerPhone || '',
+    customerBirthDate: editingOrder?.customerBirthDate || '',
+    customerCPF: editingOrder?.customerCPF || '',
+    customerCNPJ: editingOrder?.customerCNPJ || '',
+    customerCompany: editingOrder?.customerCompany || '',
     
-    deliveryCep: '',
-    deliveryAddress: '',
-    deliveryNumber: '',
-    deliveryNeighborhood: '',
-    deliveryCity: '',
-    deliveryState: '',
-    deliveryNotes: '',
+    deliveryCep: editingOrder?.deliveryCep || '',
+    deliveryAddress: editingOrder?.deliveryAddress || '',
+    deliveryNumber: editingOrder?.deliveryNumber || '',
+    deliveryNeighborhood: editingOrder?.deliveryNeighborhood || '',
+    deliveryCity: editingOrder?.deliveryCity || '',
+    deliveryState: editingOrder?.deliveryState || '',
+    deliveryNotes: editingOrder?.deliveryNotes || '',
 
-    eventDate: '',
-    limitDate: '',
+    eventDate: editingOrder ? formatDateToInput(editingOrder.eventDate) : '',
+    limitDate: editingOrder ? formatDateToInput(editingOrder.deliveryDate || editingOrder.limitDate) : '',
 
-    items: [],
+    items: (editingOrder && Array.isArray(editingOrder.items) && editingOrder.items.length > 0)
+      ? JSON.parse(JSON.stringify(editingOrder.items)).map(it => {
+          if (!it.productSnapshot && it.productId) {
+            it.productSnapshot = products.find(p => p.id === it.productId) || {};
+          }
+          if (!it.productSnapshot) {
+            it.productSnapshot = products.find(p => p.name === it.productTitle) || {};
+          }
+          if (!it.personalization) it.personalization = {};
+          if (!it.changeOptions) it.changeOptions = {};
+          return it;
+        })
+      : (editingOrder ? [{
+          productTitle: editingOrder.productTitle || editingOrder.title || 'Item',
+          qty: editingOrder.qty || 1,
+          unitPrice: editingOrder.unitPrice || (editingOrder.productSnapshot?.price) || (editingOrder.financial?.totalAmount ? Number((editingOrder.financial.totalAmount / (editingOrder.qty || 1)).toFixed(2)) : 0),
+          personalization: editingOrder.personalization ? JSON.parse(JSON.stringify(editingOrder.personalization)) : {},
+          changeOptions: editingOrder.changeOptions ? JSON.parse(JSON.stringify(editingOrder.changeOptions)) : {},
+          productSnapshot: editingOrder.productSnapshot || products.find(p => p.name === editingOrder.productTitle) || {},
+          notes: editingOrder.notes || ''
+        }] : []),
     
-    discount: 0,
-    paymentMethods: [{ method: 'PIX', amount: 0 }],
+    discount: editingOrder?.discount || editingOrder?.financial?.discount || 0,
+    payments: (editingOrder && Array.isArray(editingOrder.payments) && editingOrder.payments.length > 0)
+      ? JSON.parse(JSON.stringify(editingOrder.payments))
+      : (editingOrder && Array.isArray(editingOrder.financial?.payments) && editingOrder.financial.payments.length > 0
+          ? JSON.parse(JSON.stringify(editingOrder.financial.payments))
+          : (editingOrder && editingOrder.financial?.paidAmount > 0
+              ? [{
+                  id: 'pay_init',
+                  method: editingOrder.paymentMethod || 'PIX',
+                  amount: Number(editingOrder.financial.paidAmount),
+                  datetime: editingOrder.orderDate ? `${editingOrder.orderDate} às 12:00` : 'Inicial'
+                }]
+              : [])),
     
-    notes: ''
+    notes: editingOrder?.notes || ''
   };
 
   // Helper to calculate BOM for all items
@@ -703,414 +864,541 @@ export function renderNewOrderPage(container, ctx) {
   }
 
   function render() {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = editingOrder && editingOrder.orderDate 
+      ? formatDateToInput(editingOrder.orderDate) || new Date().toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
     
-    // Auto calculate limit date (3 days before event)
-    let autoLimitDate = '';
-    if (orderData.eventDate) {
+    // Auto calculate limit date (3 days before event) only if not already set
+    if (orderData.eventDate && !orderData.limitDate) {
       const d = new Date(orderData.eventDate + 'T12:00:00');
       d.setDate(d.getDate() - 3);
-      autoLimitDate = d.toISOString().split('T')[0];
-      orderData.limitDate = autoLimitDate;
+      orderData.limitDate = d.toISOString().split('T')[0];
     }
+
+    const isD1 = (activeDivisoria === 'section-cliente');
+    const isD2 = (activeDivisoria === 'section-produto');
+    const isD3 = (activeDivisoria === 'section-insumos');
+    const isD4 = (activeDivisoria === 'section-financeiro');
 
     const html = `
       <div style="max-width: 100%; margin: 0 auto; padding-bottom: 32px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
           <div>
-            <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">📝 Novo Pedido</h2>
-            <div style="font-size: 0.875rem; color: var(--text-secondary);">Cadastre um novo pedido com múltiplos produtos e personalizações</div>
+            <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin: 0;">
+              ${isEditing ? `✏️ Editar Pedido #${formatOrderNumber(editingOrder.number || editingOrder.id)}` : '📝 Novo Pedido'}
+            </h2>
+            ${isEditing ? `<div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Atualize dados do cliente, itens, ficha técnica e pagamentos</div>` : ''}
           </div>
-          <button class="btn btn-secondary" id="btn-cancel-order">Voltar</button>
+          <button type="button" class="btn btn-secondary" id="btn-back-to-orders" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+            ⬅ Voltar para Pedidos
+          </button>
         </div>
 
         <form id="form-new-order-page" style="display: flex; flex-direction: column; gap: 0;">
+          <!-- Abas Superiores -->
           <div class="binder-tabs" id="new-order-tabs">
-            <button type="button" class="binder-tab active" data-target="section-cliente">1. Dados do Cliente & Entrega</button>
-            <button type="button" class="binder-tab" data-target="section-produto">2. Produtos & Personalização</button>
-            <button type="button" class="binder-tab" data-target="section-insumos">3. Ficha Técnica</button>
-            <button type="button" class="binder-tab" data-target="section-financeiro">4. Financeiro & Conclusão</button>
+            <button type="button" class="binder-tab ${isD1 ? 'active' : ''}" data-target="section-cliente">1. Dados do Cliente & Entrega</button>
+            <button type="button" class="binder-tab ${isD2 ? 'active' : ''}" data-target="section-produto">2. Produtos & Personalização</button>
+            <button type="button" class="binder-tab ${isD3 ? 'active' : ''}" data-target="section-insumos">3. Ficha Técnica</button>
+            <button type="button" class="binder-tab ${isD4 ? 'active' : ''}" data-target="section-financeiro">4. Financeiro & Conclusão</button>
           </div>
 
-          <!-- TAB 1: CLIENTE E ENTREGA -->
-          <div class="binder-panel active" id="section-cliente" style="margin-top: 0;">
-            <div class="panel">
-              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">👤 Perfil do Cliente</h3>
-              
-              <div style="display: flex; gap: 16px; margin-bottom: 14px;">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
-                  <input type="radio" name="customerType" value="PF" ${orderData.customerType === 'PF' ? 'checked' : ''}> Pessoa Física (PF)
-                </label>
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
-                  <input type="radio" name="customerType" value="PJ" ${orderData.customerType === 'PJ' ? 'checked' : ''}> Pessoa Jurídica (PJ)
-                </label>
-              </div>
+          <div class="binder-panel" style="background: #ffffff; border: 1px solid var(--border-subtle); border-top: none; border-radius: 0 0 12px 12px; padding: 20px; box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04); margin-bottom: 24px;">
+            <!-- ETAPA 1: CLIENTE E ENTREGA -->
+            <div id="section-cliente" style="display: ${isD1 ? 'block' : 'none'};">
+              <div class="panel">
+                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">👤 Perfil do Cliente</h3>
+                
+                <div style="display: flex; gap: 16px; margin-bottom: 14px;">
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                    <input type="radio" name="customerType" value="PF" ${orderData.customerType === 'PF' ? 'checked' : ''}> Pessoa Física (PF)
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                    <input type="radio" name="customerType" value="PJ" ${orderData.customerType === 'PJ' ? 'checked' : ''}> Pessoa Jurídica (PJ)
+                  </label>
+                </div>
 
-              ${orderData.customerType === 'PF' ? `
-                <!-- PF Fields -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                  <div>
-                    <label class="form-label">Nome *</label>
-                    <input class="form-input" id="inp-cli-nome" required value="${orderData.customer}">
+                ${orderData.customerType === 'PF' ? `
+                  <!-- PF Fields -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                      <label class="form-label">Nome *</label>
+                      <input class="form-input" id="inp-cli-nome" value="${orderData.customer}" placeholder="Nome do cliente">
+                    </div>
+                    <div>
+                      <label class="form-label">Contato (WhatsApp)</label>
+                      <input class="form-input" id="inp-cli-contato" value="${orderData.customerPhone}" placeholder="(00) 00000-0000">
+                    </div>
                   </div>
-                  <div>
-                    <label class="form-label">Contato (WhatsApp)</label>
-                    <input class="form-input" id="inp-cli-contato" value="${orderData.customerPhone}">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                      <label class="form-label">Data de Nascimento</label>
+                      <input type="date" class="form-input" id="inp-cli-nasc" value="${orderData.customerBirthDate}">
+                    </div>
+                    <div>
+                      <label class="form-label">CPF</label>
+                      <input class="form-input" id="inp-cli-cpf" value="${orderData.customerCPF}" placeholder="000.000.000-00">
+                    </div>
                   </div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                  <div>
-                    <label class="form-label">Data de Nascimento</label>
-                    <input type="date" class="form-input" id="inp-cli-nasc" value="${orderData.customerBirthDate}">
+                ` : `
+                  <!-- PJ Fields -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                      <label class="form-label">Empresa / Razão Social *</label>
+                      <input class="form-input" id="inp-cli-empresa" value="${orderData.customerCompany}" placeholder="Nome da empresa">
+                    </div>
+                    <div>
+                      <label class="form-label">Contato (WhatsApp)</label>
+                      <input class="form-input" id="inp-cli-contato" value="${orderData.customerPhone}" placeholder="(00) 00000-0000">
+                    </div>
                   </div>
-                  <div>
-                    <label class="form-label">CPF</label>
-                    <input class="form-input" id="inp-cli-cpf" value="${orderData.customerCPF}">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                      <label class="form-label">CNPJ</label>
+                      <input class="form-input" id="inp-cli-cnpj" value="${orderData.customerCNPJ}" placeholder="00.000.000/0000-00">
+                    </div>
+                    <div></div>
                   </div>
-                </div>
-              ` : `
-                <!-- PJ Fields -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                  <div>
-                    <label class="form-label">Empresa *</label>
-                    <input class="form-input" id="inp-cli-empresa" required value="${orderData.customerCompany}">
-                  </div>
-                  <div>
-                    <label class="form-label">Contato (WhatsApp)</label>
-                    <input class="form-input" id="inp-cli-contato" value="${orderData.customerPhone}">
-                  </div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                  <div>
-                    <label class="form-label">CNPJ</label>
-                    <input class="form-input" id="inp-cli-cnpj" value="${orderData.customerCNPJ}">
-                  </div>
-                  <div></div>
-                </div>
-              `}
+                `}
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; background: var(--bg-surface-raised); padding: 10px; border-radius: 8px;">
-                <div>
-                  <label class="form-label">Data do Pedido</label>
-                  <input type="date" class="form-input" value="${todayStr}" disabled style="background: #e5e7eb; cursor: not-allowed;">
-                </div>
-                <div>
-                  <label class="form-label">Data do Evento</label>
-                  <input type="date" class="form-input" id="inp-cli-evento" value="${orderData.eventDate}">
-                </div>
-                <div>
-                  <label class="form-label">Data Limite (Auto: -3 dias)</label>
-                  <input type="date" class="form-input" value="${orderData.limitDate}" disabled style="background: #e5e7eb; cursor: not-allowed;">
-                </div>
-              </div>
-
-              <div>
-                <label class="form-label">Observações Internas (Cliente)</label>
-                <textarea class="form-input" id="inp-cli-obs" rows="2">${orderData.notes}</textarea>
-              </div>
-            </div>
-
-            <div class="panel" style="margin-top: 16px;">
-              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">🚚 Entrega</h3>
-              
-              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-bottom: 12px;">
-                <div>
-                  <label class="form-label">CEP</label>
-                  <div style="display: flex; gap: 6px;">
-                    <input class="form-input" id="inp-ent-cep" value="${orderData.deliveryCep}" placeholder="00000-000">
-                    <button type="button" class="btn btn-secondary" id="btn-busca-cep" style="padding: 0 10px;">🔍</button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; background: var(--bg-surface-raised); padding: 10px; border-radius: 8px;">
+                  <div>
+                    <label class="form-label">Data do Pedido</label>
+                    <input type="date" class="form-input" value="${todayStr}" disabled style="background: #e5e7eb; cursor: not-allowed;">
+                  </div>
+                  <div>
+                    <label class="form-label">Data do Evento</label>
+                    <input type="date" class="form-input" id="inp-cli-evento" value="${orderData.eventDate}">
+                  </div>
+                  <div>
+                    <label class="form-label">Data de Entrega / Limite</label>
+                    <input type="date" class="form-input" id="inp-cli-limite" value="${orderData.limitDate}">
                   </div>
                 </div>
+
                 <div>
-                  <label class="form-label">Endereço</label>
-                  <input class="form-input" id="inp-ent-endereco" value="${orderData.deliveryAddress}">
+                  <label class="form-label">Observações Internas (Cliente)</label>
+                  <input type="text" class="form-input" id="inp-cli-obs" value="${escapeHtml(orderData.notes || '')}" placeholder="Digite observações internas sobre o cliente ou pedido...">
                 </div>
               </div>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; margin-bottom: 12px;">
-                <div>
-                  <label class="form-label">Número</label>
-                  <input class="form-input" id="inp-ent-numero" value="${orderData.deliveryNumber}">
-                </div>
-                <div>
-                  <label class="form-label">Bairro</label>
-                  <input class="form-input" id="inp-ent-bairro" value="${orderData.deliveryNeighborhood}">
-                </div>
-                <div>
-                  <label class="form-label">Cidade / Estado</label>
-                  <div style="display: flex; gap: 6px;">
-                    <input class="form-input" id="inp-ent-cidade" value="${orderData.deliveryCity}" style="flex: 2;">
-                    <input class="form-input" id="inp-ent-estado" value="${orderData.deliveryState}" style="flex: 1;" placeholder="UF">
+              <div class="panel" style="margin-top: 16px;">
+                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">🚚 Entrega</h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-bottom: 12px;">
+                  <div>
+                    <label class="form-label">CEP</label>
+                    <div style="display: flex; gap: 6px;">
+                      <input class="form-input" id="inp-ent-cep" value="${orderData.deliveryCep}" placeholder="00000-000">
+                      <button type="button" class="btn btn-secondary" id="btn-busca-cep" style="padding: 0 10px;">🔍</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="form-label">Endereço</label>
+                    <input class="form-input" id="inp-ent-endereco" value="${orderData.deliveryAddress}">
                   </div>
                 </div>
-              </div>
-              
-              <div>
-                <label class="form-label">Observações de Entrega</label>
-                <textarea class="form-input" id="inp-ent-obs" rows="2">${orderData.deliveryNotes}</textarea>
-              </div>
-            </div>
 
-            <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
-              <button type="button" class="btn btn-primary btn-next-tab" data-next="section-produto">Próximo Passo ➔</button>
-            </div>
-          </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; margin-bottom: 12px;">
+                  <div>
+                    <label class="form-label">Número</label>
+                    <input class="form-input" id="inp-ent-numero" value="${orderData.deliveryNumber}">
+                  </div>
+                  <div>
+                    <label class="form-label">Bairro</label>
+                    <input class="form-input" id="inp-ent-bairro" value="${orderData.deliveryNeighborhood}">
+                  </div>
+                  <div>
+                    <label class="form-label">Cidade / Estado</label>
+                    <div style="display: flex; gap: 6px;">
+                      <input class="form-input" id="inp-ent-cidade" value="${orderData.deliveryCity}" style="flex: 2;">
+                      <input class="form-input" id="inp-ent-estado" value="${orderData.deliveryState}" style="flex: 1;" placeholder="UF">
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label class="form-label">Observações de Entrega</label>
+                  <input type="text" class="form-input" id="inp-ent-obs" value="${escapeHtml(orderData.deliveryNotes || '')}" placeholder="Digite observações sobre o local ou instruções de entrega...">
+                </div>
+              </div>
 
-          <!-- TAB 2: PRODUTOS E PERSONALIZAÇÃO -->
-          <div class="binder-panel" id="section-produto" style="margin-top: 0; display: none;">
-            <div class="panel" style="background: var(--bg-surface-raised);">
-              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 14px;">🛍️ Adicionar Produto</h3>
-              <div style="display: grid; grid-template-columns: 3fr 1fr auto; gap: 12px; align-items: end;">
-                <div>
-                  <label class="form-label">Seleção do Produto</label>
-                  <select class="form-input" id="inp-prod-select">
-                    ${products.map(p => `<option value="${p.id}">${p.name} - R$ ${Number(p.price || 0).toFixed(2)}</option>`).join('')}
-                  </select>
-                </div>
-                <div>
-                  <label class="form-label">Quantidade</label>
-                  <input type="number" class="form-input" id="inp-prod-qty" value="1" min="1">
-                </div>
-                <button type="button" class="btn btn-primary" id="btn-add-product" style="margin-bottom: 2px;">+ Inserir</button>
+              <!-- Rodapé da Etapa 1: Avançar para a próxima etapa -->
+              <div style="display: flex; justify-content: flex-end; margin-top: 20px; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+                <button type="button" class="btn btn-primary btn-next-divisoria" data-next="section-produto" style="font-weight: 600; padding: 10px 22px;">
+                  Próxima: Produtos & Personalização ➔
+                </button>
               </div>
             </div>
 
-            <div class="panel" style="margin-top: 16px;">
-              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">🛒 Listagem de Produtos & Personalização</h3>
-              
-              <div id="order-items-list" style="display: flex; flex-direction: column; gap: 16px;">
-                ${orderData.items.length === 0 ? 
-                  '<div style="text-align: center; padding: 24px; color: var(--text-secondary); font-size: 14px;">Nenhum produto adicionado ainda.</div>' 
-                  : orderData.items.map((item, index) => {
-                    
-                    // Render personalizations fields based on productSnapshot
-                    const prod = item.productSnapshot;
-                    let persHtml = '';
-                    
-                    if (Array.isArray(prod.personalizationFields) && prod.personalizationFields.length > 0) {
-                      persHtml += '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-subtle);">';
-                      persHtml += '<div style="font-size: 11px; font-weight: 700; color: var(--accent-primary); margin-bottom: 8px; text-transform: uppercase;">Campos Dinâmicos de Personalização</div>';
-                      persHtml += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
-                      prod.personalizationFields.forEach(field => {
-                        const val = item.personalization[field.id] || '';
-                        const req = field.required ? ' *' : '';
-                        persHtml += `
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">${field.name}${req}</label>
-                            ${field.type === 'longText' 
-                              ? `<textarea class="form-input item-pers-field" data-index="${index}" data-field="${field.id}" rows="2" style="font-size: 12px;">${val}</textarea>`
-                              : `<input class="form-input item-pers-field" data-index="${index}" data-field="${field.id}" value="${val}" style="font-size: 12px;">`
-                            }
+            <!-- ETAPA 2: PRODUTOS E PERSONALIZAÇÃO -->
+            <div id="section-produto" style="display: ${isD2 ? 'block' : 'none'};">
+              <div class="panel" style="background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                  🛍️ Adicionar Produto ao Pedido
+                </h3>
+                <div style="display: grid; grid-template-columns: minmax(200px, 3fr) minmax(100px, 1fr) auto; gap: 12px; align-items: flex-end;">
+                  <div>
+                    <label class="form-label" style="font-weight: 600;">Produto do Catálogo</label>
+                    <select class="form-input" id="inp-prod-select" style="width: 100%;">
+                      ${products.length === 0 
+                        ? '<option value="">Nenhum produto cadastrado no catálogo</option>' 
+                        : products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} - R$ ${Number(p.price || 0).toFixed(2)}</option>`).join('')
+                      }
+                    </select>
+                  </div>
+                  <div>
+                    <label class="form-label" style="font-weight: 600;">Quantidade</label>
+                    <input type="number" class="form-input" id="inp-prod-qty" value="1" min="1" style="width: 100%; text-align: center; font-weight: 600;">
+                  </div>
+                  <div>
+                    <button type="button" class="btn btn-primary" id="btn-add-product" style="padding: 9px 18px; font-weight: 600; white-space: nowrap; width: 100%;">
+                      + Adicionar Item
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel" style="border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+                  <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0;">
+                    🛒 Itens do Pedido & Detalhes de Produção
+                  </h3>
+                  <span style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">
+                    ${orderData.items.length} ${orderData.items.length === 1 ? 'item adicionado' : 'itens adicionados'}
+                  </span>
+                </div>
+                
+                <div id="order-items-list" style="display: flex; flex-direction: column; gap: 14px;">
+                  ${orderData.items.length === 0 ? 
+                    '<div style="text-align: center; padding: 32px 16px; color: var(--text-secondary); font-size: 14px; background: #f8fafc; border-radius: 8px; border: 1px dashed var(--border-subtle);">Nenhum produto adicionado ainda.<br><span style="font-size: 12px; color: var(--text-muted);">Selecione um produto no formulário acima e clique em <b>+ Adicionar Item</b>.</span></div>' 
+                    : orderData.items.map((item, index) => {
+                      
+                      const prod = item.productSnapshot || {};
+                      const itemPers = item.personalization || {};
+                      const itemOpts = item.changeOptions || {};
+                      let persHtml = '';
+                      
+                      if (Array.isArray(prod.personalizationFields) && prod.personalizationFields.length > 0) {
+                        persHtml += '<div style="margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">';
+                        persHtml += '<div style="font-size: 11px; font-weight: 700; color: var(--accent-primary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;">Campos Dinâmicos de Personalização</div>';
+                        persHtml += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">';
+                        prod.personalizationFields.forEach(field => {
+                          const val = itemPers[field.id] || '';
+                          const req = field.required ? ' *' : '';
+                          persHtml += `
+                            <div>
+                              <label class="form-label" style="font-size: 11px; font-weight: 600; margin-bottom: 4px;">${escapeHtml(field.name)}${req}</label>
+                              ${field.type === 'longText' 
+                                ? `<textarea class="form-input item-pers-field" data-index="${index}" data-field="${field.id}" rows="2" style="font-size: 12px; width: 100%;" placeholder="Digite ${escapeHtml(field.name)}...">${escapeHtml(val)}</textarea>`
+                                : `<input type="text" class="form-input item-pers-field" data-index="${index}" data-field="${field.id}" value="${escapeHtml(val)}" style="font-size: 12px; width: 100%;" placeholder="Digite ${escapeHtml(field.name)}...">`
+                              }
+                            </div>
+                          `;
+                        });
+                        persHtml += '</div></div>';
+                      }
+
+                      if (Array.isArray(prod.changeOptions) && prod.changeOptions.length > 0) {
+                        persHtml += '<div style="margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">';
+                        persHtml += '<div style="font-size: 11px; font-weight: 700; color: var(--accent-primary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;">Opções de Alteração / Variação</div>';
+                        persHtml += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">';
+                        prod.changeOptions.forEach(opt => {
+                          const val = itemOpts[opt.id] || '';
+                          const req = opt.required ? ' *' : '';
+                          persHtml += `
+                            <div>
+                              <label class="form-label" style="font-size: 11px; font-weight: 600; margin-bottom: 4px;">${escapeHtml(opt.name)}${req}</label>
+                              <select class="form-input item-opt-field" data-index="${index}" data-field="${opt.id}" style="font-size: 12px; width: 100%;">
+                                <option value="">Selecione uma opção...</option>
+                                ${(opt.options || []).map(o => `<option value="${escapeHtml(o)}" ${val === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+                              </select>
+                            </div>
+                          `;
+                        });
+                        persHtml += '</div></div>';
+                      }
+
+                      const itemQty = Number(item.qty) || 1;
+                      const itemUnitPrice = Number(item.unitPrice) || 0;
+                      const itemSubtotal = itemQty * itemUnitPrice;
+
+                      return `
+                        <div style="border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                              <span style="background: var(--accent-primary); color: #fff; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">
+                                ${index + 1}
+                              </span>
+                              <div>
+                                <div style="font-weight: 700; font-size: 14px; color: var(--text-primary);">${escapeHtml(item.productTitle || 'Item')}</div>
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 1px;">
+                                  Preço Unitário: <b>R$ ${itemUnitPrice.toFixed(2)}</b>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 14px;">
+                              <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 2px 4px;">
+                                <button type="button" class="btn-item-qty-dec" data-index="${index}" style="border: none; background: transparent; cursor: pointer; padding: 2px 6px; font-weight: 700; color: var(--text-primary); font-size: 14px;">-</button>
+                                <input type="number" class="item-qty-input" data-index="${index}" value="${itemQty}" min="1" style="width: 44px; text-align: center; font-size: 13px; font-weight: 700; border: none; background: transparent; outline: none;">
+                                <button type="button" class="btn-item-qty-inc" data-index="${index}" style="border: none; background: transparent; cursor: pointer; padding: 2px 6px; font-weight: 700; color: var(--text-primary); font-size: 14px;">+</button>
+                              </div>
+
+                              <div style="text-align: right; min-width: 90px;">
+                                <span style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); display: block;">Subtotal</span>
+                                <span style="font-size: 14px; font-weight: 700; color: var(--accent-primary);">R$ ${itemSubtotal.toFixed(2)}</span>
+                              </div>
+
+                              <button type="button" class="btn btn-secondary btn-remove-item" data-index="${index}" style="padding: 4px 10px; font-size: 12px; color: #dc2626; border-color: #fca5a5; display: inline-flex; align-items: center; gap: 4px;" title="Remover item do pedido">
+                                🗑️ Remover
+                              </button>
+                            </div>
                           </div>
-                        `;
-                      });
-                      persHtml += '</div></div>';
-                    }
 
-                    if (Array.isArray(prod.changeOptions) && prod.changeOptions.length > 0) {
-                      persHtml += '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-subtle);">';
-                      persHtml += '<div style="font-size: 11px; font-weight: 700; color: var(--accent-primary); margin-bottom: 8px; text-transform: uppercase;">Opções de Alteração</div>';
-                      persHtml += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
-                      prod.changeOptions.forEach(opt => {
-                        const val = item.changeOptions[opt.id] || '';
-                        const req = opt.required ? ' *' : '';
-                        persHtml += `
-                          <div>
-                            <label class="form-label" style="font-size: 11px;">${opt.name}${req}</label>
-                            <select class="form-input item-opt-field" data-index="${index}" data-field="${opt.id}" style="font-size: 12px;">
-                              <option value="">Selecione...</option>
-                              ${opt.options.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}
-                            </select>
+                          ${persHtml}
+
+                          <div style="margin-top: 10px;">
+                            <label class="form-label" style="font-size: 11px; font-weight: 600; margin-bottom: 4px;">Observações Específicas do Item (Instruções de produção)</label>
+                            <input type="text" class="form-input item-notes-field" data-index="${index}" value="${escapeHtml(item.notes || '')}" style="font-size: 12px; width: 100%;" placeholder="Ex: Nome da criança, tema, detalhes de corte ou acabamento...">
                           </div>
-                        `;
-                      });
-                      persHtml += '</div></div>';
-                    }
+                        </div>
+                      `;
+                    }).join('')
+                  }
+                </div>
+              </div>
 
+              <!-- Rodapé da Etapa 2 -->
+              <div style="display: flex; justify-content: space-between; margin-top: 20px; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+                <button type="button" class="btn btn-secondary btn-prev-divisoria" data-prev="section-cliente">⬅ Anterior (Cliente & Entrega)</button>
+                <button type="button" class="btn btn-primary btn-next-divisoria" data-next="section-insumos" style="font-weight: 600; padding: 10px 22px;">Próxima: Ficha Técnica ➔</button>
+              </div>
+            </div>
+
+            <!-- ETAPA 3: FICHA TÉCNICA E BOM SNAPSHOT -->
+            <div id="section-insumos" style="display: ${isD3 ? 'block' : 'none'};">
+              <div class="panel">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                  <h3 style="font-size: 1rem; font-weight: 700;">🧩 Insumos / Estoque (BOM Snapshot)</h3>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
+                  O sistema calcula automaticamente todos os materiais que serão gastos com base nos produtos escolhidos e quantidades. 
+                  Os custos ficam "congelados" nesta cópia (snapshot) para não sofrerem impacto caso os preços mudem futuramente.
+                </p>
+
+                <div style="background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden;">
+                  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                      <tr style="background: rgba(0,0,0,0.02); text-align: left; border-bottom: 1px solid var(--border-subtle);">
+                        <th style="padding: 10px 12px; font-weight: 600;">Insumo / Componente</th>
+                        <th style="padding: 10px 12px; font-weight: 600; text-align: center;">Qtd Necessária</th>
+                        <th style="padding: 10px 12px; font-weight: 600; text-align: right;">Custo Est.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${(() => {
+                        const bom = calculateTotalBOM();
+                        if (bom.items.length === 0) return '<tr><td colspan="3" style="padding: 16px; text-align: center; color: var(--text-secondary);">Nenhum insumo configurado nos produtos selecionados.</td></tr>';
+                        return bom.items.map(b => `
+                          <tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <td style="padding: 10px 12px;">${b.name} <span style="font-size: 10px; color: var(--text-secondary); padding: 2px 4px; background: #e5e7eb; border-radius: 4px; margin-left: 6px;">${b.type}</span></td>
+                            <td style="padding: 10px 12px; text-align: center; font-variant-numeric: tabular-nums;">${b.totalQty} ${b.unit}</td>
+                            <td style="padding: 10px 12px; text-align: right; color: var(--accent-primary); font-weight: 500;">R$ ${b.subtotal.toFixed(2)}</td>
+                          </tr>
+                        `).join('') + `
+                          <tr style="background: rgba(219, 39, 119, 0.05);">
+                            <td colspan="2" style="padding: 12px; font-weight: 700; text-align: right; color: var(--text-primary);">Custo de Material Previsto:</td>
+                            <td style="padding: 12px; font-weight: 700; text-align: right; color: var(--accent-primary);">R$ ${bom.totalCost.toFixed(2)}</td>
+                          </tr>
+                        `;
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Rodapé da Etapa 3 -->
+              <div style="display: flex; justify-content: space-between; margin-top: 20px; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+                <button type="button" class="btn btn-secondary btn-prev-divisoria" data-prev="section-produto">⬅ Anterior (Produtos & Personalização)</button>
+                <button type="button" class="btn btn-primary btn-next-divisoria" data-next="section-financeiro" style="font-weight: 600; padding: 10px 22px;">Próxima: Financeiro & Conclusão ➔</button>
+              </div>
+            </div>
+
+            <!-- ETAPA 4: FINANCEIRO & NOTA FISCAL -->
+            <div id="section-financeiro" style="display: ${isD4 ? 'block' : 'none'};">
+              <div class="panel" style="background: #fff; border: 1px solid var(--border-subtle); box-shadow: 0 4px 12px rgba(0,0,0,0.03);" id="invoice-printable-area">
+                
+                <!-- Cabeçalho NF -->
+                <div style="text-align: center; border-bottom: 2px dashed var(--border-subtle); padding-bottom: 16px; margin-bottom: 16px;">
+                  <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); text-transform: uppercase; letter-spacing: 1px;">RESUMO DO PEDIDO</h2>
+                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Ateliê Paper Max · Emissão: ${todayStr.split('-').reverse().join('/')}</div>
+                </div>
+
+                <!-- Cliente NF -->
+                <div style="margin-bottom: 16px; font-size: 13px;">
+                  <div style="font-weight: 700; margin-bottom: 4px; color: var(--text-primary);">DADOS DO CLIENTE</div>
+                  <div><strong>Nome/Razão:</strong> ${orderData.customerType === 'PJ' ? (orderData.customerCompany || orderData.customer) : orderData.customer}</div>
+                  <div><strong>Documento:</strong> ${orderData.customerType === 'PJ' ? orderData.customerCNPJ : orderData.customerCPF}</div>
+                  <div><strong>Contato:</strong> ${orderData.customerPhone}</div>
+                </div>
+
+                <!-- Itens NF -->
+                <div style="margin-bottom: 16px;">
+                  <div style="font-weight: 700; margin-bottom: 8px; color: var(--text-primary); font-size: 13px;">INFORMAÇÕES INDIVIDUAIS (ITENS)</div>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <thead>
+                      <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left;">
+                        <th style="padding: 6px 0;">Qtd</th>
+                        <th style="padding: 6px 0;">Produto / Descrição</th>
+                        <th style="padding: 6px 0; text-align: right;">V. Unit</th>
+                        <th style="padding: 6px 0; text-align: right;">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${orderData.items.map(item => `
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                          <td style="padding: 8px 0; font-weight: 600;">${item.qty}x</td>
+                          <td style="padding: 8px 0;">
+                            ${item.productTitle}
+                            ${item.notes ? `<div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Obs: ${item.notes}</div>` : ''}
+                          </td>
+                          <td style="padding: 8px 0; text-align: right;">R$ ${Number(item.unitPrice).toFixed(2)}</td>
+                          <td style="padding: 8px 0; text-align: right; font-weight: 600;">R$ ${(item.unitPrice * item.qty).toFixed(2)}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Totais NF -->
+                <div style="border-top: 2px dashed var(--border-subtle); padding-top: 16px; margin-bottom: 16px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+                    <span>Subtotal:</span>
+                    <span>R$ ${orderData.items.reduce((sum, it) => sum + (it.unitPrice * it.qty), 0).toFixed(2)}</span>
+                  </div>
+                  
+                  <div style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin-bottom: 4px; padding: 4px 0;" class="no-print-interactive">
+                    <span>Desconto (R$):</span>
+                    <input type="number" step="0.01" min="0" class="form-input" id="inp-fin-discount" value="${orderData.discount}" style="width: 100px; text-align: right; padding: 4px 8px; font-size: 12px;">
+                  </div>
+                  
+                  <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; margin-top: 8px; color: var(--accent-primary);">
+                    <span>VALOR TOTAL:</span>
+                    <span>R$ ${getCalculatedTotal().toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <!-- Histórico de Pagamento no Pedido -->
+                <div style="background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid var(--border-subtle); margin-top: 16px;">
+                  <div style="font-weight: 700; margin-bottom: 12px; color: var(--text-primary); font-size: 13px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
+                    <span>💳 Histórico de Pagamentos</span>
+                    <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: none;">Lançamento e registro por data/hora</span>
+                  </div>
+
+                  <!-- Linha de inserção: TIPO DE PAGAMENTO (SELECT) | R$ [INPUT] | + -->
+                  <div class="no-print-interactive" style="display: grid; grid-template-columns: 1fr 140px auto; gap: 10px; align-items: end; background: #ffffff; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px; margin-bottom: 14px;">
+                    <div>
+                      <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 4px;">Tipo de Pagamento</label>
+                      <select class="form-input" id="inp-new-pay-method" style="height: 38px; font-size: 13px; font-weight: 600; text-transform: uppercase;">
+                        <option value="DINHEIRO">DINHEIRO</option>
+                        <option value="PIX" selected>PIX</option>
+                        <option value="CRÉDITO">CRÉDITO</option>
+                        <option value="DÉBITO">DÉBITO</option>
+                        <option value="PERMUTA">PERMUTA</option>
+                        <option value="BOLETO">BOLETO</option>
+                        <option value="TRANSFERÊNCIA">TRANSFERÊNCIA</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 4px;">R$ Valor</label>
+                      <input type="number" step="0.01" min="0.01" class="form-input" id="inp-new-pay-amount" placeholder="0,00" value="${(() => {
+                        const paidSoFar = orderData.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+                        const rem = Math.max(0, getCalculatedTotal() - paidSoFar);
+                        return rem > 0 ? rem.toFixed(2) : '';
+                      })()}" style="height: 38px; font-size: 14px; font-weight: 700; text-align: right;">
+                    </div>
+                    <div>
+                      <button type="button" class="btn btn-primary" id="btn-add-pay-entry" style="height: 38px; padding: 0 16px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 4px;" title="Adicionar Pagamento ao Histórico">
+                        <span style="font-size: 18px; line-height: 1;">+</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Tabela do Histórico de Pagamentos -->
+                  <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; margin-bottom: 12px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                      <thead>
+                        <tr style="background: #f1f5f9; border-bottom: 1px solid var(--border-subtle); text-align: left;">
+                          <th style="padding: 9px 12px; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Tipo de Pagamento</th>
+                          <th style="padding: 9px 12px; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; text-align: right;">Valor</th>
+                          <th style="padding: 9px 12px; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; text-align: center;">Data / Hora</th>
+                          <th style="padding: 9px 12px; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; text-align: center; width: 44px;" class="no-print-interactive"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${orderData.payments.length === 0 ? `
+                          <tr>
+                            <td colspan="4" style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 12px;">
+                              Nenhum pagamento registrado ainda. Selecione o tipo de pagamento, digite o valor e clique em <b>+</b>.
+                            </td>
+                          </tr>
+                        ` : orderData.payments.map((p, idx) => `
+                          <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary); text-transform: uppercase;">
+                              ${escapeHtml(p.method)}
+                            </td>
+                            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #16a34a; font-variant-numeric: tabular-nums;">
+                              R$ ${Number(p.amount).toFixed(2)}
+                            </td>
+                            <td style="padding: 10px 12px; text-align: center; color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums;">
+                              ${escapeHtml(p.datetime || (p.date + (p.time ? ` às ${p.time}` : '')))}
+                            </td>
+                            <td style="padding: 10px 12px; text-align: center;" class="no-print-interactive">
+                              <button type="button" class="btn-remove-pay-entry" data-index="${idx}" style="background: none; border: none; cursor: pointer; color: #dc2626; font-size: 14px; padding: 2px 6px; border-radius: 4px;" title="Remover lançamento">
+                                ✖
+                              </button>
+                            </td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <!-- Resumo Financeiro da Entrada e Saldo -->
+                  ${(() => {
+                    const totalPaid = orderData.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+                    const total = getCalculatedTotal();
+                    const remaining = Math.max(0, total - totalPaid);
                     return `
-                      <div style="border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; background: #fff;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                          <div style="flex: 1;">
-                            <div style="font-weight: 700; font-size: 14px;">${item.qty}x ${item.productTitle}</div>
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Preço Un: R$ ${Number(item.unitPrice).toFixed(2)} | Subtotal: R$ ${Number(item.qty * item.unitPrice).toFixed(2)}</div>
-                          </div>
-                          <button type="button" class="btn btn-secondary btn-remove-item" data-index="${index}" style="padding: 4px 8px; font-size: 11px; color: #dc2626; border-color: #fca5a5;">Remover</button>
-                        </div>
-                        ${persHtml}
-                        <div style="margin-top: 10px;">
-                          <label class="form-label" style="font-size: 11px;">Observações Específicas do Item (Instruções de produção)</label>
-                          <textarea class="form-input item-notes-field" data-index="${index}" rows="2" style="font-size: 12px;">${item.notes}</textarea>
-                        </div>
+                      <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+                        <span>Valor Entrada/Pago:</span>
+                        <span style="font-weight: 700; color: #16a34a;">R$ ${totalPaid.toFixed(2)}</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700;">
+                        <span>Valor Restante:</span>
+                        <span style="color: ${remaining > 0 ? '#dc2626' : '#16a34a'}; font-weight: 700;">
+                          ${remaining > 0 ? `R$ ${remaining.toFixed(2)}` : '✅ Totalmente Quitado'}
+                        </span>
                       </div>
                     `;
-                  }).join('')
-                }
-              </div>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; margin-top: 16px;">
-              <button type="button" class="btn btn-secondary btn-prev-tab" data-prev="section-cliente">⬅ Voltar</button>
-              <button type="button" class="btn btn-primary btn-next-tab" data-next="section-insumos">Próximo Passo ➔</button>
-            </div>
-          </div>
-
-          <!-- TAB 3: FICHA TÉCNICA E BOM SNAPSHOT -->
-          <div class="binder-panel" id="section-insumos" style="margin-top: 0; display: none;">
-            <div class="panel">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <h3 style="font-size: 1rem; font-weight: 700;">🧩 Insumos / Estoque (BOM Snapshot)</h3>
-              </div>
-              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
-                O sistema calcula automaticamente todos os materiais que serão gastos com base nos produtos escolhidos e quantidades. 
-                Os custos ficam "congelados" nesta cópia (snapshot) para não sofrerem impacto caso os preços mudem futuramente.
-              </p>
-
-              <div style="background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                  <thead>
-                    <tr style="background: rgba(0,0,0,0.02); text-align: left; border-bottom: 1px solid var(--border-subtle);">
-                      <th style="padding: 10px 12px; font-weight: 600;">Insumo / Componente</th>
-                      <th style="padding: 10px 12px; font-weight: 600; text-align: center;">Qtd Necessária</th>
-                      <th style="padding: 10px 12px; font-weight: 600; text-align: right;">Custo Est.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${(() => {
-                      const bom = calculateTotalBOM();
-                      if (bom.items.length === 0) return '<tr><td colspan="3" style="padding: 16px; text-align: center; color: var(--text-secondary);">Nenhum insumo configurado nos produtos selecionados.</td></tr>';
-                      return bom.items.map(b => `
-                        <tr style="border-bottom: 1px solid var(--border-subtle);">
-                          <td style="padding: 10px 12px;">${b.name} <span style="font-size: 10px; color: var(--text-secondary); padding: 2px 4px; background: #e5e7eb; border-radius: 4px; margin-left: 6px;">${b.type}</span></td>
-                          <td style="padding: 10px 12px; text-align: center; font-variant-numeric: tabular-nums;">${b.totalQty} ${b.unit}</td>
-                          <td style="padding: 10px 12px; text-align: right; color: var(--accent-primary); font-weight: 500;">R$ ${b.subtotal.toFixed(2)}</td>
-                        </tr>
-                      `).join('') + `
-                        <tr style="background: rgba(219, 39, 119, 0.05);">
-                          <td colspan="2" style="padding: 12px; font-weight: 700; text-align: right; color: var(--text-primary);">Custo de Material Previsto:</td>
-                          <td style="padding: 12px; font-weight: 700; text-align: right; color: var(--accent-primary);">R$ ${bom.totalCost.toFixed(2)}</td>
-                        </tr>
-                      `;
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; margin-top: 16px;">
-              <button type="button" class="btn btn-secondary btn-prev-tab" data-prev="section-produto">⬅ Voltar</button>
-              <button type="button" class="btn btn-primary btn-next-tab" data-next="section-financeiro">Próximo Passo ➔</button>
-            </div>
-          </div>
-
-          <!-- TAB 4: FINANCEIRO & NOTA FISCAL -->
-          <div class="binder-panel" id="section-financeiro" style="margin-top: 0; display: none;">
-            <div class="panel" style="background: #fff; border: 1px solid var(--border-subtle); box-shadow: 0 4px 12px rgba(0,0,0,0.03);" id="invoice-printable-area">
-              
-              <!-- Cabeçalho NF -->
-              <div style="text-align: center; border-bottom: 2px dashed var(--border-subtle); padding-bottom: 16px; margin-bottom: 16px;">
-                <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); text-transform: uppercase; letter-spacing: 1px;">RESUMO DO PEDIDO</h2>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Ateliê Paper Max · Emissão: ${todayStr.split('-').reverse().join('/')}</div>
-              </div>
-
-              <!-- Cliente NF -->
-              <div style="margin-bottom: 16px; font-size: 13px;">
-                <div style="font-weight: 700; margin-bottom: 4px; color: var(--text-primary);">DADOS DO CLIENTE</div>
-                <div><strong>Nome/Razão:</strong> ${orderData.customerType === 'PJ' ? (orderData.customerCompany || orderData.customer) : orderData.customer}</div>
-                <div><strong>Documento:</strong> ${orderData.customerType === 'PJ' ? orderData.customerCNPJ : orderData.customerCPF}</div>
-                <div><strong>Contato:</strong> ${orderData.customerPhone}</div>
-              </div>
-
-              <!-- Itens NF -->
-              <div style="margin-bottom: 16px;">
-                <div style="font-weight: 700; margin-bottom: 8px; color: var(--text-primary); font-size: 13px;">INFORMAÇÕES INDIVIDUAIS (ITENS)</div>
-                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                  <thead>
-                    <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left;">
-                      <th style="padding: 6px 0;">Qtd</th>
-                      <th style="padding: 6px 0;">Produto / Descrição</th>
-                      <th style="padding: 6px 0; text-align: right;">V. Unit</th>
-                      <th style="padding: 6px 0; text-align: right;">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${orderData.items.map(item => `
-                      <tr style="border-bottom: 1px solid #f3f4f6;">
-                        <td style="padding: 8px 0; font-weight: 600;">${item.qty}x</td>
-                        <td style="padding: 8px 0;">
-                          ${item.productTitle}
-                          ${item.notes ? `<div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Obs: ${item.notes}</div>` : ''}
-                        </td>
-                        <td style="padding: 8px 0; text-align: right;">R$ ${Number(item.unitPrice).toFixed(2)}</td>
-                        <td style="padding: 8px 0; text-align: right; font-weight: 600;">R$ ${(item.unitPrice * item.qty).toFixed(2)}</td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Totais NF -->
-              <div style="border-top: 2px dashed var(--border-subtle); padding-top: 16px; margin-bottom: 16px;">
-                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
-                  <span>Subtotal:</span>
-                  <span>R$ ${orderData.items.reduce((sum, it) => sum + (it.unitPrice * it.qty), 0).toFixed(2)}</span>
+                  })()}
                 </div>
-                
-                <!-- Campos Interativos (Não impressos na NF final visual, mas controlam o estado) -->
-                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin-bottom: 4px; padding: 4px 0;" class="no-print-interactive">
-                  <span>Desconto (R$):</span>
-                  <input type="number" step="0.01" min="0" class="form-input" id="inp-fin-discount" value="${orderData.discount}" style="width: 100px; text-align: right; padding: 4px 8px; font-size: 12px;">
+
+                <!-- Action buttons on NF -->
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;" class="no-print-interactive">
+                  <button type="button" class="btn btn-secondary" id="btn-print-nf">🖨️ Salvar PDF / Imprimir</button>
                 </div>
-                
-                <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; margin-top: 8px; color: var(--accent-primary);">
-                  <span>VALOR TOTAL:</span>
-                  <span>R$ ${getCalculatedTotal().toFixed(2)}</span>
-                </div>
+
               </div>
 
-              <!-- Pagamentos -->
-              <div style="background: #f9fafb; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb;">
-                <div style="font-weight: 700; margin-bottom: 8px; color: var(--text-primary); font-size: 12px; text-transform: uppercase;">Condições de Pagamento</div>
-                
-                <div id="payment-methods-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;" class="no-print-interactive">
-                  ${orderData.paymentMethods.map((pm, idx) => `
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                      <select class="form-input pay-method-select" data-index="${idx}" style="flex: 1; padding: 4px 8px; font-size: 12px;">
-                        ${['Dinheiro', 'PIX', 'Crédito', 'Débito', 'Permuta'].map(m => `<option value="${m}" ${pm.method === m ? 'selected' : ''}>${m}</option>`).join('')}
-                      </select>
-                      <input type="number" step="0.01" min="0" class="form-input pay-method-amount" data-index="${idx}" value="${pm.amount}" style="width: 100px; text-align: right; padding: 4px 8px; font-size: 12px;" placeholder="Valor R$">
-                      <button type="button" class="btn btn-secondary btn-remove-pay" data-index="${idx}" style="padding: 4px; color: #dc2626;">✖</button>
-                    </div>
-                  `).join('')}
-                </div>
-                <button type="button" class="btn btn-secondary no-print-interactive" id="btn-add-pay" style="font-size: 11px; padding: 4px 8px; margin-bottom: 12px;">+ Adicionar Forma de Pagamento (Ex: Permuta + PIX)</button>
-
-                ${(() => {
-                  const totalPaid = orderData.paymentMethods.reduce((sum, p) => sum + Number(p.amount), 0);
-                  const total = getCalculatedTotal();
-                  const remaining = Math.max(0, total - totalPaid);
-                  return `
-                    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
-                      <span>Valor Entrada/Pago:</span>
-                      <span style="font-weight: 600; color: #16a34a;">R$ ${totalPaid.toFixed(2)}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700;">
-                      <span>Valor Restante:</span>
-                      <span style="color: ${remaining > 0 ? '#dc2626' : '#16a34a'};">R$ ${remaining.toFixed(2)}</span>
-                    </div>
-                  `;
-                })()}
+              <!-- Rodapé da Etapa 4 -->
+              <div style="display: flex; justify-content: space-between; margin-top: 24px; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+                <button type="button" class="btn btn-secondary btn-prev-divisoria" data-prev="section-insumos">⬅ Anterior (Ficha Técnica)</button>
+                <button type="submit" class="btn btn-primary" style="font-size: 1.1rem; padding: 10px 26px; font-weight: 700;">
+                  ${isEditing ? '💾 Salvar Alterações no Pedido' : '✅ Concluir e Salvar Pedido'}
+                </button>
               </div>
-
-              <!-- Action buttons on NF -->
-              <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;" class="no-print-interactive">
-                <button type="button" class="btn btn-secondary" id="btn-print-nf">🖨️ Salvar PDF / Imprimir</button>
-              </div>
-
-            </div>
-
-            <div style="display: flex; justify-content: space-between; margin-top: 24px; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
-              <button type="button" class="btn btn-secondary btn-prev-tab" data-prev="section-insumos">⬅ Voltar</button>
-              <button type="submit" class="btn btn-primary" style="font-size: 1.1rem; padding: 10px 24px;">✅ Concluir e Salvar Pedido</button>
             </div>
           </div>
 
@@ -1120,124 +1408,138 @@ export function renderNewOrderPage(container, ctx) {
 
     container.innerHTML = html;
 
-    // Attach Tab Events
-    const tabs = container.querySelectorAll('.binder-tab');
-    const panels = container.querySelectorAll('.binder-panel');
-
-    function activateTab(targetId) {
-      tabs.forEach(t => t.classList.remove('active'));
-      panels.forEach(p => p.classList.remove('active'));
-      const activeTab = container.querySelector(`.binder-tab[data-target="${targetId}"]`);
-      const activePanel = document.getElementById(targetId);
-      if (activeTab) activeTab.classList.add('active');
-      if (activePanel) {
-        activePanel.classList.add('active');
-        activePanel.style.display = 'block';
-      }
-      panels.forEach(p => { if (p.id !== targetId) p.style.display = 'none'; });
-    }
-
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        saveCurrentState();
-        activateTab(tab.dataset.target);
-        render(); // re-render to update dynamic sections (BOM, Finance) based on new state
-        activateTab(tab.dataset.target); // restore active tab after render
-      });
-    });
-
-    container.querySelectorAll('.btn-next-tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        saveCurrentState();
-        const next = btn.dataset.next;
-        activateTab(next);
-        render();
-        activateTab(next);
-      });
-    });
-
-    container.querySelectorAll('.btn-prev-tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        saveCurrentState();
-        const prev = btn.dataset.prev;
-        activateTab(prev);
-        render();
-        activateTab(prev);
-      });
-    });
-
-    // Helper: Save form inputs to orderData before re-rendering
+    // Helper: Save form inputs to orderData before re-rendering or switching divisórias
     function saveCurrentState() {
       // Cliente & Entrega
-      if(document.querySelector('input[name="customerType"]:checked')) orderData.customerType = document.querySelector('input[name="customerType"]:checked').value;
-      if(document.getElementById('inp-cli-nome')) orderData.customer = document.getElementById('inp-cli-nome').value;
-      if(document.getElementById('inp-cli-empresa')) orderData.customerCompany = document.getElementById('inp-cli-empresa').value;
-      if(document.getElementById('inp-cli-contato')) orderData.customerPhone = document.getElementById('inp-cli-contato').value;
-      if(document.getElementById('inp-cli-nasc')) orderData.customerBirthDate = document.getElementById('inp-cli-nasc').value;
-      if(document.getElementById('inp-cli-cpf')) orderData.customerCPF = document.getElementById('inp-cli-cpf').value;
-      if(document.getElementById('inp-cli-cnpj')) orderData.customerCNPJ = document.getElementById('inp-cli-cnpj').value;
-      if(document.getElementById('inp-cli-evento')) orderData.eventDate = document.getElementById('inp-cli-evento').value;
-      if(document.getElementById('inp-cli-obs')) orderData.notes = document.getElementById('inp-cli-obs').value;
+      const custTypeEl = container.querySelector('input[name="customerType"]:checked');
+      if (custTypeEl) orderData.customerType = custTypeEl.value;
+
+      const inpCliNome = container.querySelector('#inp-cli-nome');
+      if (inpCliNome) orderData.customer = inpCliNome.value;
+
+      const inpCliEmpresa = container.querySelector('#inp-cli-empresa');
+      if (inpCliEmpresa) orderData.customerCompany = inpCliEmpresa.value;
+
+      const inpCliContato = container.querySelector('#inp-cli-contato');
+      if (inpCliContato) orderData.customerPhone = inpCliContato.value;
+
+      const inpCliNasc = container.querySelector('#inp-cli-nasc');
+      if (inpCliNasc) orderData.customerBirthDate = inpCliNasc.value;
+
+      const inpCliCpf = container.querySelector('#inp-cli-cpf');
+      if (inpCliCpf) orderData.customerCPF = inpCliCpf.value;
+
+      const inpCliCnpj = container.querySelector('#inp-cli-cnpj');
+      if (inpCliCnpj) orderData.customerCNPJ = inpCliCnpj.value;
+
+      const inpCliEvento = container.querySelector('#inp-cli-evento');
+      if (inpCliEvento) orderData.eventDate = inpCliEvento.value;
+
+      const inpCliLimite = container.querySelector('#inp-cli-limite');
+      if (inpCliLimite) orderData.limitDate = inpCliLimite.value;
+
+      const inpCliObs = container.querySelector('#inp-cli-obs');
+      if (inpCliObs) orderData.notes = inpCliObs.value;
       
-      if(document.getElementById('inp-ent-cep')) orderData.deliveryCep = document.getElementById('inp-ent-cep').value;
-      if(document.getElementById('inp-ent-endereco')) orderData.deliveryAddress = document.getElementById('inp-ent-endereco').value;
-      if(document.getElementById('inp-ent-numero')) orderData.deliveryNumber = document.getElementById('inp-ent-numero').value;
-      if(document.getElementById('inp-ent-bairro')) orderData.deliveryNeighborhood = document.getElementById('inp-ent-bairro').value;
-      if(document.getElementById('inp-ent-cidade')) orderData.deliveryCity = document.getElementById('inp-ent-cidade').value;
-      if(document.getElementById('inp-ent-estado')) orderData.deliveryState = document.getElementById('inp-ent-estado').value;
-      if(document.getElementById('inp-ent-obs')) orderData.deliveryNotes = document.getElementById('inp-ent-obs').value;
+      const inpEntCep = container.querySelector('#inp-ent-cep');
+      if (inpEntCep) orderData.deliveryCep = inpEntCep.value;
+
+      const inpEntEnd = container.querySelector('#inp-ent-endereco');
+      if (inpEntEnd) orderData.deliveryAddress = inpEntEnd.value;
+
+      const inpEntNum = container.querySelector('#inp-ent-numero');
+      if (inpEntNum) orderData.deliveryNumber = inpEntNum.value;
+
+      const inpEntBairro = container.querySelector('#inp-ent-bairro');
+      if (inpEntBairro) orderData.deliveryNeighborhood = inpEntBairro.value;
+
+      const inpEntCidade = container.querySelector('#inp-ent-cidade');
+      if (inpEntCidade) orderData.deliveryCity = inpEntCidade.value;
+
+      const inpEntEstado = container.querySelector('#inp-ent-estado');
+      if (inpEntEstado) orderData.deliveryState = inpEntEstado.value;
+
+      const inpEntObs = container.querySelector('#inp-ent-obs');
+      if (inpEntObs) orderData.deliveryNotes = inpEntObs.value;
 
       // Items personalization & options
       container.querySelectorAll('.item-pers-field').forEach(el => {
         const idx = el.dataset.index;
         const fieldId = el.dataset.field;
-        if(orderData.items[idx]) {
-          if(!orderData.items[idx].personalization) orderData.items[idx].personalization = {};
+        if (orderData.items[idx]) {
+          if (!orderData.items[idx].personalization) orderData.items[idx].personalization = {};
           orderData.items[idx].personalization[fieldId] = el.value;
         }
       });
       container.querySelectorAll('.item-opt-field').forEach(el => {
         const idx = el.dataset.index;
         const fieldId = el.dataset.field;
-        if(orderData.items[idx]) {
-          if(!orderData.items[idx].changeOptions) orderData.items[idx].changeOptions = {};
+        if (orderData.items[idx]) {
+          if (!orderData.items[idx].changeOptions) orderData.items[idx].changeOptions = {};
           orderData.items[idx].changeOptions[fieldId] = el.value;
         }
       });
       container.querySelectorAll('.item-notes-field').forEach(el => {
         const idx = el.dataset.index;
-        if(orderData.items[idx]) {
+        if (orderData.items[idx]) {
           orderData.items[idx].notes = el.value;
         }
       });
 
       // Financeiro
-      if(document.getElementById('inp-fin-discount')) orderData.discount = Number(document.getElementById('inp-fin-discount').value) || 0;
-      
-      const newPayments = [];
-      container.querySelectorAll('.pay-method-select').forEach((sel, i) => {
-        const amtInput = container.querySelectorAll('.pay-method-amount')[i];
-        if(sel && amtInput) {
-          newPayments.push({ method: sel.value, amount: Number(amtInput.value) || 0 });
-        }
-      });
-      if (newPayments.length > 0) orderData.paymentMethods = newPayments;
+      const inpFinDisc = container.querySelector('#inp-fin-discount');
+      if (inpFinDisc) orderData.discount = Number(inpFinDisc.value) || 0;
     }
 
-    // Interactive Actions
+    // Function to switch active divisória: Highlights target and expands page, collapses others in gray
+    function switchDivisoria(targetId) {
+      saveCurrentState();
+      activeDivisoria = targetId;
+      render();
+      const newOrderTabs = container.querySelector('#new-order-tabs');
+      if (newOrderTabs) {
+        newOrderTabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    // Attach click events on top binder tabs
+    container.querySelectorAll('.binder-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchDivisoria(tab.dataset.target);
+      });
+    });
+
+    // Next Divisória buttons
+    container.querySelectorAll('.btn-next-divisoria').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchDivisoria(btn.dataset.next);
+      });
+    });
+
+    // Previous Divisória buttons
+    container.querySelectorAll('.btn-prev-divisoria').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchDivisoria(btn.dataset.prev);
+      });
+    });
+
+    // Customer Type change
     container.querySelectorAll('input[name="customerType"]').forEach(r => {
       r.addEventListener('change', () => {
         saveCurrentState();
+        activeDivisoria = 'section-cliente';
         render();
-        activateTab('section-cliente');
       });
     });
 
     const btnBuscaCep = document.getElementById('btn-busca-cep');
     if (btnBuscaCep) {
       btnBuscaCep.addEventListener('click', async () => {
-        const cep = document.getElementById('inp-ent-cep').value.replace(/D/g, '');
-        if (cep.length !== 8) { showToast('CEP inválido'); return; }
+        const cep = document.getElementById('inp-ent-cep').value.replace(/\D/g, '');
+        if (cep.length !== 8) { showToast('CEP inválido (digite 8 dígitos)', '⚠️'); return; }
         try {
           const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
           const data = await res.json();
@@ -1247,6 +1549,7 @@ export function renderNewOrderPage(container, ctx) {
           document.getElementById('inp-ent-cidade').value = data.localidade || '';
           document.getElementById('inp-ent-estado').value = data.uf || '';
           document.getElementById('inp-ent-numero').focus();
+          saveCurrentState();
         } catch(e) {
           showToast('Erro ao buscar CEP', '🔴');
         }
@@ -1271,12 +1574,9 @@ export function renderNewOrderPage(container, ctx) {
             productSnapshot: JSON.parse(JSON.stringify(prod)),
             notes: ''
           });
-          // Also set default payment amount to total
-          if (orderData.paymentMethods.length === 1) {
-            orderData.paymentMethods[0].amount = getCalculatedTotal();
-          }
+          activeDivisoria = 'section-produto';
           render();
-          activateTab('section-produto');
+          showToast(`"${prod.name}" adicionado ao pedido!`, '🛍️');
         }
       });
     }
@@ -1286,35 +1586,104 @@ export function renderNewOrderPage(container, ctx) {
         saveCurrentState();
         const idx = Number(e.currentTarget.dataset.index);
         orderData.items.splice(idx, 1);
+        activeDivisoria = 'section-produto';
         render();
-        activateTab('section-produto');
       });
     });
 
-    const btnAddPay = document.getElementById('btn-add-pay');
-    if (btnAddPay) {
-      btnAddPay.addEventListener('click', () => {
-        saveCurrentState();
-        orderData.paymentMethods.push({ method: 'Dinheiro', amount: 0 });
-        render();
-        activateTab('section-financeiro');
-      });
-    }
-
-    container.querySelectorAll('.btn-remove-pay').forEach(btn => {
+    // Item Quantity Steppers and Direct Input
+    container.querySelectorAll('.btn-item-qty-inc').forEach(btn => {
       btn.addEventListener('click', (e) => {
         saveCurrentState();
         const idx = Number(e.currentTarget.dataset.index);
-        orderData.paymentMethods.splice(idx, 1);
+        if (orderData.items[idx]) {
+          orderData.items[idx].qty = (Number(orderData.items[idx].qty) || 1) + 1;
+          activeDivisoria = 'section-produto';
+          render();
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-item-qty-dec').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        saveCurrentState();
+        const idx = Number(e.currentTarget.dataset.index);
+        if (orderData.items[idx]) {
+          const currentQty = Number(orderData.items[idx].qty) || 1;
+          if (currentQty > 1) {
+            orderData.items[idx].qty = currentQty - 1;
+            activeDivisoria = 'section-produto';
+            render();
+          }
+        }
+      });
+    });
+
+    container.querySelectorAll('.item-qty-input').forEach(inp => {
+      inp.addEventListener('change', (e) => {
+        saveCurrentState();
+        const idx = Number(e.currentTarget.dataset.index);
+        const val = Math.max(1, Number(e.currentTarget.value) || 1);
+        if (orderData.items[idx]) {
+          orderData.items[idx].qty = val;
+          activeDivisoria = 'section-produto';
+          render();
+        }
+      });
+    });
+
+    const btnAddPayEntry = document.getElementById('btn-add-pay-entry');
+    if (btnAddPayEntry) {
+      btnAddPayEntry.addEventListener('click', () => {
+        saveCurrentState();
+        const selMethod = document.getElementById('inp-new-pay-method');
+        const inpAmount = document.getElementById('inp-new-pay-amount');
+        const amount = Number(inpAmount?.value);
+
+        if (isNaN(amount) || amount <= 0) {
+          showToast('Informe um valor de pagamento válido maior que zero.', '⚠️');
+          if (inpAmount) inpAmount.focus();
+          return;
+        }
+
+        const method = (selMethod?.value || 'PIX').trim().toUpperCase();
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const datetimeStr = `${day}/${month}/${year} às ${hours}:${minutes}`;
+
+        orderData.payments.push({
+          id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+          method,
+          amount: Number(amount.toFixed(2)),
+          date: `${day}/${month}/${year}`,
+          time: `${hours}:${minutes}`,
+          datetime: datetimeStr,
+          timestamp: now.toISOString()
+        });
+
+        activeDivisoria = 'section-financeiro';
         render();
-        activateTab('section-financeiro');
+        showToast(`Pagamento de R$ ${amount.toFixed(2)} (${method}) adicionado ao histórico!`, '✅');
+      });
+    }
+
+    container.querySelectorAll('.btn-remove-pay-entry').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        saveCurrentState();
+        const idx = Number(e.currentTarget.dataset.index);
+        orderData.payments.splice(idx, 1);
+        activeDivisoria = 'section-financeiro';
+        render();
       });
     });
 
     const btnPrintNf = document.getElementById('btn-print-nf');
     if (btnPrintNf) {
       btnPrintNf.addEventListener('click', () => {
-        // Simple print
         const styles = `
           <style>
             body { font-family: sans-serif; padding: 20px; }
@@ -1332,14 +1701,15 @@ export function renderNewOrderPage(container, ctx) {
       });
     }
 
-    // Refresh calculations when amount inputs change
-    container.querySelectorAll('.pay-method-amount, #inp-fin-discount').forEach(inp => {
-      inp.addEventListener('blur', () => {
+    // Refresh calculations when discount changes
+    const inpDiscount = container.querySelector('#inp-fin-discount');
+    if (inpDiscount) {
+      inpDiscount.addEventListener('blur', () => {
         saveCurrentState();
+        activeDivisoria = 'section-financeiro';
         render();
-        activateTab('section-financeiro');
       });
-    });
+    }
 
     // Form Submit (Save Order)
     const form = document.getElementById('form-new-order-page');
@@ -1348,19 +1718,80 @@ export function renderNewOrderPage(container, ctx) {
         e.preventDefault();
         saveCurrentState();
 
+        if (orderData.customerType === 'PF' && (!orderData.customer || !orderData.customer.trim())) {
+          showToast('Por favor, informe o Nome do Cliente na Divisória 1.', '⚠️');
+          switchDivisoria('section-cliente');
+          const inp = container.querySelector('#inp-cli-nome');
+          if (inp) inp.focus();
+          return;
+        }
+
+        if (orderData.customerType === 'PJ' && (!orderData.customerCompany || !orderData.customerCompany.trim())) {
+          showToast('Por favor, informe a Empresa / Razão Social na Divisória 1.', '⚠️');
+          switchDivisoria('section-cliente');
+          const inp = container.querySelector('#inp-cli-empresa');
+          if (inp) inp.focus();
+          return;
+        }
+
         if (orderData.items.length === 0) {
-          showToast('Adicione pelo menos um produto ao pedido.', '🔴');
-          activateTab('section-produto');
+          showToast('Adicione pelo menos um produto ao pedido na Divisória 2.', '⚠️');
+          switchDivisoria('section-produto');
           return;
         }
         
         try {
-          const { createOrder } = await import('./orders.js');
-          
-          const totalPaid = orderData.paymentMethods.reduce((sum, p) => sum + Number(p.amount), 0);
+          const totalPaid = Number(orderData.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toFixed(2));
           const totalAmount = getCalculatedTotal();
-          
-          const primaryMethod = orderData.paymentMethods.length > 0 ? orderData.paymentMethods[0].method : 'PIX';
+          const remainingAmount = Math.max(0, Number((totalAmount - totalPaid).toFixed(2)));
+          const primaryMethod = orderData.payments.length > 0 ? orderData.payments[0].method : 'PIX';
+
+          if (isEditing) {
+            const updated = updateOrder(editingOrder.id, {
+              customerType: orderData.customerType,
+              customer: orderData.customer,
+              customerCompany: orderData.customerCompany,
+              customerPhone: orderData.customerPhone,
+              customerBirthDate: orderData.customerBirthDate,
+              customerCPF: orderData.customerCPF,
+              customerCNPJ: orderData.customerCNPJ,
+              
+              deliveryCep: orderData.deliveryCep,
+              deliveryAddress: orderData.deliveryAddress,
+              deliveryNumber: orderData.deliveryNumber,
+              deliveryNeighborhood: orderData.deliveryNeighborhood,
+              deliveryCity: orderData.deliveryCity,
+              deliveryState: orderData.deliveryState,
+              deliveryNotes: orderData.deliveryNotes,
+              
+              eventDate: orderData.eventDate,
+              deliveryDate: orderData.limitDate,
+              limitDate: orderData.limitDate,
+
+              items: orderData.items,
+              qty: orderData.items.reduce((sum, it) => sum + (Number(it.qty) || 1), 0),
+              
+              notes: orderData.notes,
+              
+              payments: orderData.payments,
+              paidAmount: totalPaid,
+              remainingAmount,
+              discount: orderData.discount,
+              financial: {
+                totalAmount,
+                paidAmount: totalPaid,
+                remainingAmount,
+                discount: orderData.discount,
+                payments: orderData.payments
+              },
+              
+              paymentMethod: primaryMethod
+            });
+
+            showToast(`Pedido #${formatOrderNumber(updated.number || updated.id)} atualizado com sucesso!`, '✅');
+            switchView('pedidos');
+            return;
+          }
 
           const newOrder = createOrder({
             customerType: orderData.customerType,
@@ -1387,12 +1818,15 @@ export function renderNewOrderPage(container, ctx) {
             
             notes: orderData.notes,
             
+            payments: orderData.payments,
+            paidAmount: totalPaid,
+            remainingAmount,
             financial: {
               totalAmount,
               paidAmount: totalPaid,
-              remainingAmount: Math.max(0, totalAmount - totalPaid),
+              remainingAmount,
               discount: orderData.discount,
-              paymentMethods: orderData.paymentMethods
+              payments: orderData.payments
             },
             
             paymentMethod: primaryMethod
@@ -1409,6 +1843,11 @@ export function renderNewOrderPage(container, ctx) {
     const btnCancel = document.getElementById('btn-cancel-order');
     if (btnCancel) {
       btnCancel.addEventListener('click', () => switchView('pedidos'));
+    }
+
+    const btnBack = container.querySelector('#btn-back-to-orders');
+    if (btnBack) {
+      btnBack.addEventListener('click', () => switchView('pedidos'));
     }
   }
 
@@ -1427,12 +1866,14 @@ export function showOrderConsultationDrawer(orderId, ctx) {
   const fin = getOrderFinancials(order);
   const orderNum = formatOrderNumber(order.number || order.id);
 
-  const items = (order.items && order.items.length > 0) ? order.items : [{
-    productTitle: order.productTitle,
-    qty: order.qty,
+  const items = (Array.isArray(order.items) && order.items.length > 0) ? order.items : [{
+    productTitle: order.productTitle || order.title || 'Item',
+    qty: order.qty || 1,
+    unitPrice: order.unitPrice || (order.productSnapshot?.price) || 0,
     personalization: order.personalization || {},
     changeOptions: order.changeOptions || {},
-    productSnapshot: order.productSnapshot || {}
+    productSnapshot: order.productSnapshot || {},
+    notes: order.notes || ''
   }];
 
   const contentHtml = `
@@ -1441,7 +1882,7 @@ export function showOrderConsultationDrawer(orderId, ctx) {
       <div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-family: monospace; font-size: 16px; font-weight: 700; color: var(--accent-primary);">
-            #${orderNum}
+            ${orderNum}
           </span>
           <span class="status-pill" style="border-left: 4px solid ${neon.color}; font-size: 12px; padding: 4px 10px;">
             ${escapeHtml(neon.label)}
@@ -1517,6 +1958,83 @@ export function showOrderConsultationDrawer(orderId, ctx) {
       </div>
     </div>
 
+    <!-- Histórico de Pagamentos no Pedido (Consultation Drawer) -->
+    <div class="drawer-detail-section" style="margin-bottom: 16px; padding: 14px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 10px;" id="drawer-payment-history-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h4 class="drawer-subtitle" style="margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text-primary);">
+          💳 Histórico de Pagamentos do Pedido
+        </h4>
+        <span style="font-size: 11px; font-weight: 700; color: ${fin.remainingAmount > 0 ? '#dc2626' : '#16a34a'};">
+          ${fin.remainingAmount > 0 ? `Restante: R$ ${fin.remainingAmount.toFixed(2)}` : '✅ Totalmente Quitado'}
+        </span>
+      </div>
+
+      <!-- Inserção de Novo Pagamento: TIPO DE PAGAMENTO (SELECT) | R$ [INPUT] | + -->
+      <div style="display: grid; grid-template-columns: 1fr 130px auto; gap: 8px; align-items: end; background: #f8fafc; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; margin-bottom: 12px;">
+        <div>
+          <label style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 4px;">Tipo de Pagamento</label>
+          <select class="form-input" id="drawer-inp-pay-method" style="height: 34px; font-size: 12px; font-weight: 600; text-transform: uppercase;">
+            <option value="DINHEIRO">DINHEIRO</option>
+            <option value="PIX" selected>PIX</option>
+            <option value="CRÉDITO">CRÉDITO</option>
+            <option value="DÉBITO">DÉBITO</option>
+            <option value="PERMUTA">PERMUTA</option>
+            <option value="BOLETO">BOLETO</option>
+            <option value="TRANSFERÊNCIA">TRANSFERÊNCIA</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 4px;">R$ Valor</label>
+          <input type="number" step="0.01" min="0.01" class="form-input" id="drawer-inp-pay-amount" placeholder="0,00" value="${fin.remainingAmount > 0 ? fin.remainingAmount.toFixed(2) : ''}" style="height: 34px; font-size: 13px; font-weight: 700; text-align: right;">
+        </div>
+        <div>
+          <button type="button" class="btn btn-primary" id="drawer-btn-add-pay" style="height: 34px; padding: 0 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 4px;" title="Adicionar Pagamento ao Histórico">
+            <span style="font-size: 16px; line-height: 1;">+</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabela do Histórico de Pagamentos -->
+      <div style="border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <thead>
+            <tr style="background: #f1f5f9; border-bottom: 1px solid var(--border-subtle); text-align: left;">
+              <th style="padding: 8px 12px; font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Tipo de Pagamento</th>
+              <th style="padding: 8px 12px; font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; text-align: right;">Valor</th>
+              <th style="padding: 8px 12px; font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; text-align: center;">Data / Hora</th>
+              <th style="padding: 8px 12px; font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; text-align: center; width: 36px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(!fin.payments || fin.payments.length === 0) ? `
+              <tr>
+                <td colspan="4" style="padding: 14px; text-align: center; color: var(--text-secondary); font-size: 12px;">
+                  Nenhum pagamento registrado ainda. Selecione o tipo de pagamento, digite o valor e clique em <b>+</b>.
+                </td>
+              </tr>
+            ` : fin.payments.map((p) => `
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 9px 12px; font-weight: 700; color: var(--text-primary); text-transform: uppercase;">
+                  ${escapeHtml(p.method)}
+                </td>
+                <td style="padding: 9px 12px; text-align: right; font-weight: 700; color: #16a34a; font-variant-numeric: tabular-nums;">
+                  R$ ${Number(p.amount).toFixed(2)}
+                </td>
+                <td style="padding: 9px 12px; text-align: center; color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums;">
+                  ${escapeHtml(p.datetime || (p.date + (p.time ? ` às ${p.time}` : '')))}
+                </td>
+                <td style="padding: 9px 12px; text-align: center;">
+                  <button type="button" class="drawer-btn-remove-pay" data-pay-id="${escapeHtml(p.id)}" style="background: none; border: none; cursor: pointer; color: #dc2626; font-size: 13px; padding: 2px 4px; border-radius: 4px;" title="Remover lançamento">
+                    ✖
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Lista de Itens e Personalização -->
     <div style="margin-bottom: 16px;">
       <h4 class="drawer-subtitle" style="margin-top: 0; margin-bottom: 10px;">🛒 Itens e Personalização</h4>
@@ -1561,11 +2079,128 @@ export function showOrderConsultationDrawer(orderId, ctx) {
     ` : ''}
   `;
 
-  openDrawer(`Consulta: Pedido #${orderNum}`, contentHtml, (drawer, close) => {
-    // Eventos de edição serão configurados aqui futuramente
-  }, 'drawer-large');
+  openDrawer({
+    title: `Consulta de Pedido ${orderNum}`,
+    contentHtml,
+    footerHtml: `
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 8px;">
+        <span style="font-size: 12px; color: var(--text-secondary);">ID do Pedido: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${escapeHtml(order.id)}</code></span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button type="button" class="btn btn-secondary" id="drawer-btn-share-art" style="padding: 8px 14px; font-weight: 700; color: #2563eb; background: #eff6ff; border-color: #bfdbfe; display: inline-flex; align-items: center; gap: 4px;">
+            🔗 Compartilhar Arte
+          </button>
+          <button type="button" class="btn btn-secondary" id="drawer-btn-edit-order" style="padding: 8px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+            ✏️ Editar Pedido
+          </button>
+          <button type="button" class="btn btn-secondary" id="drawer-btn-del-order" style="padding: 8px 14px; font-weight: 600; color: #dc2626; border-color: #fca5a5; display: inline-flex; align-items: center; gap: 4px;">
+            🗑️ Excluir
+          </button>
+          <button type="button" class="btn btn-secondary" id="btn-close-consultation-drawer" style="padding: 8px 18px; font-weight: 600;">Fechar</button>
+        </div>
+      </div>
+    `,
+    className: 'drawer-large',
+    onMount: (drawer) => {
+      const closeBtn = drawer.querySelector('#btn-close-consultation-drawer');
+      if (closeBtn) closeBtn.onclick = closeDrawer;
+
+      const shareBtn = drawer.querySelector('#drawer-btn-share-art');
+      if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+          closeDrawer();
+          const shareUrl = `${window.location.origin}${window.location.pathname}#/aprovar-arte/${order.id}`;
+          navigator.clipboard?.writeText(shareUrl);
+          showToast(`Link de aprovação copiado: ${shareUrl}`, '🔗');
+          if (typeof ctx.switchView === 'function') {
+            ctx.switchView('aprovar-arte', order.id);
+          }
+        });
+      }
+
+      const editBtn = drawer.querySelector('#drawer-btn-edit-order');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          closeDrawer();
+          openEditOrderDrawer(order.id, ctx);
+        });
+      }
+
+      const delBtn = drawer.querySelector('#drawer-btn-del-order');
+      if (delBtn) {
+        delBtn.addEventListener('click', () => {
+          showConfirmDialog({
+            title: 'Excluir Pedido',
+            message: `Tem certeza que deseja excluir o <b>Pedido #${orderNum}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
+            confirmText: 'Sim, Excluir Pedido',
+            isDanger: true,
+            onConfirm: () => {
+              try {
+                deleteOrder(order.id);
+                closeDrawer();
+                showToast(`Pedido #${orderNum} excluído com sucesso!`, '✅');
+                if (typeof ctx.renderOrdersView === 'function') {
+                  ctx.renderOrdersView();
+                } else if (typeof ctx.switchView === 'function') {
+                  ctx.switchView('pedidos');
+                }
+              } catch (err) {
+                showToast(err.message, '⚠');
+              }
+            }
+          });
+        });
+      }
+
+      // Add payment from consultation drawer
+      const btnAddPay = drawer.querySelector('#drawer-btn-add-pay');
+      if (btnAddPay) {
+        btnAddPay.addEventListener('click', () => {
+          const selMethod = drawer.querySelector('#drawer-inp-pay-method');
+          const inpAmt = drawer.querySelector('#drawer-inp-pay-amount');
+          const amt = Number(inpAmt?.value);
+
+          if (isNaN(amt) || amt <= 0) {
+            showToast('Informe um valor de pagamento válido maior que zero.', '⚠️');
+            if (inpAmt) inpAmt.focus();
+            return;
+          }
+
+          const method = (selMethod?.value || 'PIX').trim().toUpperCase();
+          try {
+            addOrderPayment(order.id, { method, amount: amt });
+            showToast(`Pagamento de R$ ${amt.toFixed(2)} (${method}) registrado no histórico!`, '✅');
+            showOrderConsultationDrawer(order.id, ctx);
+          } catch (err) {
+            showToast(err.message, '🔴');
+          }
+        });
+      }
+
+      // Remove payment from consultation drawer
+      drawer.querySelectorAll('.drawer-btn-remove-pay').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const payId = e.currentTarget.dataset.payId;
+          if (!payId) return;
+          try {
+            removeOrderPayment(order.id, payId);
+            showToast('Lançamento de pagamento removido do histórico.', 'ℹ️');
+            showOrderConsultationDrawer(order.id, ctx);
+          } catch (err) {
+            showToast(err.message, '🔴');
+          }
+        });
+      });
+    }
+  });
 }
 
 export function openEditOrderDrawer(orderId, ctx) {
-  ctx.showToast('Edição de pedidos com múltiplos itens está em desenvolvimento.', 'ℹ');
+  if (ctx && typeof ctx.switchView === 'function') {
+    ctx.switchView('pedidos-editar', orderId);
+  } else {
+    const container = document.getElementById('view-container');
+    if (container) {
+      renderNewOrderPage(container, ctx, orderId);
+    }
+  }
 }

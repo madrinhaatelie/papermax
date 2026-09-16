@@ -762,7 +762,7 @@ export function consumeOrderMaterials(order, { materials = [], components = [], 
     return {
       success: true,
       alreadyDeducted: true,
-      message: `Estoque já foi baixado para o Pedido #${order.number} em ${order.production.stockDeductedAt || 'etapa anterior'}.`,
+      message: `Estoque já foi baixado para o Pedido ${order.number} em ${order.production.stockDeductedAt || 'etapa anterior'}.`,
       movements: []
     };
   }
@@ -808,11 +808,11 @@ export function consumeOrderMaterials(order, { materials = [], components = [], 
       unit: mat.baseUnit || mat.unit,
       previousStock: prevStock,
       newStock: Number(newStock.toFixed(2)),
-      origin: `Pedido #${order.number} · ${order.customer || 'Cliente'}`,
+      origin: `Pedido ${order.number} · ${order.customer || 'Cliente'}`,
       orderId: order.id,
       productId: order.productId,
       operator,
-      notes: notes || `Consumo de produção para itens do Pedido #${order.number}`,
+      notes: notes || `Consumo de produção para itens do Pedido ${order.number}`,
       createdAt: new Date().toISOString()
     };
 
@@ -830,7 +830,7 @@ export function consumeOrderMaterials(order, { materials = [], components = [], 
   return {
     success: true,
     alreadyDeducted: false,
-    message: `${createdMovements.length} insumos baixados com sucesso para o Pedido #${order.number}.`,
+    message: `${createdMovements.length} insumos baixados com sucesso para o Pedido ${order.number}.`,
     movements: createdMovements
   };
 }
@@ -981,7 +981,7 @@ export function applyInventoryAdjustments(inventorySession, countedItems = [], {
       unit: item.baseUnit || 'un',
       previousStock: systemStock,
       newStock: physicalStock,
-      origin: `Inventário #${inventorySession.code || inventorySession.id}`,
+      origin: `Inventário ${inventorySession.code || inventorySession.id}`,
       operator,
       notes: `${reason} · Diferença apurada: ${diff > 0 ? '+' : ''}${diff} ${item.baseUnit || 'un'}. ${count.notes || ''}`.trim(),
       createdAt: new Date().toISOString()
@@ -1022,11 +1022,11 @@ export function receivePurchase(purchase, { materials = [], components = [], mov
     throw new Error('Compra inválida.');
   }
 
-  if (purchase.status === 'recebida') {
+  if (purchase.status === 'recebido' || purchase.status === 'recebida') {
     return {
       success: true,
       alreadyReceived: true,
-      message: `A Compra #${purchase.code || purchase.id} já foi recebida anteriormente.`,
+      message: `A Compra ${purchase.code || purchase.id} já foi recebida anteriormente.`,
       movements: []
     };
   }
@@ -1066,7 +1066,7 @@ export function receivePurchase(purchase, { materials = [], components = [], mov
       unit: baseUnit,
       previousStock: prevStock,
       newStock: Number(newStock.toFixed(2)),
-      origin: `Compra #${purchase.code || purchase.id} · ${purchase.supplierName || 'Fornecedor'}`,
+      origin: `Compra ${purchase.code || purchase.id} · ${purchase.supplierName || 'Fornecedor'}`,
       operator,
       notes: notes || `Entrada de compra realizada em ${new Date().toLocaleDateString('pt-BR')}`,
       createdAt: new Date().toISOString()
@@ -1076,13 +1076,13 @@ export function receivePurchase(purchase, { materials = [], components = [], mov
     createdMovements.push(movement);
   }
 
-  purchase.status = 'recebida';
+  purchase.status = 'recebido';
   purchase.receivedAt = new Date().toISOString();
   purchase.receivedBy = operator;
 
   return {
     success: true,
-    message: `Compra #${purchase.code || purchase.id} recebida com sucesso. ${createdMovements.length} itens adicionados ao estoque.`,
+    message: `Compra ${purchase.code || purchase.id} recebida com sucesso. ${createdMovements.length} itens adicionados ao estoque.`,
     movements: createdMovements
   };
 }

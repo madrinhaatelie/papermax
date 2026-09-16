@@ -120,7 +120,7 @@ export function calculateDashboardMetrics(customOrders = null) {
     const s = (o.status || '').toLowerCase();
     const stage = (o.production?.currentStage || '').toLowerCase();
     if (s === 'green' || s === 'pronto' || s === 'entregue' || s === 'concluido' || stage === 'pronto' || stage === 'expedicao') {
-      soldProductsCount += qty;
+      soldProductsCount += 1;
     }
   });
 
