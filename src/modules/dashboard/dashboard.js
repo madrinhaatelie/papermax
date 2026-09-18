@@ -5,7 +5,7 @@
  * Strictly from real persisted data. Zero invented or static numbers.
  */
 
-import { loadOrders, loadProducts, loadPurchases, loadExpenses } from '../../data/storage.js';
+import { loadOrders, loadProducts, loadPurchases, loadExpenses, loadPrintQueue } from '../../data/storage.js';
 import { formatDateBR } from '../../utils/sanitize.js';
 import { calculateProductIntelligence, INTELLIGENCE_PERIODS } from '../products/products.intelligence.js';
 import { isOrderActive } from '../orders/orders.js';
@@ -21,6 +21,18 @@ export function calculateDashboardMetrics(customOrders = null) {
   let inProdCount = 0;
   let pendingCount = 0;
   let readyCount = 0;
+
+  // Real Print Queue count
+  let printQueuePendingCount = 0;
+  try {
+    const queue = loadPrintQueue();
+    if (Array.isArray(queue)) {
+      printQueuePendingCount = queue.filter(q => {
+        const s = (q.status || '').toLowerCase();
+        return s === 'aguardando' || s === 'em processamento' || s === 'pendente';
+      }).length;
+    }
+  } catch (e) {}
 
   // 2. Operational production pipeline: "O que preciso produzir hoje?"
   let awaitingCount = 0;
@@ -234,7 +246,8 @@ export function calculateDashboardMetrics(customOrders = null) {
     operational: {
       awaitingCount,
       impressaoCount,
-      printQueueCount: impressaoCount,
+      printQueuePendingCount,
+      printQueueCount: printQueuePendingCount || impressaoCount,
       corteCount,
       finishingCount: corteCount,
       vincoCount,

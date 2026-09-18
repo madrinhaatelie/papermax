@@ -3,11 +3,12 @@
  * Provides safe export and import of versioned JSON backups with rollback safety.
  */
 
-import { STORAGE_KEYS } from './storage.js';
+import { STORAGE_KEYS, getLocalStorage } from './storage.js';
 
 export function getLastBackupTimestamp() {
   try {
-    return localStorage.getItem('papermax.last_backup.v1') || null;
+    const storage = getLocalStorage();
+    return storage ? storage.getItem('papermax.last_backup.v1') : null;
   } catch (e) {
     return null;
   }
@@ -15,7 +16,10 @@ export function getLastBackupTimestamp() {
 
 export function setLastBackupTimestamp(isoString) {
   try {
-    localStorage.setItem('papermax.last_backup.v1', isoString);
+    const storage = getLocalStorage();
+    if (storage) {
+      storage.setItem('papermax.last_backup.v1', isoString);
+    }
   } catch (e) {
     console.error('[Backup] Error saving last backup timestamp:', e);
   }
@@ -23,9 +27,10 @@ export function setLastBackupTimestamp(isoString) {
 
 export function exportBackup() {
   try {
+    const storage = getLocalStorage();
     const collections = {};
     for (const [keyName, storageKey] of Object.entries(STORAGE_KEYS)) {
-      const raw = localStorage.getItem(storageKey);
+      const raw = storage ? storage.getItem(storageKey) : null;
       if (raw) {
         try {
           collections[keyName] = JSON.parse(raw);
@@ -54,19 +59,22 @@ export function exportBackup() {
     };
 
     const jsonString = JSON.stringify(backupPayload, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    
+    if (typeof document !== 'undefined' && typeof Blob !== 'undefined' && typeof URL !== 'undefined') {
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
 
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `PAPER-MAX-backup-${yyyy}-${mm}-${dd}-${hh}-${min}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PAPER-MAX-backup-${yyyy}-${mm}-${dd}-${hh}-${min}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
 
     setLastBackupTimestamp(now.toISOString());
-    return { success: true, timestamp: now.toISOString() };
+    return { success: true, timestamp: now.toISOString(), payload: backupPayload, jsonString };
   } catch (err) {
     console.error('[Backup] Export failed:', err);
     return { success: false, error: err.message };
@@ -74,10 +82,15 @@ export function exportBackup() {
 }
 
 export function restoreBackup(jsonString) {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return { success: false, error: 'Armazenamento local não disponível neste ambiente.' };
+  }
+
   // 1. Take a full snapshot of current localStorage state for rollback safety
   const rollbackSnapshot = {};
   for (const storageKey of Object.values(STORAGE_KEYS)) {
-    rollbackSnapshot[storageKey] = localStorage.getItem(storageKey);
+    rollbackSnapshot[storageKey] = storage.getItem(storageKey);
   }
 
   try {
@@ -99,18 +112,18 @@ export function restoreBackup(jsonString) {
       return { success: false, error: 'Coleções de dados ausentes ou inválidas no backup.' };
     }
 
-    // 3. Apply collections to localStorage safely
+    // 3. Apply collections to storage safely
     for (const [keyName, storageKey] of Object.entries(STORAGE_KEYS)) {
       const data = parsed.collections[keyName];
       if (data !== undefined && data !== null) {
-        localStorage.setItem(storageKey, typeof data === 'string' ? data : JSON.stringify(data));
+        storage.setItem(storageKey, typeof data === 'string' ? data : JSON.stringify(data));
       } else {
-        localStorage.removeItem(storageKey);
+        storage.removeItem(storageKey);
       }
     }
 
     // Set last backup or restore timestamp
-    localStorage.setItem('papermax.last_backup.v1', new Date().toISOString());
+    storage.setItem('papermax.last_backup.v1', new Date().toISOString());
 
     return { success: true };
   } catch (err) {
@@ -119,9 +132,9 @@ export function restoreBackup(jsonString) {
     try {
       for (const [storageKey, val] of Object.entries(rollbackSnapshot)) {
         if (val !== null) {
-          localStorage.setItem(storageKey, val);
+          storage.setItem(storageKey, val);
         } else {
-          localStorage.removeItem(storageKey);
+          storage.removeItem(storageKey);
         }
       }
     } catch (rbErr) {

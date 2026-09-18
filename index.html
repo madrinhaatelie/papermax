@@ -1443,31 +1443,125 @@
       background: var(--bg-surface-raised);
     }
 
-    /* Toast Notification */
-    .toast {
+    /* =========================================================
+       SNACKBAR DYNAMIC ISLAND (IPHONE SPRING ANIMATION & 70% LIQUID GLASS NEON)
+       ========================================================= */
+    .toast,
+    .snackbar-liquid-neon {
       position: fixed;
-      bottom: 60px;
-      right: 20px;
-      background: #ffffff;
-      border: 1px solid var(--border-strong);
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      color: var(--text-primary);
-      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.1);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      transform: translateY(20px);
+      bottom: 28px;
+      left: 50%;
+      transform: translate(-50%, 140%) scale(0.82);
       opacity: 0;
       pointer-events: none;
-      transition: transform 0.2s ease, opacity 0.2s ease;
-      z-index: 60;
+      z-index: 9999;
+      
+      /* Pure 70% Transparent Liquid Glass */
+      background: rgba(255, 255, 255, 0.70);
+      backdrop-filter: blur(24px) saturate(200%);
+      -webkit-backdrop-filter: blur(24px) saturate(200%);
+      
+      /* Refined NEON Glowing Borders */
+      border: 1.5px solid rgba(255, 255, 255, 0.95);
+      border-radius: 24px;
+      
+      padding: 10px 16px 10px 12px;
+      min-width: 280px;
+      max-width: min(92vw, 520px);
+      
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      
+      /* Liquid Glass & NEON Multi-layer Glow */
+      box-shadow: 
+        0 0 0 1px rgba(219, 39, 119, 0.35),
+        0 0 18px 2px rgba(219, 39, 119, 0.30),
+        0 0 35px 5px rgba(168, 85, 247, 0.22),
+        0 18px 36px -10px rgba(15, 23, 42, 0.16),
+        inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95);
+        
+      /* iPhone Dynamic Island Spring Animation */
+      transition: 
+        transform 0.48s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
+        opacity 0.26s ease, 
+        box-shadow 0.4s ease;
+      cursor: pointer;
+      user-select: none;
     }
 
-    .toast.show {
-      transform: translateY(0);
+    .toast.show,
+    .snackbar-liquid-neon.show {
+      transform: translate(-50%, 0) scale(1);
       opacity: 1;
+      pointer-events: auto;
+    }
+
+    .snackbar-content {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .snackbar-icon-pill {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 15px;
+      background: linear-gradient(135deg, rgba(219, 39, 119, 0.18), rgba(168, 85, 247, 0.18));
+      border: 1px solid rgba(219, 39, 119, 0.35);
+      color: var(--accent-primary);
+      box-shadow: 0 0 10px rgba(219, 39, 119, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+    }
+
+    .snackbar-body {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .snackbar-message {
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: -0.2px;
+      color: #0f172a;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .snackbar-close-btn {
+      background: rgba(15, 23, 42, 0.06);
+      border: 1px solid rgba(15, 23, 42, 0.1);
+      color: #475569;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+
+    .snackbar-close-btn:hover {
+      background: rgba(219, 39, 119, 0.15);
+      color: #db2777;
+      border-color: rgba(219, 39, 119, 0.3);
+      transform: scale(1.1);
     }
 
     /* Responsive */
@@ -1535,6 +1629,51 @@
       gap: 8px;
       flex-wrap: wrap;
     }
+    /* PAPER MAX - Submenu Fichário Horizontal Padrão Global */
+    .tab-bar, .products-tab-bar, .orders-tab-bar, .settings-tab-bar, .finance-tab-bar, .stock-tab-bar {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid #cbd5e1;
+      padding-bottom: 0;
+      overflow-x: auto;
+      align-items: flex-end;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .tab-btn {
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      border: 1px solid #cbd5e1;
+      border-bottom: 1px solid #cbd5e1;
+      background: #f1f5f9;
+      color: #475569;
+      position: relative;
+      z-index: 1;
+      box-shadow: none;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-btn:hover {
+      background: #e2e8f0;
+      color: var(--text-primary);
+    }
+    .tab-btn.active {
+      font-weight: 700;
+      border-bottom: 2px solid #ffffff;
+      background: #ffffff;
+      color: var(--primary, #db2777);
+      margin-bottom: -2px;
+      z-index: 2;
+      box-shadow: 0 -2px 6px rgba(0,0,0,0.03);
+    }
+
     .subtabs {
       display: flex;
       gap: 4px;
@@ -2843,6 +2982,7 @@
         <button class="btn btn-primary" id="btn-quick-new-order">Novo pedido</button>
         <button class="btn" id="btn-quick-new-product">Novo produto</button>
         <button class="btn" id="btn-quick-purchase">Nova compra</button>
+        <button class="btn" id="btn-quick-bulk">⚡ Em massa</button>
         <button class="btn" id="btn-quick-import">Importar CSV</button>
       </div>
       <div class="search-wrapper" id="global-search-wrapper" style="margin-left: auto;">
@@ -2860,10 +3000,17 @@
   </main>
 </div>
 
-<!-- Toast Message -->
-<div class="toast" id="system-toast">
-  <span id="toast-icon">✓</span>
-  <span id="toast-message">Operação realizada com sucesso!</span>
+<!-- Toast / Snackbar Dynamic Island Liquid Glass NEON (70% Transparent) -->
+<div class="toast snackbar-liquid-neon" id="system-toast" role="status" aria-live="polite">
+  <div class="snackbar-content">
+    <div class="snackbar-icon-pill">
+      <span id="toast-icon">✨</span>
+    </div>
+    <div class="snackbar-body">
+      <span id="toast-message" class="snackbar-message">Operação realizada com sucesso!</span>
+    </div>
+  </div>
+  <button type="button" class="snackbar-close-btn" id="toast-close-btn" aria-label="Fechar notificação">✕</button>
 </div>
 
 <!-- PDF-Lib Professional Vector PDF Engine (Etapa 3) -->

@@ -17,6 +17,7 @@ import {
   updateOrder,
   deleteOrder,
   duplicateOrder,
+  updateOrderPrintJobById,
   exportOrdersCSV,
   exportOrdersCSVTemplate,
   ORDER_STATUS_MAP,
@@ -24,10 +25,11 @@ import {
   addOrderPayment,
   removeOrderPayment
 } from './orders.js';
+import { bus, showToast } from '../../core/events.js';
 import { loadProducts, loadMaterials, loadComponents } from '../../data/storage.js';
 import { getProductById } from '../products/products.js';
 import { fileStorage } from '../../data/filestorage.js';
-import { formatDateBR, parseDateBRToISO, escapeHtml, formatNumberXX } from '../../utils/sanitize.js';
+import { formatDateBR, formatDateDayMonthBR, parseDateBRToISO, escapeHtml, formatNumberXX, formatPhone, formatCPF, formatCNPJ } from '../../utils/sanitize.js';
 import { downloadCSVFile } from '../../utils/csv.js';
 import { generatePersonalizedPdf, triggerPdfDownload } from '../personalization/pdf.engine.js';
 import {
@@ -109,7 +111,9 @@ export function showConfirmDialog({ title = 'Confirmação', message, confirmTex
 
   overlay.querySelector('#confirm-dialog-cancel').addEventListener('click', close);
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
+    if (e.target === overlay) {
+      if (!isDanger) close();
+    }
   });
 
   overlay.querySelector('#confirm-dialog-confirm').addEventListener('click', () => {
@@ -268,11 +272,19 @@ export function getOrderFinancials(order) {
   const snap = order.productSnapshot || {};
   const unitPrice = Number(snap.price || 0);
   const qty = Number(order.qty || 1);
-  const totalAmount = Number(
-    order.totalAmount !== undefined 
-      ? order.totalAmount 
-      : (order.financial?.totalAmount !== undefined ? order.financial.totalAmount : (unitPrice * qty))
-  );
+  
+  let totalAmount = 0;
+  if (order.totalAmount !== undefined && order.totalAmount !== null) {
+    totalAmount = Number(order.totalAmount);
+  } else if (order.financial?.totalAmount !== undefined && order.financial?.totalAmount !== null) {
+    totalAmount = Number(order.financial.totalAmount);
+  } else if (Array.isArray(order.items) && order.items.length > 0) {
+    const rawSubtotal = order.items.reduce((s, it) => s + ((Number(it.unitPrice) || Number(it.productSnapshot?.price) || 0) * (Number(it.qty) || 1)), 0);
+    const disc = Number(order.discount || order.financial?.discount || 0);
+    totalAmount = Math.max(0, rawSubtotal - disc);
+  } else {
+    totalAmount = unitPrice * qty;
+  }
 
   const payments = Array.isArray(order.payments) 
     ? order.payments 
@@ -344,35 +356,36 @@ export function renderOrdersView(container, ctx) {
       </div>
     </div>
 
-    <!-- Orders Filter Select (Substitui as abas em formato Select conforme solicitado) -->
-    <div class="orders-filter-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;">
-      <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 280px; max-width: 460px;">
-        <label for="select-orders-tab" style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;">
-          <span>🎯</span> Filtrar Status / Etapa:
+    <!-- Search & Select Filter Bar -->
+    <div class="filter-bar" style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 8px; min-width: 240px;">
+        <label for="select-orders-tab" style="font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+          <span>🎯 Status:</span>
         </label>
-        <select class="form-select" id="select-orders-tab" style="flex: 1; height: 38px; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1.5px solid var(--border-strong); background-color: #ffffff; color: var(--text-primary); cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-          <option value="em_andamento" ${currentOrdersTab === 'em_andamento' ? 'selected' : ''}>⚡ Em Andamento (Ativos)</option>
-          <option value="todos" ${currentOrdersTab === 'todos' ? 'selected' : ''}>📋 Todos os Pedidos</option>
-          <option value="aguardando" ${currentOrdersTab === 'aguardando' ? 'selected' : ''}>🟡 Aguardando Aprovação</option>
-          <option value="producao" ${currentOrdersTab === 'producao' ? 'selected' : ''}>🔵 Em Produção Geral</option>
-          <option value="impressao" ${currentOrdersTab === 'impressao' ? 'selected' : ''}>🟢 Fila de Impressão</option>
-          <option value="corte" ${currentOrdersTab === 'corte' ? 'selected' : ''}>🟣 Corte</option>
-          <option value="vinco" ${currentOrdersTab === 'vinco' ? 'selected' : ''}>🟣 Vinco</option>
-          <option value="montagem" ${currentOrdersTab === 'montagem' ? 'selected' : ''}>🔵 Montagem</option>
-          <option value="acabamento" ${currentOrdersTab === 'acabamento' ? 'selected' : ''}>🔵 Acabamento</option>
-          <option value="conferencia" ${currentOrdersTab === 'conferencia' ? 'selected' : ''}>🟡 CQ / Conferência</option>
-          <option value="embalagem" ${currentOrdersTab === 'embalagem' ? 'selected' : ''}>📦 Embalagem</option>
-          <option value="prontos" ${currentOrdersTab === 'prontos' ? 'selected' : ''}>✓ Prontos p/ Retirada</option>
-          <option value="bloqueados" ${currentOrdersTab === 'bloqueados' ? 'selected' : ''}>🟠 Bloqueados</option>
-          <option value="entregues" ${currentOrdersTab === 'entregues' ? 'selected' : ''}>🚚 Entregues</option>
-          <option value="cancelados" ${currentOrdersTab === 'cancelados' ? 'selected' : ''}>❌ Cancelados</option>
+        <select id="select-orders-tab" class="form-select" style="height: 38px; font-size: 13px; font-weight: 600; border-radius: 8px; border: 1px solid var(--border-subtle); background-color: #ffffff; padding: 0 12px; color: var(--text-primary); cursor: pointer; flex: 1; min-width: 190px;">
+          ${[
+            { id: 'em_andamento', label: '⚡ Em Andamento' },
+            { id: 'todos', label: '📋 Todos os Pedidos' },
+            { id: 'aguardando', label: '🟡 Aguardando' },
+            { id: 'producao', label: '🔵 Em Produção' },
+            { id: 'impressao', label: '🟢 Fila Impressão' },
+            { id: 'corte', label: '🟣 Corte' },
+            { id: 'vinco', label: '🟣 Vinco' },
+            { id: 'montagem', label: '🔵 Montagem' },
+            { id: 'acabamento', label: '🔵 Acabamento' },
+            { id: 'conferencia', label: '🟡 CQ / Conferência' },
+            { id: 'embalagem', label: '📦 Embalagem' },
+            { id: 'prontos', label: '✓ Prontos' },
+            { id: 'bloqueados', label: '🟠 Bloqueados' },
+            { id: 'entregues', label: '🚚 Entregues' },
+            { id: 'cancelados', label: '❌ Cancelados' }
+          ].map(tab => `
+            <option value="${tab.id}" ${currentOrdersTab === tab.id ? 'selected' : ''}>${tab.label}</option>
+          `).join('')}
         </select>
       </div>
-    </div>
 
-    <!-- Search & Filters (Bloco 03) -->
-    <div class="filter-bar" style="display: flex; gap: 12px; align-items: center; margin-bottom: 14px;">
-      <div class="search-wrapper" style="flex: 1; position: relative;">
+      <div class="search-wrapper" style="flex: 1; min-width: 240px; position: relative;">
         <span class="search-icon" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--text-secondary);">🔍</span>
         <input class="search" id="input-orders-search" 
                placeholder="Busca em tempo real por número (ex: 0001, 1048), cliente, produto ou status..." 
@@ -391,7 +404,7 @@ export function renderOrdersView(container, ctx) {
   `;
 
   // Bind Events
-  // Select Tab
+  // Status Filter Select change
   const selectOrdersTab = container.querySelector('#select-orders-tab');
   if (selectOrdersTab) {
     selectOrdersTab.addEventListener('change', (e) => {
@@ -467,8 +480,8 @@ export function renderOrdersView(container, ctx) {
   // Row / Card Clicks -> Open Large Consultation Drawer
   container.querySelectorAll('[data-action="view-order"]').forEach(el => {
     el.addEventListener('click', (e) => {
-      // Don't trigger if clicked on kebab menu or button
-      if (e.target.closest('.dropdown-kebab-wrapper') || e.target.closest('button')) return;
+      // Don't trigger if clicked on kebab menu or child button
+      if (e.target.closest('.dropdown-kebab-wrapper') || (e.target.closest('button') && e.target.closest('button') !== el)) return;
       const id = el.dataset.id;
       showOrderConsultationDrawer(id, ctx);
     });
@@ -534,13 +547,13 @@ export function renderOrdersView(container, ctx) {
       const orderNum = order ? (order.number || order.id) : id;
       showConfirmDialog({
         title: 'Excluir Pedido',
-        message: `Tem certeza que deseja excluir o <b>Pedido #${formatOrderNumber(orderNum)}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
+        message: `Tem certeza que deseja excluir o <b>Pedido ${formatOrderNumber(orderNum)}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
         confirmText: 'Sim, Excluir Pedido',
         isDanger: true,
         onConfirm: () => {
           try {
             deleteOrder(id);
-            showToast(`Pedido #${formatOrderNumber(orderNum)} excluído com sucesso!`, '✅');
+            showToast(`Pedido ${formatOrderNumber(orderNum)} excluído com sucesso!`, '✅');
             renderOrdersView(container, ctx);
           } catch (err) {
             showToast(err.message, '⚠');
@@ -559,7 +572,62 @@ export function renderOrdersView(container, ctx) {
       if (rec && rec.blob) {
         triggerPdfDownload(rec.blob, rec.metadata?.name || 'molde.pdf');
       } else {
-        alert('Arquivo não encontrado no armazenamento.');
+        showToast('Arquivo não encontrado no armazenamento.', '⚠️');
+      }
+    });
+  });
+
+  // Print Queue Direct Row Actions (▶ Iniciar, ⏸ Pausar, ✓ Concluir)
+  container.querySelectorAll('[data-action="print-start"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      try {
+        const res = updateOrderPrintJobById(id, 'iniciar', { notes: 'Impressão iniciada na fila de impressão' });
+        if (res && res.success) {
+          showToast(res.message || 'Impressão iniciada!');
+          renderOrdersView(container, ctx);
+        } else {
+          showToast(res?.message || 'Falha ao iniciar impressão.', '⚠');
+        }
+      } catch (err) {
+        showToast(err.message, '⚠');
+      }
+    });
+  });
+
+  container.querySelectorAll('[data-action="print-pause"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      try {
+        const res = updateOrderPrintJobById(id, 'pausar', { notes: 'Impressão pausada na fila de impressão' });
+        if (res && res.success) {
+          showToast(res.message || 'Impressão pausada.');
+          renderOrdersView(container, ctx);
+        } else {
+          showToast(res?.message || 'Falha ao pausar impressão.', '⚠');
+        }
+      } catch (err) {
+        showToast(err.message, '⚠');
+      }
+    });
+  });
+
+  container.querySelectorAll('[data-action="print-complete"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      try {
+        const res = updateOrderPrintJobById(id, 'concluir', { notes: 'Impressão finalizada na fila de impressão' });
+        if (res && res.success) {
+          showToast(res.message || 'Impressão concluída! Pedido avançado para Corte.');
+          renderOrdersView(container, ctx);
+        } else {
+          showToast(res?.message || 'Falha ao concluir impressão.', '⚠');
+        }
+      } catch (err) {
+        showToast(err.message, '⚠');
       }
     });
   });
@@ -744,9 +812,15 @@ function renderPrintQueueTableHtml(orders) {
 /**
  * Dedicated New Order Full Page (Slug: #pedidos/novo / view: 'pedidos-novo')
  */
-export function renderNewOrderPage(container, ctx, editOrderId = null) {
+export function renderNewOrderPage(container, ctx, editOrderId = null, prefill = null) {
   if (!container) return;
   const { switchView, showToast, openDrawer, closeDrawer } = ctx;
+
+  // Support prefill passed as 3rd parameter
+  if (editOrderId && typeof editOrderId === 'object' && !editOrderId.id && (editOrderId.productId || editOrderId.productTitle)) {
+    prefill = editOrderId;
+    editOrderId = null;
+  }
 
   const products = loadProducts().filter(p => p.status === 'ativo');
   const allMaterials = loadMaterials();
@@ -755,8 +829,51 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
   const editingOrder = editOrderId ? getOrderById(editOrderId) : null;
   const isEditing = Boolean(editingOrder);
 
+  const prefillPid = typeof prefill === 'string' ? prefill : (prefill?.productId || null);
+
   // Local state
-  let activeDivisoria = 'section-cliente'; // 'section-cliente' | 'section-produto' | 'section-insumos' | 'section-financeiro'
+  let activeDivisoria = (!isEditing && prefillPid) ? 'section-produto' : 'section-cliente';
+
+  let initialItems = [];
+  if (editingOrder && Array.isArray(editingOrder.items) && editingOrder.items.length > 0) {
+    initialItems = JSON.parse(JSON.stringify(editingOrder.items)).map(it => {
+      if (!it.productSnapshot && it.productId) {
+        it.productSnapshot = products.find(p => p.id === it.productId) || {};
+      }
+      if (!it.productSnapshot) {
+        it.productSnapshot = products.find(p => p.name === it.productTitle) || {};
+      }
+      if (!it.personalization) it.personalization = {};
+      if (!it.changeOptions) it.changeOptions = {};
+      return it;
+    });
+  } else if (editingOrder) {
+    initialItems = [{
+      productId: editingOrder.productId || null,
+      productTitle: editingOrder.productTitle || editingOrder.title || 'Item',
+      qty: editingOrder.qty || 1,
+      unitPrice: editingOrder.unitPrice || (editingOrder.productSnapshot?.price) || (editingOrder.financial?.totalAmount ? Number((editingOrder.financial.totalAmount / (editingOrder.qty || 1)).toFixed(2)) : 0),
+      personalization: editingOrder.personalization ? JSON.parse(JSON.stringify(editingOrder.personalization)) : {},
+      changeOptions: editingOrder.changeOptions ? JSON.parse(JSON.stringify(editingOrder.changeOptions)) : {},
+      productSnapshot: editingOrder.productSnapshot || products.find(p => p.name === editingOrder.productTitle) || {},
+      notes: editingOrder.notes || ''
+    }];
+  } else if (!isEditing && prefillPid) {
+    const allCatalogProds = loadProducts();
+    const prefillProd = allCatalogProds.find(p => p.id === prefillPid);
+    if (prefillProd) {
+      initialItems = [{
+        productId: prefillProd.id,
+        productTitle: prefillProd.name,
+        qty: Number(prefill?.qty) || 1,
+        unitPrice: Number(prefillProd.price) || 0,
+        personalization: prefill?.personalization ? JSON.parse(JSON.stringify(prefill.personalization)) : {},
+        changeOptions: prefill?.changeOptions ? JSON.parse(JSON.stringify(prefill.changeOptions)) : {},
+        productSnapshot: JSON.parse(JSON.stringify(prefillProd)),
+        notes: prefill?.notes || ''
+      }];
+    }
+  }
 
   let orderData = {
     customerType: editingOrder?.customerType || 'PF', // PF | PJ
@@ -775,30 +892,13 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
     deliveryState: editingOrder?.deliveryState || '',
     deliveryNotes: editingOrder?.deliveryNotes || '',
 
+    orderDate: editingOrder?.orderDate
+      ? (formatDateToInput(editingOrder.orderDate) || (editingOrder.orderDate.includes('-') ? editingOrder.orderDate : ''))
+      : new Date().toISOString().split('T')[0],
     eventDate: editingOrder ? formatDateToInput(editingOrder.eventDate) : '',
     limitDate: editingOrder ? formatDateToInput(editingOrder.deliveryDate || editingOrder.limitDate) : '',
 
-    items: (editingOrder && Array.isArray(editingOrder.items) && editingOrder.items.length > 0)
-      ? JSON.parse(JSON.stringify(editingOrder.items)).map(it => {
-          if (!it.productSnapshot && it.productId) {
-            it.productSnapshot = products.find(p => p.id === it.productId) || {};
-          }
-          if (!it.productSnapshot) {
-            it.productSnapshot = products.find(p => p.name === it.productTitle) || {};
-          }
-          if (!it.personalization) it.personalization = {};
-          if (!it.changeOptions) it.changeOptions = {};
-          return it;
-        })
-      : (editingOrder ? [{
-          productTitle: editingOrder.productTitle || editingOrder.title || 'Item',
-          qty: editingOrder.qty || 1,
-          unitPrice: editingOrder.unitPrice || (editingOrder.productSnapshot?.price) || (editingOrder.financial?.totalAmount ? Number((editingOrder.financial.totalAmount / (editingOrder.qty || 1)).toFixed(2)) : 0),
-          personalization: editingOrder.personalization ? JSON.parse(JSON.stringify(editingOrder.personalization)) : {},
-          changeOptions: editingOrder.changeOptions ? JSON.parse(JSON.stringify(editingOrder.changeOptions)) : {},
-          productSnapshot: editingOrder.productSnapshot || products.find(p => p.name === editingOrder.productTitle) || {},
-          notes: editingOrder.notes || ''
-        }] : []),
+    items: initialItems,
     
     discount: editingOrder?.discount || editingOrder?.financial?.discount || 0,
     payments: (editingOrder && Array.isArray(editingOrder.payments) && editingOrder.payments.length > 0)
@@ -864,9 +964,9 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
   }
 
   function render() {
-    const todayStr = editingOrder && editingOrder.orderDate 
+    const todayStr = orderData.orderDate || (editingOrder && editingOrder.orderDate 
       ? formatDateToInput(editingOrder.orderDate) || new Date().toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0];
+      : new Date().toISOString().split('T')[0]);
     
     // Auto calculate limit date (3 days before event) only if not already set
     if (orderData.eventDate && !orderData.limitDate) {
@@ -885,7 +985,7 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
         <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
           <div>
             <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin: 0;">
-              ${isEditing ? `✏️ Editar Pedido #${formatOrderNumber(editingOrder.number || editingOrder.id)}` : '📝 Novo Pedido'}
+              ${isEditing ? `✏️ Editar Pedido ${formatOrderNumber(editingOrder.number || editingOrder.id)}` : '📝 Novo Pedido'}
             </h2>
             ${isEditing ? `<div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Atualize dados do cliente, itens, ficha técnica e pagamentos</div>` : ''}
           </div>
@@ -927,7 +1027,7 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
                     </div>
                     <div>
                       <label class="form-label">Contato (WhatsApp)</label>
-                      <input class="form-input" id="inp-cli-contato" value="${orderData.customerPhone}" placeholder="(00) 00000-0000">
+                      <input class="form-input" id="inp-cli-contato" data-mask="phone" value="${formatPhone(orderData.customerPhone)}" placeholder="(XX) 9 XXXX-XXXX">
                     </div>
                   </div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
@@ -937,7 +1037,7 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
                     </div>
                     <div>
                       <label class="form-label">CPF</label>
-                      <input class="form-input" id="inp-cli-cpf" value="${orderData.customerCPF}" placeholder="000.000.000-00">
+                      <input class="form-input" id="inp-cli-cpf" data-mask="cpf" value="${formatCPF(orderData.customerCPF)}" placeholder="XXX.XXX.XXX-XX">
                     </div>
                   </div>
                 ` : `
@@ -949,13 +1049,13 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
                     </div>
                     <div>
                       <label class="form-label">Contato (WhatsApp)</label>
-                      <input class="form-input" id="inp-cli-contato" value="${orderData.customerPhone}" placeholder="(00) 00000-0000">
+                      <input class="form-input" id="inp-cli-contato" data-mask="phone" value="${formatPhone(orderData.customerPhone)}" placeholder="(XX) 9 XXXX-XXXX">
                     </div>
                   </div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                     <div>
                       <label class="form-label">CNPJ</label>
-                      <input class="form-input" id="inp-cli-cnpj" value="${orderData.customerCNPJ}" placeholder="00.000.000/0000-00">
+                      <input class="form-input" id="inp-cli-cnpj" data-mask="cnpj" value="${formatCNPJ(orderData.customerCNPJ)}" placeholder="XX.XXX.XXX/XXXX-XX">
                     </div>
                     <div></div>
                   </div>
@@ -963,8 +1063,11 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; background: var(--bg-surface-raised); padding: 10px; border-radius: 8px;">
                   <div>
-                    <label class="form-label">Data do Pedido</label>
-                    <input type="date" class="form-input" value="${todayStr}" disabled style="background: #e5e7eb; cursor: not-allowed;">
+                    <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+                      <span>📅 Data do Pedido *</span>
+                      <span style="font-size: 10px; color: var(--accent-primary); font-weight: 600;">(retroativo / editável)</span>
+                    </label>
+                    <input type="date" class="form-input" id="inp-cli-data-pedido" value="${orderData.orderDate || todayStr}">
                   </div>
                   <div>
                     <label class="form-label">Data do Evento</label>
@@ -1080,8 +1183,8 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
                       let persHtml = '';
                       
                       if (Array.isArray(prod.personalizationFields) && prod.personalizationFields.length > 0) {
-                        persHtml += '<div style="margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">';
-                        persHtml += '<div style="font-size: 11px; font-weight: 700; color: var(--accent-primary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;">Campos Dinâmicos de Personalização</div>';
+                        persHtml += '<div style="margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">';
+                        persHtml += '<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;"><span class="badge-count" style="font-size: 10px; font-weight: 700; background: #e0e7ff; color: #3730a3;">✏️ EDITÁVEL: TEXTOS & INFORMAÇÕES</span></div>';
                         persHtml += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">';
                         prod.personalizationFields.forEach(field => {
                           const val = itemPers[field.id] || '';
@@ -1100,18 +1203,19 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
                       }
 
                       if (Array.isArray(prod.changeOptions) && prod.changeOptions.length > 0) {
-                        persHtml += '<div style="margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">';
-                        persHtml += '<div style="font-size: 11px; font-weight: 700; color: var(--accent-primary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;">Opções de Alteração / Variação</div>';
+                        persHtml += '<div style="margin-top: 12px; padding: 12px; background: #fefce8; border: 1px solid #fef08a; border-radius: 6px;">';
+                        persHtml += '<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;"><span class="badge-count" style="font-size: 10px; font-weight: 700; background: #fef08a; color: #854d0e;">🎨 PERSONALIZÁVEL: CORES & ACABAMENTOS</span></div>';
                         persHtml += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">';
                         prod.changeOptions.forEach(opt => {
                           const val = itemOpts[opt.id] || '';
                           const req = opt.required ? ' *' : '';
+                          const choices = opt.choices || opt.options || [];
                           persHtml += `
                             <div>
                               <label class="form-label" style="font-size: 11px; font-weight: 600; margin-bottom: 4px;">${escapeHtml(opt.name)}${req}</label>
                               <select class="form-input item-opt-field" data-index="${index}" data-field="${opt.id}" style="font-size: 12px; width: 100%;">
                                 <option value="">Selecione uma opção...</option>
-                                ${(opt.options || []).map(o => `<option value="${escapeHtml(o)}" ${val === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+                                ${choices.map(o => `<option value="${escapeHtml(o)}" ${val === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
                               </select>
                             </div>
                           `;
@@ -1180,7 +1284,7 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
             <div id="section-insumos" style="display: ${isD3 ? 'block' : 'none'};">
               <div class="panel">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                  <h3 style="font-size: 1rem; font-weight: 700;">🧩 Insumos / Estoque (BOM Snapshot)</h3>
+                  <h3 style="font-size: 1rem; font-weight: 700;">🧩 Insumos e Materiais Necessários</h3>
                 </div>
                 <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
                   O sistema calcula automaticamente todos os materiais que serão gastos com base nos produtos escolhidos e quantidades. 
@@ -1421,16 +1525,19 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
       if (inpCliEmpresa) orderData.customerCompany = inpCliEmpresa.value;
 
       const inpCliContato = container.querySelector('#inp-cli-contato');
-      if (inpCliContato) orderData.customerPhone = inpCliContato.value;
+      if (inpCliContato) orderData.customerPhone = formatPhone(inpCliContato.value);
 
       const inpCliNasc = container.querySelector('#inp-cli-nasc');
       if (inpCliNasc) orderData.customerBirthDate = inpCliNasc.value;
 
       const inpCliCpf = container.querySelector('#inp-cli-cpf');
-      if (inpCliCpf) orderData.customerCPF = inpCliCpf.value;
+      if (inpCliCpf) orderData.customerCPF = formatCPF(inpCliCpf.value);
 
       const inpCliCnpj = container.querySelector('#inp-cli-cnpj');
-      if (inpCliCnpj) orderData.customerCNPJ = inpCliCnpj.value;
+      if (inpCliCnpj) orderData.customerCNPJ = formatCNPJ(inpCliCnpj.value);
+
+      const inpCliDataPed = container.querySelector('#inp-cli-data-pedido');
+      if (inpCliDataPed && inpCliDataPed.value) orderData.orderDate = inpCliDataPed.value;
 
       const inpCliEvento = container.querySelector('#inp-cli-evento');
       if (inpCliEvento) orderData.eventDate = inpCliEvento.value;
@@ -1748,6 +1855,7 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
 
           if (isEditing) {
             const updated = updateOrder(editingOrder.id, {
+              orderDate: orderData.orderDate,
               customerType: orderData.customerType,
               customer: orderData.customer,
               customerCompany: orderData.customerCompany,
@@ -1788,12 +1896,13 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
               paymentMethod: primaryMethod
             });
 
-            showToast(`Pedido #${formatOrderNumber(updated.number || updated.id)} atualizado com sucesso!`, '✅');
+            showToast(`Pedido ${formatOrderNumber(updated.number || updated.id)} atualizado com sucesso!`, '✅');
             switchView('pedidos');
             return;
           }
 
           const newOrder = createOrder({
+            orderDate: orderData.orderDate || new Date().toISOString().split('T')[0],
             customerType: orderData.customerType,
             customer: orderData.customer,
             customerCompany: orderData.customerCompany,
@@ -1812,7 +1921,6 @@ export function renderNewOrderPage(container, ctx, editOrderId = null) {
             
             eventDate: orderData.eventDate,
             limitDate: orderData.limitDate,
-            orderDate: new Date(),
 
             items: orderData.items,
             
@@ -1878,33 +1986,42 @@ export function showOrderConsultationDrawer(orderId, ctx) {
 
   const contentHtml = `
     <!-- Top Summary Badge Bar -->
-    <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
       <div>
-        <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
           <span style="font-family: monospace; font-size: 16px; font-weight: 700; color: var(--accent-primary);">
             ${orderNum}
           </span>
           <span class="status-pill" style="border-left: 4px solid ${neon.color}; font-size: 12px; padding: 4px 10px;">
             ${escapeHtml(neon.label)}
           </span>
+          <div style="display: inline-flex; align-items: center; gap: 6px;">
+            <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Alterar Status:</label>
+            <select class="form-input" id="drawer-inp-order-status" style="height: 28px; padding: 2px 8px; font-size: 11px; font-weight: 700;">
+              <option value="yellow" ${order.status === 'yellow' || order.status === 'aguardando' ? 'selected' : ''}>Aguardando Aprovação</option>
+              <option value="em_personalizacao" ${order.status === 'em_personalizacao' ? 'selected' : ''}>Em Personalização</option>
+              <option value="aguardando_impressao" ${order.status === 'aguardando_impressao' ? 'selected' : ''}>Aguardando Impressão</option>
+              <option value="blue" ${order.status === 'blue' || order.status === 'producao' ? 'selected' : ''}>Em Produção</option>
+              <option value="orange" ${order.status === 'orange' || order.status === 'em_conferencia' ? 'selected' : ''}>Em Conferência</option>
+              <option value="red" ${order.status === 'red' || order.status === 'bloqueado' ? 'selected' : ''}>Bloqueado</option>
+              <option value="green" ${order.status === 'green' || order.status === 'pronto' ? 'selected' : ''}>Pronto</option>
+              <option value="neutral" ${order.status === 'neutral' || order.status === 'entregue' ? 'selected' : ''}>Entregue / Concluído</option>
+              <option value="cancelado" ${order.status === 'cancelado' ? 'selected' : ''}>Cancelado</option>
+            </select>
+          </div>
         </div>
-        <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 4px;">
+        <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 6px;">
           ${escapeHtml(order.title || order.productTitle || 'Vários Itens')}
         </div>
       </div>
       <div style="text-align: right;">
         <div style="font-size: 11px; color: var(--text-secondary);">Data do Pedido: <b>${order.orderDate || '--/--/----'}</b></div>
         <div style="font-size: 12px; color: var(--text-primary); margin-top: 2px;">
-          Entrega Prevista: <b style="color: #0284c7;">${order.deliveryDate || '--/--/----'}</b>
+          Entrega Prevista: <b style="color: #0284c7;">${order.deliveryDate || order.limitDate || '--/--/----'}</b>
         </div>
+        ${order.eventDate ? `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Data do Evento: <b>${order.eventDate}</b></div>` : ''}
       </div>
     </div>
-
-    <!-- Production Stage Timeline Stepper -->
-    <!-- (Timeline temporariamente desabilitada) -->
-
-    <!-- Production Operations Action Box (Apontamento & CQ) -->
-    <!-- (Ações de produção temporariamente desabilitadas) -->
 
     <!-- 2-Column Grid: Dados do Cliente & Condições Financeiras -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
@@ -1916,17 +2033,42 @@ export function showOrderConsultationDrawer(orderId, ctx) {
         </h4>
         <div class="detail-grid" style="display: flex; flex-direction: column; gap: 8px;">
           <div class="detail-item">
-            <span class="detail-label" style="font-size: 11px; color: var(--text-secondary);">Cliente:</span>
-            <span class="detail-val" style="font-size: 13px; font-weight: 600;">${escapeHtml(order.customerType === 'PJ' ? (order.customerCompany || order.customer) : order.customer || '—')}</span>
+            <span class="detail-label" style="font-size: 11px; color: var(--text-secondary);">Tipo / Nome:</span>
+            <span class="detail-val" style="font-size: 13px; font-weight: 600;">
+              ${order.customerType === 'PJ' ? `[PJ] ${escapeHtml(order.customerCompany || order.customer || '—')}` : `[PF] ${escapeHtml(order.customer || '—')}`}
+            </span>
           </div>
-          <div class="detail-item">
-            <span class="detail-label" style="font-size: 11px; color: var(--text-secondary);">Contato:</span>
-            <span class="detail-val">${escapeHtml(order.customerPhone || '—')}</span>
-          </div>
+          ${order.customerPhone ? `
+            <div class="detail-item">
+              <span class="detail-label" style="font-size: 11px; color: var(--text-secondary);">WhatsApp / Contato:</span>
+              <span class="detail-val" style="font-weight: 600; color: #0284c7;">${escapeHtml(formatPhone(order.customerPhone))}</span>
+            </div>
+          ` : ''}
+          ${order.customerCPF || order.customerCNPJ ? `
+            <div class="detail-item">
+              <span class="detail-label" style="font-size: 11px; color: var(--text-secondary);">Documento:</span>
+              <span class="detail-val">${escapeHtml(order.customerCPF ? formatCPF(order.customerCPF) : formatCNPJ(order.customerCNPJ))}</span>
+            </div>
+          ` : ''}
+          ${order.customerBirthDate ? `
+            <div class="detail-item">
+              <span class="detail-label" style="font-size: 11px; color: var(--text-secondary);">Nascimento:</span>
+              <span class="detail-val">${escapeHtml(order.customerBirthDate)}</span>
+            </div>
+          ` : ''}
           <div class="detail-item">
             <span class="detail-label" style="font-size: 11px; color: var(--text-secondary);">Endereço Entrega:</span>
-            <span class="detail-val">${escapeHtml(order.deliveryAddress ? order.deliveryAddress + ', ' + order.deliveryNumber : '—')}</span>
+            <span class="detail-val">
+              ${escapeHtml([order.deliveryAddress, order.deliveryNumber, order.deliveryNeighborhood, order.deliveryCity, order.deliveryState].filter(Boolean).join(', ') || 'Retirada no balcão / Não informado')}
+              ${order.deliveryCep ? ` (CEP: ${escapeHtml(order.deliveryCep)})` : ''}
+            </span>
           </div>
+          ${order.deliveryNotes ? `
+            <div class="detail-item">
+              <span class="detail-label" style="font-size: 11px; color: var(--text-secondary);">Obs. Entrega:</span>
+              <span class="detail-val" style="font-size: 12px; color: var(--text-secondary);">${escapeHtml(order.deliveryNotes)}</span>
+            </div>
+          ` : ''}
         </div>
       </div>
 
@@ -2085,9 +2227,12 @@ export function showOrderConsultationDrawer(orderId, ctx) {
     footerHtml: `
       <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 8px;">
         <span style="font-size: 12px; color: var(--text-secondary);">ID do Pedido: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${escapeHtml(order.id)}</code></span>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
           <button type="button" class="btn btn-secondary" id="drawer-btn-share-art" style="padding: 8px 14px; font-weight: 700; color: #2563eb; background: #eff6ff; border-color: #bfdbfe; display: inline-flex; align-items: center; gap: 4px;">
             🔗 Compartilhar Arte
+          </button>
+          <button type="button" class="btn btn-secondary" id="drawer-btn-dup-order" style="padding: 8px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+            📋 Duplicar
           </button>
           <button type="button" class="btn btn-secondary" id="drawer-btn-edit-order" style="padding: 8px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
             ✏️ Editar Pedido
@@ -2104,6 +2249,24 @@ export function showOrderConsultationDrawer(orderId, ctx) {
       const closeBtn = drawer.querySelector('#btn-close-consultation-drawer');
       if (closeBtn) closeBtn.onclick = closeDrawer;
 
+      // Dynamic Order Status Change
+      const selStatus = drawer.querySelector('#drawer-inp-order-status');
+      if (selStatus) {
+        selStatus.addEventListener('change', (e) => {
+          const newStatus = e.target.value;
+          try {
+            updateOrder(order.id, { status: newStatus });
+            showToast(`Status do Pedido ${orderNum} atualizado!`, '✅');
+            showOrderConsultationDrawer(order.id, ctx);
+            if (typeof ctx.renderOrdersView === 'function') {
+              ctx.renderOrdersView();
+            }
+          } catch (err) {
+            showToast(err.message, '🔴');
+          }
+        });
+      }
+
       const shareBtn = drawer.querySelector('#drawer-btn-share-art');
       if (shareBtn) {
         shareBtn.addEventListener('click', () => {
@@ -2113,6 +2276,24 @@ export function showOrderConsultationDrawer(orderId, ctx) {
           showToast(`Link de aprovação copiado: ${shareUrl}`, '🔗');
           if (typeof ctx.switchView === 'function') {
             ctx.switchView('aprovar-arte', order.id);
+          }
+        });
+      }
+
+      const dupBtn = drawer.querySelector('#drawer-btn-dup-order');
+      if (dupBtn) {
+        dupBtn.addEventListener('click', () => {
+          try {
+            const duplicated = duplicateOrder(order.id);
+            closeDrawer();
+            showToast(`Pedido ${duplicated.number} duplicado com sucesso!`, '📋');
+            if (typeof ctx.switchView === 'function') {
+              ctx.switchView('pedidos');
+            } else if (typeof ctx.renderOrdersView === 'function') {
+              ctx.renderOrdersView();
+            }
+          } catch (err) {
+            showToast(err.message, '🔴');
           }
         });
       }
@@ -2130,14 +2311,14 @@ export function showOrderConsultationDrawer(orderId, ctx) {
         delBtn.addEventListener('click', () => {
           showConfirmDialog({
             title: 'Excluir Pedido',
-            message: `Tem certeza que deseja excluir o <b>Pedido #${orderNum}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
+            message: `Tem certeza que deseja excluir o <b>Pedido ${orderNum}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
             confirmText: 'Sim, Excluir Pedido',
             isDanger: true,
             onConfirm: () => {
               try {
                 deleteOrder(order.id);
                 closeDrawer();
-                showToast(`Pedido #${orderNum} excluído com sucesso!`, '✅');
+                showToast(`Pedido ${orderNum} excluído com sucesso!`, '✅');
                 if (typeof ctx.renderOrdersView === 'function') {
                   ctx.renderOrdersView();
                 } else if (typeof ctx.switchView === 'function') {

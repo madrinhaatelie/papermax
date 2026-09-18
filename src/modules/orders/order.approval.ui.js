@@ -563,7 +563,7 @@ export function renderOrderApprovalPage(container, orderId, onBack) {
         </div>
         <h2 style="font-size: 19px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">Produção Aprovada!</h2>
         <p style="font-size: 13.5px; color: #64748b; line-height: 1.5; margin: 0 0 20px 0;">
-          Obrigado! A arte do <b>Pedido #${order.number || order.id}</b> foi aceita com sucesso e o status foi atualizado para <b>Fila de Impressão</b>.
+          Obrigado! A arte do <b>Pedido ${order.number || order.id}</b> foi aceita com sucesso e o status foi atualizado para <b>Fila de Impressão</b>.
         </p>
         <button type="button" id="btn-close-success-modal" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 13.5px; font-weight: 700; border-radius: 8px;">
           Entendido

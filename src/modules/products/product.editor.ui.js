@@ -529,7 +529,7 @@ export function openProductConfigDrawer({
           <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
             <div style="font-size: 12px; color: #166534;">
               <div style="font-weight: 700; font-size: 13px;">🧩 Ficha Técnica: Insumos (R$ ${totalCompositionCost.toFixed(2).replace('.', ',')}) + Desgaste de Máquina (R$ ${machineWearRate.toFixed(2).replace('.', ',')})</div>
-              <div style="font-size: 11px; color: #15803d; margin-top: 2px;">Custo Total de Produção Sugerido: <b>${formatCurrency(totalCalculatedProductionCost)}</b> (${product.composition?.length || 0} itens na BOM)</div>
+              <div style="font-size: 11px; color: #15803d; margin-top: 2px;">Custo Total de Produção Sugerido: <b>${formatCurrency(totalCalculatedProductionCost)}</b> (${product.composition?.length || 0} insumos cadastrados)</div>
             </div>
             <button type="button" class="btn btn-sm" id="btn-sync-cost-step3" style="font-size: 11px; padding: 4px 10px; background: #ffffff; border: 1px solid #86efac; color: #166534; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
               ⚡ Aplicar Custo Sugerido (${formatCurrency(totalCalculatedProductionCost)})
@@ -550,7 +550,7 @@ export function openProductConfigDrawer({
 
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
               <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px; text-align: center;">
-                <div style="font-size: 10.5px; color: var(--text-muted);">Insumos (BOM)</div>
+                <div style="font-size: 10.5px; color: var(--text-muted);">Insumos e Materiais</div>
                 <div style="font-weight: 700; font-size: 13.5px; color: #0284c7; margin-top: 2px;">${formatCurrency(totalCompositionCost)}</div>
               </div>
               <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px; text-align: center;">

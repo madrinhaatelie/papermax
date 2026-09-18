@@ -10,7 +10,8 @@
  * 6. 🧮 Custos & Margens (Estrutura de Custos de Produtos, BOM, Insumos e Pedidos)
  */
 
-import { openContextMenu } from '../../app.js';
+import { openContextMenu, switchView, openDrawer, closeDrawer } from '../../app.js';
+import { showConfirmDialog } from '../orders/orders.ui.js';
 import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
@@ -25,11 +26,13 @@ import {
   payExpense,
   getReceivables,
   getReceivableById,
+  createReceivable,
   receiveReceivable,
   updateReceivable,
   deleteReceivable,
   getPayables,
   getPayableById,
+  createPayable,
   payPayable,
   updatePayable,
   deletePayable,
@@ -52,7 +55,7 @@ import {
   escapeHtml,
   generateId
 } from '../../utils/sanitize.js';
-import { bus } from '../../core/events.js';
+import { bus, showToast } from '../../core/events.js';
 
 // State variables for Finance module
 let currentFinanceTab = 'visao_geral'; // 'visao_geral' | 'vendas' | 'despesas' | 'a_receber' | 'a_pagar' | 'custos'
@@ -81,84 +84,90 @@ export function renderFinanceModule() {
   });
 
   container.innerHTML = `
-    <!-- Top Header -->
-    <div class="module-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px;">
+    <!-- Top Header & Action Bar -->
+    <div class="module-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
       <div>
-        <h2 class="module-title" style="margin: 0; font-size: 1.625rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+        <h2 class="module-title" style="margin: 0; font-size: 1.75rem; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 10px; letter-spacing: -0.5px;">
           💰 Gestão Financeira Integrada
         </h2>
+        <p style="margin: 4px 0 0 0; font-size: 0.875rem; color: var(--text-secondary);">
+          Controle de caixa, fluxo previsto, DRE do ateliê e rentabilidade por produto.
+        </p>
       </div>
-      <div class="header-actions" style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <button class="btn btn-secondary" id="btn-finance-export-csv" title="Exportar dados da aba atual para CSV" style="padding: 8px 14px;">
+
+      <div class="header-actions" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <!-- Period Filter Dropdown -->
+        <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-card); border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <label for="select-finance-period" style="font-size: 0.875rem; font-weight: 700; color: var(--text-primary); margin: 0; white-space: nowrap;">
+            📅 Período:
+          </label>
+          <select id="select-finance-period" class="form-select" style="padding: 6px 12px; font-size: 0.875rem; font-weight: 600; border-radius: 6px; border: 1px solid #cbd5e1; background: #ffffff; color: var(--text-primary); cursor: pointer; min-width: 170px;">
+            <option value="${FINANCIAL_PERIODS.ESTE_MES}" ${currentPeriod === FINANCIAL_PERIODS.ESTE_MES ? 'selected' : ''}>Este Mês</option>
+            <option value="${FINANCIAL_PERIODS.MES_ANTERIOR}" ${currentPeriod === FINANCIAL_PERIODS.MES_ANTERIOR ? 'selected' : ''}>Mês Anterior</option>
+            <option value="${FINANCIAL_PERIODS.ULTIMOS_30}" ${currentPeriod === FINANCIAL_PERIODS.ULTIMOS_30 ? 'selected' : ''}>Últimos 30 Dias</option>
+            <option value="${FINANCIAL_PERIODS.TODO_PERIODO}" ${currentPeriod === FINANCIAL_PERIODS.TODO_PERIODO ? 'selected' : ''}>Todo o Período</option>
+            <option value="${FINANCIAL_PERIODS.PERSONALIZADO}" ${currentPeriod === FINANCIAL_PERIODS.PERSONALIZADO ? 'selected' : ''}>Personalizado</option>
+          </select>
+        </div>
+
+        <button class="btn btn-secondary" id="btn-finance-export-csv" title="Exportar dados da aba atual para CSV" style="padding: 8px 14px; font-weight: 600;">
           ⬇ Exportar CSV
         </button>
-        <button class="btn btn-secondary" id="btn-finance-import-csv" title="Importar dados via planilha CSV" style="padding: 8px 14px;">
+        <button class="btn btn-secondary" id="btn-finance-import-csv" title="Importar dados via planilha CSV" style="padding: 8px 14px; font-weight: 600;">
           ⬆ Importar CSV
         </button>
-        <button class="btn btn-primary" id="btn-quick-new-expense" style="padding: 8px 16px;">
-          + Nova Despesa
-        </button>
+        ${currentFinanceTab === 'a_receber' ? `
+          <button class="btn btn-primary" id="btn-quick-new-receivable" style="padding: 9px 18px; font-weight: 700; background: var(--border-focus, #db2777); color: #ffffff; border-radius: 8px;">
+            + Nova Conta a Receber
+          </button>
+        ` : currentFinanceTab === 'a_pagar' ? `
+          <button class="btn btn-primary" id="btn-quick-new-payable" style="padding: 9px 18px; font-weight: 700; background: var(--border-focus, #db2777); color: #ffffff; border-radius: 8px;">
+            + Nova Conta a Pagar
+          </button>
+        ` : `
+          <button class="btn btn-primary" id="btn-quick-new-expense" style="padding: 9px 18px; font-weight: 700; background: var(--border-focus, #db2777); color: #ffffff; border-radius: 8px;">
+            + Nova Despesa
+          </button>
+        `}
       </div>
     </div>
 
-    <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 0 0 24px 0;" />
-
-    <!-- Period Filter Toolbar (Select Dropdown) -->
-    <div class="card" style="padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 10px;">
-      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <label for="select-finance-period" style="font-size: 0.875rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px; margin: 0;">
-          📅 Período:
-        </label>
-        <select id="select-finance-period" class="form-select" style="padding: 8px 14px; font-size: 0.875rem; font-weight: 600; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); cursor: pointer; min-width: 200px;">
-          <option value="${FINANCIAL_PERIODS.ESTE_MES}" ${currentPeriod === FINANCIAL_PERIODS.ESTE_MES ? 'selected' : ''}>Este Mês</option>
-          <option value="${FINANCIAL_PERIODS.MES_ANTERIOR}" ${currentPeriod === FINANCIAL_PERIODS.MES_ANTERIOR ? 'selected' : ''}>Mês Anterior</option>
-          <option value="${FINANCIAL_PERIODS.ULTIMOS_30}" ${currentPeriod === FINANCIAL_PERIODS.ULTIMOS_30 ? 'selected' : ''}>Últimos 30 Dias</option>
-          <option value="${FINANCIAL_PERIODS.TODO_PERIODO}" ${currentPeriod === FINANCIAL_PERIODS.TODO_PERIODO ? 'selected' : ''}>Todo o Período</option>
-          <option value="${FINANCIAL_PERIODS.PERSONALIZADO}" ${currentPeriod === FINANCIAL_PERIODS.PERSONALIZADO ? 'selected' : ''}>Personalizado</option>
-        </select>
+    ${currentPeriod === FINANCIAL_PERIODS.PERSONALIZADO ? `
+      <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: 20px; padding: 12px 16px; background: #f1f5f9; border-radius: 8px; border: 1px solid #cbd5e1;">
+        <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Intervalo Personalizado:</span>
+        <input type="text" id="custom-start-date" class="form-input" style="width: 130px; padding: 6px 10px; font-size: 0.875rem;" placeholder="DD/MM/AAAA" value="${escapeHtml(customDateRange.startDate)}" />
+        <span style="color: var(--text-secondary); font-size: 0.875rem;">até</span>
+        <input type="text" id="custom-end-date" class="form-input" style="width: 130px; padding: 6px 10px; font-size: 0.875rem;" placeholder="DD/MM/AAAA" value="${escapeHtml(customDateRange.endDate)}" />
+        <button class="btn btn-sm btn-primary" id="btn-apply-custom-date" style="padding: 6px 16px; font-weight: 600;">Aplicar</button>
       </div>
+    ` : ''}
 
-      ${currentPeriod === FINANCIAL_PERIODS.PERSONALIZADO ? `
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-          <input type="text" id="custom-start-date" class="form-input" style="width: 120px; padding: 6px 10px; font-size: 0.8125rem;" placeholder="DD/MM/AAAA" value="${escapeHtml(customDateRange.startDate)}" />
-          <span style="color: var(--text-secondary); font-size: 0.8125rem;">até</span>
-          <input type="text" id="custom-end-date" class="form-input" style="width: 120px; padding: 6px 10px; font-size: 0.8125rem;" placeholder="DD/MM/AAAA" value="${escapeHtml(customDateRange.endDate)}" />
-          <button class="btn btn-sm btn-primary" id="btn-apply-custom-date" style="padding: 6px 14px;">Aplicar</button>
-        </div>
-      ` : ''}
-    </div>
+    <!-- HORIZONTAL DIVIDER 1 -->
+    <div style="height: 1px; background: #e2e8f0; margin: 0 0 24px 0; width: 100%;"></div>
 
-    <!-- Navigation Tabs -->
-    <div class="finance-tab-bar" style="display: flex; gap: 10px; margin-bottom: 24px; border-bottom: 2px solid var(--border-subtle); padding-bottom: 12px; overflow-x: auto;">
-      <button class="tab-btn ${currentFinanceTab === 'visao_geral' ? 'active' : ''}" data-finance-tab="visao_geral" style="padding: 8px 16px; font-weight: 600;">
-        📊 Visão Geral
-      </button>
-      <button class="tab-btn ${currentFinanceTab === 'vendas' ? 'active' : ''}" data-finance-tab="vendas" style="padding: 8px 16px; font-weight: 600;">
-        🛍️ Vendas Integradas
-      </button>
-      <button class="tab-btn ${currentFinanceTab === 'despesas' ? 'active' : ''}" data-finance-tab="despesas" style="padding: 8px 16px; font-weight: 600;">
-        💸 Despesas Operacionais
-      </button>
-      <button class="tab-btn ${currentFinanceTab === 'a_receber' ? 'active' : ''}" data-finance-tab="a_receber" style="padding: 8px 16px; font-weight: 600;">
-        📥 Contas a Receber
-        ${metrics.countReceberVencido > 0 ? `<span class="badge-count" style="background: var(--status-red-bg); color: var(--status-red-text); margin-left: 6px;">${metrics.countReceberVencido}</span>` : ''}
-      </button>
-      <button class="tab-btn ${currentFinanceTab === 'a_pagar' ? 'active' : ''}" data-finance-tab="a_pagar" style="padding: 8px 16px; font-weight: 600;">
-        📤 Contas a Pagar
-        ${metrics.countPagarVencido > 0 ? `<span class="badge-count" style="background: var(--status-red-bg); color: var(--status-red-text); margin-left: 6px;">${metrics.countPagarVencido}</span>` : ''}
-      </button>
-      <button class="tab-btn ${currentFinanceTab === 'custos' ? 'active' : ''}" data-finance-tab="custos" style="padding: 8px 16px; font-weight: 600;">
-        🧮 Custos & Margens (BOM)
-      </button>
+    <!-- Navigation Tabs Bar (Divisórias de Fichário Horizontais Padrão Global) -->
+    <div class="finance-tab-bar" style="display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 2px solid #cbd5e1; padding-bottom: 0; overflow-x: auto; align-items: flex-end;">
+      ${[
+        { id: 'visao_geral', label: '📊 Visão Geral' },
+        { id: 'vendas', label: '🛍️ Vendas & Faturamento' },
+        { id: 'despesas', label: '💸 Despesas Operacionais' },
+        { id: 'a_receber', label: '📥 Contas a Receber' },
+        { id: 'a_pagar', label: '📤 Contas a Pagar' },
+        { id: 'custos', label: '🧮 Custos & Margens' }
+      ].map(tab => {
+        const isActive = currentFinanceTab === tab.id;
+        return `
+          <button class="tab-btn ${isActive ? 'active' : ''}" data-finance-tab="${tab.id}">
+            ${tab.label}
+          </button>
+        `;
+      }).join('')}
     </div>
 
     <!-- Sub-tab Render Container -->
-    <div id="finance-subtab-container" style="padding-top: 4px;">
+    <div id="finance-subtab-container">
       ${renderActiveFinanceSubtab(metrics)}
     </div>
-
-    <!-- Modal / Drawer Container -->
-    <div id="finance-modal-container"></div>
   `;
 
   attachFinanceEventListeners();
@@ -195,200 +204,148 @@ function renderVisaoGeralTab(metrics) {
   const isPositivePredicted = metrics.resultadoPrevisto >= 0;
 
   return `
-    <div style="display: flex; flex-direction: column; gap: 24px;">
+    <div style="display: flex; flex-direction: column; gap: 28px;">
       
-      <!-- REALIZADO vs PREVISTO Split Cards -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+      <!-- REALIZADO vs PREVISTO Split Cards (2 Colunas) -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px;">
         
-        <!-- Bloco 1: REALIZADO NO CAIXA -->
-        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-top: 4px solid #10b981; border-radius: 10px; background: var(--bg-card);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 1.25rem;">💵</span>
-              <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-primary);">FLUXO REALIZADO</h3>
+        <!-- Bloco 1: FLUXO DE CAIXA -->
+        <div class="card" style="padding: 24px 28px; border: 1px solid #cbd5e1; border-top: 5px solid #10b981; border-radius: 12px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.5rem;">💵</span>
+              <div>
+                <h3 style="margin: 0; font-size: 1.0625rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.3px;">FLUXO DE CAIXA</h3>
+                <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">(Entradas − Saídas = Saldo Total)</span>
+              </div>
             </div>
-            <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #047857; font-size: 0.8125rem; font-weight: 700; padding: 5px 12px; border-radius: 16px;">
               Efetivado no Caixa
             </span>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed var(--border-subtle);">
-            <div>
-              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Entradas Recebidas</span>
-              <div style="font-size: 1.375rem; font-weight: 700; color: #10b981; margin-top: 4px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px dashed #cbd5e1;">
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 8px;">
+              <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Entradas</span>
+              <div style="font-size: 1.5rem; font-weight: 800; color: #059669; margin-top: 6px;">
                 ${formatCurrency(metrics.entradasRealizadas)}
               </div>
             </div>
-            <div>
-              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Saídas Pagas</span>
-              <div style="font-size: 1.375rem; font-weight: 700; color: #ef4444; margin-top: 4px;">
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 8px;">
+              <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Saídas</span>
+              <div style="font-size: 1.5rem; font-weight: 800; color: #dc2626; margin-top: 6px;">
                 ${formatCurrency(metrics.saidasRealizadas)}
               </div>
-              <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+              <div style="font-size: 0.75rem; color: #64748b; margin-top: 6px; font-weight: 600;">
                 Compras: ${formatCurrency(metrics.saidasCompras)} · Desp: ${formatCurrency(metrics.saidasDespesas)}
               </div>
             </div>
           </div>
 
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Saldo Realizado:</span>
-            <span style="font-size: 1.5rem; font-weight: 800; color: ${isPositiveRealized ? '#10b981' : '#ef4444'};">
+          <div style="display: flex; justify-content: space-between; align-items: center; background: #f0fdf4; padding: 14px 18px; border-radius: 10px; border: 1px solid #bbf7d0;">
+            <span style="font-size: 0.9375rem; font-weight: 700; color: #166534;">Saldo Total:</span>
+            <span style="font-size: 1.625rem; font-weight: 900; color: ${isPositiveRealized ? '#047857' : '#dc2626'};">
               ${formatCurrency(metrics.saldoRealizado)}
             </span>
           </div>
         </div>
 
-        <!-- Bloco 2: VALORES PREVISTOS (A RECEBER / A PAGAR) -->
-        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-top: 4px solid #f59e0b; border-radius: 10px; background: var(--bg-card);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 1.25rem;">⏳</span>
-              <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-primary);">PREVISTO / ABERTO</h3>
+        <!-- Bloco 2: PREVISTO -->
+        <div class="card" style="padding: 24px 28px; border: 1px solid #cbd5e1; border-top: 5px solid #f59e0b; border-radius: 12px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.5rem;">⏳</span>
+              <div>
+                <h3 style="margin: 0; font-size: 1.0625rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.3px;">PREVISTO</h3>
+                <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">(A Receber − A Pagar = Previsto)</span>
+              </div>
             </div>
-            <span class="badge" style="background: rgba(245, 158, 11, 0.12); color: #d97706; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
+            <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #b45309; font-size: 0.8125rem; font-weight: 700; padding: 5px 12px; border-radius: 16px;">
               A Vencer / Vencido
             </span>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed var(--border-subtle);">
-            <div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px dashed #cbd5e1;">
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 8px;">
               <div style="display: flex; align-items: center; justify-content: space-between;">
-                <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">A Receber Total</span>
-                ${metrics.countReceberVencido > 0 ? `<span style="font-size: 0.6875rem; color: #ef4444; font-weight: 600;">(${metrics.countReceberVencido} vencidos)</span>` : ''}
+                <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">A Receber</span>
+                ${metrics.countReceberVencido > 0 ? `<span style="font-size: 0.6875rem; color: #dc2626; font-weight: 700;">(${metrics.countReceberVencido} venc.)</span>` : ''}
               </div>
-              <div style="font-size: 1.375rem; font-weight: 700; color: #f59e0b; margin-top: 4px;">
+              <div style="font-size: 1.5rem; font-weight: 800; color: #d97706; margin-top: 6px;">
                 ${formatCurrency(metrics.totalAReceber)}
               </div>
             </div>
-            <div>
+            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 8px;">
               <div style="display: flex; align-items: center; justify-content: space-between;">
-                <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">A Pagar Total</span>
-                ${metrics.countPagarVencido > 0 ? `<span style="font-size: 0.6875rem; color: #ef4444; font-weight: 600;">(${metrics.countPagarVencido} vencidos)</span>` : ''}
+                <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">A Pagar</span>
+                ${metrics.countPagarVencido > 0 ? `<span style="font-size: 0.6875rem; color: #dc2626; font-weight: 700;">(${metrics.countPagarVencido} venc.)</span>` : ''}
               </div>
-              <div style="font-size: 1.375rem; font-weight: 700; color: #8b5cf6; margin-top: 4px;">
+              <div style="font-size: 1.5rem; font-weight: 800; color: #7c3aed; margin-top: 6px;">
                 ${formatCurrency(metrics.totalAPagar)}
               </div>
             </div>
           </div>
 
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Resultado Previsto:</span>
-            <span style="font-size: 1.5rem; font-weight: 800; color: ${isPositivePredicted ? '#10b981' : '#ef4444'};">
+          <div style="display: flex; justify-content: space-between; align-items: center; background: #fffbe6; padding: 14px 18px; border-radius: 10px; border: 1px solid #fde68a;">
+            <span style="font-size: 0.9375rem; font-weight: 700; color: #92400e;">Previsto:</span>
+            <span style="font-size: 1.625rem; font-weight: 900; color: ${isPositivePredicted ? '#047857' : '#dc2626'};">
               ${formatCurrency(metrics.resultadoPrevisto)}
-            </span>
-          </div>
-        </div>
-
-        <!-- Bloco 3: DESEMPENHO ECONÔMICO (COMPETÊNCIA) -->
-        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-top: 4px solid #3b82f6; border-radius: 10px; background: var(--bg-card);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 1.25rem;">📈</span>
-              <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-primary);">DRE DO PERÍODO</h3>
-            </div>
-            <span class="badge" style="background: rgba(59, 130, 246, 0.12); color: #2563eb; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
-              ${metrics.totalOrdersInPeriod} Pedidos
-            </span>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed var(--border-subtle);">
-            <div>
-              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Vendas Faturadas</span>
-              <div style="font-size: 1.375rem; font-weight: 700; color: var(--text-primary); margin-top: 4px;">
-                ${formatCurrency(metrics.totalVendas)}
-              </div>
-            </div>
-            <div>
-              <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Margem Média</span>
-              <div style="font-size: 1.375rem; font-weight: 700; color: #3b82f6; margin-top: 4px;">
-                ${metrics.margemMediaPercent}%
-              </div>
-            </div>
-          </div>
-
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Lucro Bruto:</span>
-            <span style="font-size: 1.5rem; font-weight: 800; color: #10b981;">
-              ${formatCurrency(metrics.lucroBrutoVendas)}
             </span>
           </div>
         </div>
 
       </div>
 
-      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 8px 0;" />
+      <!-- HORIZONTAL DIVIDER 2 -->
+      <div style="height: 1px; background: #e2e8f0; margin: 8px 0; width: 100%;"></div>
 
-      <!-- DRE Simplificado e Detalhamento de Despesas -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
-        
-        <!-- Demonstrativo de Resultado -->
-        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-card);">
-          <h4 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-            📑 DRE Gerencial Sintético (${formatPeriodLabel(metrics.period)})
-          </h4>
+      <!-- Demonstrativo de Resultado (DRE Gerencial Sintético) & Guia / Glossário -->
+      <div class="card" style="padding: 24px 28px; border: 1px solid #cbd5e1; border-radius: 12px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+        <h4 style="margin: 0 0 20px 0; font-size: 1.125rem; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px;">
+          📑 DRE Gerencial Sintético (${formatPeriodLabel(metrics.period)})
+        </h4>
 
-          <div style="display: flex; flex-direction: column; gap: 12px; font-size: 0.875rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
-              <span style="font-weight: 600; color: var(--text-primary);">(+) Receita Bruta de Vendas</span>
-              <span style="font-weight: 700; color: #10b981;">${formatCurrency(metrics.totalVendas)}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
-              <span style="color: var(--text-secondary);">(-) Custo das Mercadorias Vendidas (CMV)</span>
-              <span style="color: #ef4444;">${formatCurrency(metrics.totalCustoMercadorias)}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(59, 130, 246, 0.05); border-radius: 6px;">
-              <span style="font-weight: 700; color: var(--text-primary); font-size: 0.9375rem;">(=) Lucro Bruto da Produção</span>
-              <span style="font-weight: 800; color: #2563eb; font-size: 0.9375rem;">${formatCurrency(metrics.lucroBrutoVendas)}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle);">
-              <span style="color: var(--text-secondary);">(-) Despesas Operacionais Realizadas</span>
-              <span style="color: #ef4444;">${formatCurrency(metrics.saidasDespesas)}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: rgba(16, 185, 129, 0.08); border-radius: 8px; margin-top: 6px;">
-              <span style="font-weight: 800; color: var(--text-primary); font-size: 1rem;">(=) Resultado Operacional Líquido</span>
-              <span style="font-weight: 800; color: ${metrics.resultadoOperacional >= 0 ? '#059669' : '#ef4444'}; font-size: 1.1875rem;">
-                ${formatCurrency(metrics.resultadoOperacional)}
-              </span>
-            </div>
+        <div style="display: flex; flex-direction: column; gap: 14px; font-size: 0.9375rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <span style="font-weight: 700; color: var(--text-primary);">(+) Receita Bruta de Vendas</span>
+            <span style="font-weight: 800; color: #059669; font-size: 1.0625rem;">${formatCurrency(metrics.totalVendas)}</span>
           </div>
-
-          <!-- Didactic Atelier Explanations (Task 3) -->
-          <div style="margin-top: 20px; padding: 14px; background: var(--bg-surface-raised); border-radius: 8px; border: 1px dashed var(--border-subtle); font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6;">
-            <b style="color: var(--text-primary); display: block; margin-bottom: 6px; font-size: 0.8125rem;">💡 Entenda os Termos do Ateliê:</b>
-            <div>• <b>Receita:</b> Faturamento bruto total obtido com as vendas de pedidos.</div>
-            <div>• <b>CMV:</b> Custo dos materiais e papéis utilizados na fabricação dos itens.</div>
-            <div>• <b>Lucro Bruto:</b> Quanto sobra das vendas após descontar o custo dos materiais.</div>
-            <div>• <b>Despesas:</b> Gastos gerais da operação do ateliê (aluguel, embalagens, manutenção).</div>
-            <div>• <b>Margem:</b> Percentual de lucro gerado pela operação sobre o faturamento.</div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <span style="color: #475569; font-weight: 600;">(-) Custo das Mercadorias Vendidas (CMV dos papéis e insumos)</span>
+            <span style="color: #dc2626; font-weight: 700; font-size: 1.0625rem;">${formatCurrency(metrics.totalCustoMercadorias)}</span>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe;">
+            <span style="font-weight: 800; color: #1e40af; font-size: 1rem;">(=) Lucro Bruto da Produção</span>
+            <span style="font-weight: 900; color: #2563eb; font-size: 1.125rem;">${formatCurrency(metrics.lucroBrutoVendas)}</span>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <span style="color: #475569; font-weight: 600;">(-) Despesas Operacionais Realizadas</span>
+            <span style="color: #dc2626; font-weight: 700; font-size: 1.0625rem;">${formatCurrency(metrics.saidasDespesas)}</span>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; background: #f0fdf4; border-radius: 10px; border: 2px solid #86efac; margin-top: 8px;">
+            <span style="font-weight: 900; color: #166534; font-size: 1.0625rem;">(=) Resultado Operacional Líquido</span>
+            <span style="font-weight: 900; color: ${metrics.resultadoOperacional >= 0 ? '#047857' : '#dc2626'}; font-size: 1.375rem;">
+              ${formatCurrency(metrics.resultadoOperacional)}
+            </span>
           </div>
         </div>
 
-        <!-- Composição de Despesas Operacionais por Categoria -->
-        <div class="card" style="padding: 20px 24px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-card);">
-          <h4 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-            📊 Despesas por Categoria
-          </h4>
+        <!-- HORIZONTAL DIVIDER 3 -->
+        <div style="height: 1px; background: #e2e8f0; margin: 24px 0 20px 0; width: 100%;"></div>
 
-          <div style="display: flex; flex-direction: column; gap: 12px;">
-            ${Object.entries(metrics.expensesByCategory).map(([cat, val]) => {
-              const totalExp = metrics.saidasDespesas > 0 ? metrics.saidasDespesas : (Object.values(metrics.expensesByCategory).reduce((a, b) => a + b, 0) || 1);
-              const pct = ((val / totalExp) * 100).toFixed(0);
-              if (val === 0) return '';
-              return `
-                <div style="margin-bottom: 6px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 0.8125rem; margin-bottom: 6px;">
-                    <span style="font-weight: 600; color: var(--text-primary);">${cat}</span>
-                    <span style="color: var(--text-secondary); font-weight: 600;">${formatCurrency(val)} (${pct}%)</span>
-                  </div>
-                  <div style="width: 100%; height: 8px; background: var(--border-subtle); border-radius: 4px; overflow: hidden;">
-                    <div style="width: ${pct}%; height: 100%; background: #ef4444; border-radius: 4px;"></div>
-                  </div>
-                </div>
-              `;
-            }).join('') || `<div style="font-size: 0.875rem; color: var(--text-secondary); text-align: center; padding: 32px 0;"><p style="margin: 0; font-weight: 600;">Nenhuma despesa registrada neste período.</p><p style="margin: 6px 0 0 0; font-size: 0.75rem;">As despesas aparecerão aqui conforme os custos operacionais do ateliê forem lançados.</p></div>`}
-          </div>
+        <!-- Guia / Glossário: Explicação Didática dos Termos Financeiros do Ateliê -->
+        <div style="padding: 18px 20px; background: #f8fafc; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 0.875rem; color: #475569; line-height: 1.7;">
+          <b style="color: #0f172a; display: block; margin-bottom: 10px; font-size: 0.9375rem;">💡 Guia / Glossário — Termos Financeiros do Ateliê:</b>
+          <div style="margin-bottom: 6px;">• <b>(+) Receita Bruta de Vendas:</b> Faturamento bruto total obtido com as vendas de pedidos no período.</div>
+          <div style="margin-bottom: 6px;">• <b>(-) Custo das Mercadorias Vendidas (CMV):</b> Custo direto dos materiais, papéis, acrílicos e insumos utilizados na fabricação dos produtos.</div>
+          <div style="margin-bottom: 6px;">• <b>(=) Lucro Bruto da Produção:</b> Sobra financeira direta das vendas após abater o custo dos materiais.</div>
+          <div style="margin-bottom: 6px;">• <b>(-) Despesas Operacionais Realizadas:</b> Gastos fixos e operacionais do ateliê (aluguel, energia, sistemas, manutenção, embalagens).</div>
+          <div>• <b>(=) Resultado Operacional Líquido:</b> O lucro real do ateliê que sobra para o negócio após cobrir todos os custos e despesas.</div>
         </div>
-
       </div>
 
     </div>
@@ -430,59 +387,60 @@ function renderVendasTab() {
   const avgMargin = totalSalesSum > 0 ? (totalProfitSum / totalSalesSum) * 100 : 0;
 
   return `
-    <div style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 24px;">
       
       <!-- Toolbar & Search -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg-card); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border-subtle);">
-        <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: #ffffff; padding: 18px 24px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+        <div style="display: flex; align-items: center; gap: 10px;">
           <input 
             type="text" 
             id="input-search-sales" 
             class="form-input" 
             placeholder="🔍 Buscar por pedido, cliente ou produto..." 
             value="${escapeHtml(salesSearchQuery)}"
-            style="width: 280px;"
+            style="width: 300px; padding: 8px 14px; font-size: 0.875rem;"
           />
         </div>
-        <div style="display: flex; gap: 20px; align-items: center; font-size: 0.875rem;">
-          <div><strong>Total Vendas:</strong> <span style="color: #10b981; font-weight: 700;">${formatCurrency(totalSalesSum)}</span></div>
-          <div><strong>Custo Total:</strong> <span style="color: #ef4444; font-weight: 600;">${formatCurrency(totalCostSum)}</span></div>
-          <div><strong>Lucro:</strong> <span style="color: #2563eb; font-weight: 700;">${formatCurrency(totalProfitSum)}</span></div>
-          <div><strong>Margem:</strong> <span class="badge" style="background: rgba(37, 99, 235, 0.12); color: #2563eb; font-weight: 700;">${avgMargin.toFixed(1)}%</span></div>
+        <div style="display: flex; gap: 24px; align-items: center; font-size: 0.9375rem;">
+          <div><strong>Total Vendas:</strong> <span style="color: #059669; font-weight: 800; font-size: 1.0625rem;">${formatCurrency(totalSalesSum)}</span></div>
+          <div><strong>Custo Total:</strong> <span style="color: #dc2626; font-weight: 700;">${formatCurrency(totalCostSum)}</span></div>
+          <div><strong>Lucro:</strong> <span style="color: #2563eb; font-weight: 800; font-size: 1.0625rem;">${formatCurrency(totalProfitSum)}</span></div>
+          <div><strong>Margem:</strong> <span class="badge" style="background: rgba(37, 99, 235, 0.15); color: #1d4ed8; font-weight: 800; padding: 6px 12px; font-size: 0.875rem; border-radius: 12px;">${avgMargin.toFixed(1)}%</span></div>
         </div>
       </div>
 
-      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 4px 0;" />
+      <!-- HORIZONTAL DIVIDER -->
+      <div style="height: 1px; background: #e2e8f0; margin: 4px 0; width: 100%;"></div>
 
       <!-- Sales List -->
       <div class="card" style="padding: 0; background: transparent; border: none; box-shadow: none;">
-        <div class="list-group" style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="list-group" style="display: flex; flex-direction: column; gap: 12px;">
             ${sales.length === 0 ? `
-              <div style="text-align: center; padding: 40px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px; color: var(--text-secondary);">
+              <div style="text-align: center; padding: 48px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; color: var(--text-secondary);">
                 Nenhuma venda encontrada para os critérios selecionados.
               </div>
             ` : sales.map(s => {
               const isReceived = s.receivingStatus === 'recebido';
               const statusClass = isReceived ? 'status-green' : 'status-yellow';
               return `
-                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px;">
+                <div class="list-row ${statusClass}" style="padding: 16px 20px; border-radius: 10px; border: 1px solid #e2e8f0; cursor: pointer;" data-action="view-sale" data-id="${s.orderNumber}">
                   <div class="list-main">
-                    <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
+                    <div class="list-title" style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.9375rem;">
                       ${s.orderNumber} - ${escapeHtml(s.customer)}
-                      ${s.hasSnapshot ? '<span title="Custo e preço fixados no snapshot do pedido" style="font-size: 0.75rem; color: #3b82f6;">📸</span>' : ''}
+                      ${s.hasSnapshot ? '<span title="Custo e preço fixados no snapshot do pedido" style="font-size: 0.8125rem; color: #2563eb;">📸</span>' : ''}
                     </div>
-                    <div class="list-meta" style="margin-top: 4px;">
+                    <div class="list-meta" style="margin-top: 6px; color: #64748b; font-size: 0.875rem;">
                       ${escapeHtml(s.productTitle)} · ${s.qty} un · Preço Unit: ${formatCurrency(s.unitPrice)}
                     </div>
                   </div>
-                  <div style="text-align: right; min-width: 140px;">
-                    <span style="font-weight: 700; font-size: 14px; color: #10b981;">+${formatCurrency(s.totalSale)}</span>
-                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-                      Lucro: <span style="color: ${s.profit >= 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">${formatCurrency(s.profit)}</span> (${s.marginPercent.toFixed(1)}%)
+                  <div style="text-align: right; min-width: 150px;">
+                    <span style="font-weight: 800; font-size: 1.0625rem; color: #059669;">+${formatCurrency(s.totalSale)}</span>
+                    <div style="font-size: 0.8125rem; color: var(--text-muted); margin-top: 4px;">
+                      Lucro: <span style="color: ${s.profit >= 0 ? '#059669' : '#dc2626'}; font-weight: 700;">${formatCurrency(s.profit)}</span> (${s.marginPercent.toFixed(1)}%)
                     </div>
                   </div>
                   <div class="actions" onclick="event.stopPropagation();">
-                    <button class="action-btn btn-secondary btn-receivable-menu" data-id="${s.receivableId}" style="padding: 6px 10px; font-size: 14px;" title="Ações">⋮</button>
+                    <button class="action-btn btn-secondary btn-sale-menu" data-id="${s.orderNumber}" data-rec-id="${s.receivableId || ''}" style="padding: 6px 12px; font-size: 14px;" title="Ações">⋮</button>
                   </div>
                 </div>
               `;
@@ -565,8 +523,8 @@ function renderDespesasTab() {
               const statusClass = isPaid ? 'status-green' : 'status-yellow';
               
               return `
-                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px;">
-                  <div class="list-main" style="cursor: pointer;" data-action="edit-expense" data-id="${e.id}">
+                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px; cursor: pointer;" data-action="view-expense" data-id="${e.id}">
+                  <div class="list-main">
                     <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
                       ${escapeHtml(e.description)}
                       <span class="badge-count" style="background: rgba(100, 116, 139, 0.12); color: var(--text-secondary); font-size: 11px; padding: 2px 8px;">${escapeHtml(e.category || 'Operacional')}</span>
@@ -657,8 +615,8 @@ function renderAReceberTab() {
               const statusClass = isReceived ? 'status-green' : 'status-yellow';
               
               return `
-                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px;">
-                  <div class="list-main" style="cursor: pointer;" data-action="edit-receivable" data-id="${r.id}">
+                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px; cursor: pointer;" data-action="view-receivable" data-id="${r.id}">
+                  <div class="list-main">
                     <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
                       ${escapeHtml(r.customer || 'Cliente')}
                       ${r.orderId ? `<span class="badge-count" style="background: rgba(59, 130, 246, 0.12); color: #3b82f6; font-size: 11px; padding: 2px 8px;">Pedido ${r.orderId}</span>` : ''}
@@ -747,8 +705,8 @@ function renderAPagarTab() {
               const isPaid = p.status === 'pago';
               const statusClass = isPaid ? 'status-green' : 'status-yellow';
               return `
-                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px;">
-                  <div class="list-main" style="cursor: pointer;" data-action="edit-payable" data-id="${p.id}">
+                <div class="list-row ${statusClass}" style="padding: 14px 18px; border-radius: 8px; cursor: pointer;" data-action="view-payable" data-id="${p.id}">
+                  <div class="list-main">
                     <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
                       ${escapeHtml(p.supplierName || 'Fornecedor')}
                       ${p.purchaseId ? `<span class="badge-count" style="background: rgba(139, 92, 246, 0.12); color: #8b5cf6; font-size: 11px; padding: 2px 8px;">Compra ${p.purchaseId}</span>` : ''}
@@ -783,23 +741,21 @@ function renderCustosTab() {
   return `
     <div style="display: flex; flex-direction: column; gap: 20px;">
       
-      <!-- Sub-filter Switcher -->
-      <div style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; overflow-x: auto;">
-        <button class="btn btn-sm ${costsSubFilter === 'produtos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="produtos" style="padding: 8px 14px;">
+      <!-- Sub-filter Switcher (Divisórias de Fichário Horizontais Padrão) -->
+      <div class="subtabs-binder" style="display: flex; gap: 4px; border-bottom: 2px solid #cbd5e1; padding-bottom: 0; overflow-x: auto; align-items: flex-end; margin-bottom: 8px;">
+        <button class="tab-btn ${costsSubFilter === 'produtos' ? 'active' : ''}" data-cost-filter="produtos">
           📦 Custos de Produtos (${analysis.products.length})
         </button>
-        <button class="btn btn-sm ${costsSubFilter === 'componentes' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="componentes" style="padding: 8px 14px;">
-          ⚙️ Custos de Componentes BOM (${analysis.components.length})
+        <button class="tab-btn ${costsSubFilter === 'componentes' ? 'active' : ''}" data-cost-filter="componentes">
+          ⚙️ Custos de Componentes (${analysis.components.length})
         </button>
-        <button class="btn btn-sm ${costsSubFilter === 'insumos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="insumos" style="padding: 8px 14px;">
-          🧵 Custo de Insumos Base (${analysis.materials.length})
+        <button class="tab-btn ${costsSubFilter === 'insumos' ? 'active' : ''}" data-cost-filter="insumos">
+          🧵 Insumos Base (${analysis.materials.length})
         </button>
-        <button class="btn btn-sm ${costsSubFilter === 'pedidos' ? 'btn-primary' : 'btn-secondary'}" data-cost-filter="pedidos" style="padding: 8px 14px;">
+        <button class="tab-btn ${costsSubFilter === 'pedidos' ? 'active' : ''}" data-cost-filter="pedidos">
           📋 Lucratividade por Pedido (${analysis.orders.length})
         </button>
       </div>
-
-      <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 0;" />
 
       ${costsSubFilter === 'produtos' ? `
         <div class="card" style="padding: 0; overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
@@ -807,7 +763,7 @@ function renderCustosTab() {
             <thead>
               <tr style="background: var(--bg-hover); border-bottom: 1px solid var(--border-subtle);">
                 <th style="padding: 10px 14px;">Produto</th>
-                <th style="padding: 10px 14px; text-align: center;">Ficha Técnica (BOM)</th>
+                <th style="padding: 10px 14px; text-align: center;">Ficha Técnica</th>
                 <th style="padding: 10px 14px; text-align: right;">Preço de Venda</th>
                 <th style="padding: 10px 14px; text-align: right;">Custo Unit. Real</th>
                 <th style="padding: 10px 14px; text-align: right;">Margem Contrib. (R$)</th>
@@ -816,14 +772,14 @@ function renderCustosTab() {
             </thead>
             <tbody>
               ${analysis.products.map(p => `
-                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <tr class="cost-row-clickable" data-cost-type="product" data-item-id="${p.id}" style="border-bottom: 1px solid var(--border-subtle); cursor: pointer;" title="Clique para ver o detalhamento técnico e margens deste produto">
                   <td style="padding: 10px 14px; font-weight: 600; color: var(--text-primary);">
                     ${escapeHtml(p.name)}
                   </td>
                   <td style="padding: 10px 14px; text-align: center;">
                     ${p.hasBOM ? `
                       <span class="badge" style="background: rgba(59, 130, 246, 0.12); color: #2563eb; font-weight: 600;">
-                        ✓ BOM (${p.bomItemsCount} itens)
+                        ✓ Ficha Técnica (${p.bomItemsCount} itens)
                       </span>
                     ` : `
                       <span class="badge" style="background: rgba(100, 116, 139, 0.12); color: var(--text-secondary);">
@@ -865,7 +821,7 @@ function renderCustosTab() {
             </thead>
             <tbody>
               ${analysis.components.map(c => `
-                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <tr class="cost-row-clickable" data-cost-type="component" data-item-id="${c.id}" style="border-bottom: 1px solid var(--border-subtle); cursor: pointer;" title="Clique para ver a ficha técnica e insumos deste componente">
                   <td style="padding: 10px 14px; font-weight: 600; color: var(--text-primary);">
                     ${escapeHtml(c.name)}
                   </td>
@@ -899,7 +855,7 @@ function renderCustosTab() {
             </thead>
             <tbody>
               ${analysis.materials.map(m => `
-                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <tr class="cost-row-clickable" data-cost-type="material" data-item-id="${m.id}" style="border-bottom: 1px solid var(--border-subtle); cursor: pointer;" title="Clique para ver o histórico e ficha deste insumo">
                   <td style="padding: 10px 14px; font-weight: 600; color: var(--text-primary);">
                     ${escapeHtml(m.name)}
                   </td>
@@ -938,7 +894,7 @@ function renderCustosTab() {
             </thead>
             <tbody>
               ${analysis.orders.map(o => `
-                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <tr class="cost-row-clickable" data-cost-type="order" data-item-id="${o.orderNumber}" style="border-bottom: 1px solid var(--border-subtle); cursor: pointer;" title="Clique para ver a lucratividade e composição de custos deste pedido">
                   <td style="padding: 10px 14px; font-weight: 700; color: var(--text-primary);">${o.orderNumber}</td>
                   <td style="padding: 10px 14px;">${escapeHtml(o.customer)}</td>
                   <td style="padding: 10px 14px;">${o.qty}x ${escapeHtml(o.productTitle)}</td>
@@ -1091,6 +1047,22 @@ function attachFinanceEventListeners() {
     });
   }
 
+  // Quick Action: New Receivable
+  const btnNewReceivable = document.getElementById('btn-quick-new-receivable');
+  if (btnNewReceivable) {
+    btnNewReceivable.addEventListener('click', () => {
+      openReceivableDrawer();
+    });
+  }
+
+  // Quick Action: New Payable
+  const btnNewPayable = document.getElementById('btn-quick-new-payable');
+  if (btnNewPayable) {
+    btnNewPayable.addEventListener('click', () => {
+      openPayableDrawer();
+    });
+  }
+
   // CSV Export & Import
   const btnExportCSV = document.getElementById('btn-finance-export-csv');
   if (btnExportCSV) {
@@ -1107,52 +1079,126 @@ function attachFinanceEventListeners() {
 
 /**
  * Attaches event listeners to rows and dynamic action buttons inside subtabs.
+ * Strictly respects global PAPER MAX rules:
+ * - Clicking row opens Consultation Drawer
+ * - ⋮ menu items have 100% functional implementations (Resumo, Editar, Duplicar, Pagar/Receber, Excluir)
+ * - Click propagation on actions is blocked
  */
 function attachSubtabDynamicListeners() {
-  document.querySelectorAll('.btn-expense-menu').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+  const container = document.getElementById('finance-subtab-container');
+  if (!container) return;
+
+  container.onclick = (e) => {
+    // 1. Menu options (⋮) for Sales
+    const saleMenuBtn = e.target.closest('.btn-sale-menu');
+    if (saleMenuBtn) {
       e.stopPropagation();
-      const id = btn.getAttribute('data-id');
+      const orderNumber = saleMenuBtn.getAttribute('data-id');
+      const recId = saleMenuBtn.getAttribute('data-rec-id');
+      const menuOptions = [
+        {
+          label: '📄 Resumo da Venda',
+          icon: '📄',
+          action: () => showSaleConsultationDrawer(orderNumber)
+        }
+      ];
+
+      if (recId) {
+        const rec = getReceivableById(recId);
+        if (rec && rec.status !== 'recebido') {
+          menuOptions.push({
+            label: '💵 Dar Baixa / Receber',
+            icon: '💵',
+            action: () => openReceiveModal(recId)
+          });
+        }
+      }
+
+      menuOptions.push({
+        label: '📦 Ver nos Pedidos',
+        icon: '📦',
+        action: () => switchView('pedidos')
+      });
+
+      openContextMenu(e, menuOptions);
+      return;
+    }
+
+    // 2. Menu options (⋮) for Expenses
+    const expenseMenuBtn = e.target.closest('.btn-expense-menu');
+    if (expenseMenuBtn) {
+      e.stopPropagation();
+      const id = expenseMenuBtn.getAttribute('data-id');
       const exp = getExpenseById(id);
       if (!exp) return;
 
       const isPaid = exp.status === 'pago';
-      const menuOptions = [];
+      const menuOptions = [
+        {
+          label: '📄 Resumo da Despesa',
+          icon: '📄',
+          action: () => showExpenseConsultationDrawer(id)
+        }
+      ];
 
       if (!isPaid) {
         menuOptions.push({
-          label: '💵 Pagar',
+          label: '💵 Pagar Despesa',
           icon: '💵',
           action: () => openPayExpenseModal(id)
         });
       }
-      menuOptions.push({ label: '✏️ Editar', icon: '✏️', action: () => openExpenseDrawer(id) });
+
+      menuOptions.push({
+        label: '📋 Duplicar',
+        icon: '📋',
+        action: () => duplicateExpense(id)
+      });
+
+      menuOptions.push({
+        label: '✏️ Editar',
+        icon: '✏️',
+        action: () => openExpenseDrawer(id)
+      });
+
       menuOptions.push({
         label: '🗑️ Excluir',
         icon: '🗑️',
         danger: true,
         action: () => {
-          if (confirm('Excluir esta despesa?')) {
-            deleteExpense(id);
-            renderFinanceModule();
-          }
+          showConfirmDialog({
+            title: 'Excluir Despesa',
+            message: `Tem certeza que deseja excluir a despesa "${exp.description}"?`,
+            confirmText: 'Excluir',
+            isDanger: true,
+            onConfirm: () => {
+              deleteExpense(id);
+              renderFinanceModule();
+            }
+          });
         }
       });
 
       openContextMenu(e, menuOptions);
-    });
-  });
+      return;
+    }
 
-  document.querySelectorAll('.btn-receivable-menu').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    // 3. Menu options (⋮) for Receivables
+    const receivableMenuBtn = e.target.closest('.btn-receivable-menu');
+    if (receivableMenuBtn) {
       e.stopPropagation();
-      const id = btn.getAttribute('data-id');
-      const recs = getReceivables();
-      const rec = recs.find(x => x.id === id);
+      const id = receivableMenuBtn.getAttribute('data-id');
+      const rec = getReceivableById(id);
       if (!rec) return;
 
       const isReceived = rec.status === 'recebido' || rec.status === 'recebida';
-      const menuOptions = [];
+      const menuOptions = [
+        {
+          label: '📄 Resumo da Conta',
+          icon: '📄',
+          action: () => showReceivableConsultationDrawer(id)
+        }
+      ];
 
       if (!isReceived) {
         menuOptions.push({
@@ -1161,33 +1207,57 @@ function attachSubtabDynamicListeners() {
           action: () => openReceiveModal(id)
         });
       }
-      menuOptions.push({ label: '✏️ Editar', icon: '✏️', action: () => openReceivableDrawer(id) });
+
+      menuOptions.push({
+        label: '📋 Duplicar',
+        icon: '📋',
+        action: () => duplicateReceivable(id)
+      });
+
+      menuOptions.push({
+        label: '✏️ Editar',
+        icon: '✏️',
+        action: () => openReceivableDrawer(id)
+      });
+
       menuOptions.push({
         label: '🗑️ Excluir',
         icon: '🗑️',
         danger: true,
         action: () => {
-          if (confirm('Excluir este recebível?')) {
-            deleteReceivable(id);
-            renderFinanceModule();
-          }
+          showConfirmDialog({
+            title: 'Excluir Conta a Receber',
+            message: `Tem certeza que deseja excluir este recebível de "${rec.customer}"?`,
+            confirmText: 'Excluir',
+            isDanger: true,
+            onConfirm: () => {
+              deleteReceivable(id);
+              renderFinanceModule();
+            }
+          });
         }
       });
 
       openContextMenu(e, menuOptions);
-    });
-  });
+      return;
+    }
 
-  document.querySelectorAll('.btn-payable-menu').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    // 4. Menu options (⋮) for Payables
+    const payableMenuBtn = e.target.closest('.btn-payable-menu');
+    if (payableMenuBtn) {
       e.stopPropagation();
-      const id = btn.getAttribute('data-id');
-      const pays = getPayables();
-      const pay = pays.find(x => x.id === id);
+      const id = payableMenuBtn.getAttribute('data-id');
+      const pay = getPayableById(id);
       if (!pay) return;
 
       const isPaid = pay.status === 'pago';
-      const menuOptions = [];
+      const menuOptions = [
+        {
+          label: '📄 Resumo da Conta',
+          icon: '📄',
+          action: () => showPayableConsultationDrawer(id)
+        }
+      ];
 
       if (!isPaid) {
         menuOptions.push({
@@ -1196,32 +1266,721 @@ function attachSubtabDynamicListeners() {
           action: () => openPayPayableModal(id)
         });
       }
-      menuOptions.push({ label: '✏️ Editar', icon: '✏️', action: () => openPayableDrawer(id) });
+
+      menuOptions.push({
+        label: '📋 Duplicar',
+        icon: '📋',
+        action: () => duplicatePayable(id)
+      });
+
+      menuOptions.push({
+        label: '✏️ Editar',
+        icon: '✏️',
+        action: () => openPayableDrawer(id)
+      });
+
       menuOptions.push({
         label: '🗑️ Excluir',
         icon: '🗑️',
         danger: true,
         action: () => {
-          if (confirm('Excluir esta conta a pagar?')) {
-            deletePayable(id);
-            renderFinanceModule();
-          }
+          showConfirmDialog({
+            title: 'Excluir Conta a Pagar',
+            message: `Tem certeza que deseja excluir esta conta a pagar para "${pay.supplierName}"?`,
+            confirmText: 'Excluir',
+            isDanger: true,
+            onConfirm: () => {
+              deletePayable(id);
+              renderFinanceModule();
+            }
+          });
         }
       });
 
       openContextMenu(e, menuOptions);
-    });
-  });
+      return;
+    }
+
+    // 5. Click on List Row -> Open Consultation Drawer (RULE 1)
+    const cardRow = e.target.closest('.list-row');
+    if (cardRow) {
+      const id = cardRow.getAttribute('data-id');
+      const action = cardRow.getAttribute('data-action');
+      if (action === 'view-sale' || currentFinanceTab === 'vendas') {
+        if (id) showSaleConsultationDrawer(id);
+        return;
+      }
+      if (action === 'view-expense' || currentFinanceTab === 'despesas') {
+        if (id) showExpenseConsultationDrawer(id);
+        return;
+      }
+      if (action === 'view-receivable' || currentFinanceTab === 'receber') {
+        if (id) showReceivableConsultationDrawer(id);
+        return;
+      }
+      if (action === 'view-payable' || currentFinanceTab === 'pagar') {
+        if (id) showPayableConsultationDrawer(id);
+        return;
+      }
+    }
+
+    // 6. Click on Cost Row -> Open Cost Breakdown Drawer (RULE 1)
+    const costRow = e.target.closest('.cost-row-clickable');
+    if (costRow) {
+      const costType = costRow.getAttribute('data-cost-type');
+      const itemId = costRow.getAttribute('data-item-id');
+      if (costType && itemId) {
+        showCostDetailDrawer(costType, itemId);
+        return;
+      }
+    }
+  };
 }
 
 // ==========================================
-// 8. DRAWERS & MODALS
+// 8. DRAWERS & MODALS (STANDARDIZED VIA GLOBAL openDrawer)
 // ==========================================
 
-function openExpenseDrawer(expenseId = null) {
-  const modalContainer = document.getElementById('finance-modal-container');
-  if (!modalContainer) return;
+function duplicateExpense(id) {
+  const exp = getExpenseById(id);
+  if (!exp) return;
+  const newExp = createExpense({
+    description: `${exp.description} (Cópia)`,
+    category: exp.category,
+    amount: exp.amount,
+    date: formatDateBR(new Date()),
+    dueDate: formatDateBR(new Date()),
+    status: 'aberto',
+    paymentMethod: exp.paymentMethod,
+    notes: exp.notes
+  });
+  showToast(`Despesa duplicada com sucesso! (${newExp.id})`);
+  renderFinanceModule();
+}
 
+function duplicateReceivable(id) {
+  const rec = getReceivableById(id);
+  if (!rec) return;
+  const newRec = createReceivable({
+    customer: rec.customer,
+    description: `${rec.description} (Cópia)`,
+    amount: rec.amount,
+    dueDate: formatDateBR(new Date()),
+    status: 'aberto',
+    paymentMethod: rec.paymentMethod,
+    notes: rec.notes
+  });
+  showToast(`Conta a receber duplicada com sucesso! (${newRec.id})`);
+  renderFinanceModule();
+}
+
+function duplicatePayable(id) {
+  const pay = getPayableById(id);
+  if (!pay) return;
+  const newPay = createPayable({
+    supplierName: pay.supplierName,
+    description: `${pay.description} (Cópia)`,
+    amount: pay.amount,
+    dueDate: formatDateBR(new Date()),
+    status: 'aberto',
+    paymentMethod: pay.paymentMethod,
+    notes: pay.notes
+  });
+  showToast(`Conta a pagar duplicada com sucesso! (${newPay.id})`);
+  renderFinanceModule();
+}
+
+// ----------------------------------------------------
+// CONSULTATION DRAWERS (RULE 1: Click on Card/Row opens consultation)
+// ----------------------------------------------------
+
+function showExpenseConsultationDrawer(expenseId) {
+  const exp = getExpenseById(expenseId);
+  if (!exp) return;
+  const isPaid = exp.status === 'pago';
+  const statusColor = isPaid ? '#10b981' : '#f59e0b';
+  const statusBg = isPaid ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)';
+  const statusLabel = isPaid ? '✓ Pago' : '⏳ Em Aberto';
+
+  const contentHtml = `
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 0;">
+      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <div>
+            <h4 style="font-size: 16px; font-weight: 800; margin: 0 0 4px 0; color: var(--text-primary);">${escapeHtml(exp.description)}</h4>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+              Categoria: <strong>${escapeHtml(exp.category || 'Operacional')}</strong> · ID: <span style="font-family: monospace;">${exp.id}</span>
+            </div>
+          </div>
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: ${statusBg}; color: ${statusColor};">
+            ${statusLabel}
+          </span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Valor da Despesa</div>
+          <div style="font-size: 20px; font-weight: 800; color: #ef4444; margin-top: 2px;">${formatCurrency(exp.amount)}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Forma de Pagamento</div>
+          <div style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">${escapeHtml(exp.paymentMethod || 'Pix')}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Data de Emissão</div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 2px;">${exp.date || '--/--/----'}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Vencimento</div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 2px;">${exp.dueDate || '--/--/----'}</div>
+        </div>
+      </div>
+
+      ${isPaid ? `
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #065f46;">
+          ✓ <strong>Pagamento Realizado:</strong> Baixa efetuada em <b>${exp.paidDate || '--/--/----'}</b> via <b>${escapeHtml(exp.paymentMethod || 'Pix')}</b>.
+        </div>
+      ` : ''}
+
+      <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+        <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">Observações & Notas</div>
+        <div style="font-size: 13px; color: ${exp.notes ? 'var(--text-primary)' : 'var(--text-muted)'}; white-space: pre-wrap;">${escapeHtml(exp.notes) || 'Nenhuma observação registrada.'}</div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end; flex-wrap: wrap;">
+      ${!isPaid ? `
+        <button type="button" class="btn btn-sm btn-primary" id="btn-consult-exp-pay" style="padding: 8px 14px;">
+          💵 Pagar Despesa
+        </button>
+      ` : ''}
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-consult-exp-dup" style="padding: 8px 14px;">
+        📋 Duplicar
+      </button>
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-consult-exp-edit" style="padding: 8px 14px;">
+        ✏️ Editar
+      </button>
+      <button type="button" class="btn btn-sm btn-danger" id="btn-consult-exp-del" style="padding: 8px 14px;">
+        🗑️ Excluir
+      </button>
+    </div>
+  `;
+
+  openDrawer({
+    title: '📄 Resumo da Despesa',
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-consult-exp-pay')?.addEventListener('click', () => {
+        close();
+        openPayExpenseModal(exp.id);
+      });
+      drawer.querySelector('#btn-consult-exp-dup')?.addEventListener('click', () => {
+        close();
+        duplicateExpense(exp.id);
+      });
+      drawer.querySelector('#btn-consult-exp-edit')?.addEventListener('click', () => {
+        close();
+        openExpenseDrawer(exp.id);
+      });
+      drawer.querySelector('#btn-consult-exp-del')?.addEventListener('click', () => {
+        close();
+        showConfirmDialog({
+          title: 'Excluir Despesa',
+          message: `Deseja realmente excluir a despesa "${exp.description}"?`,
+          confirmText: 'Excluir',
+          isDanger: true,
+          onConfirm: () => {
+            deleteExpense(exp.id);
+            renderFinanceModule();
+          }
+        });
+      });
+    }
+  });
+}
+
+function showReceivableConsultationDrawer(recId) {
+  const rec = getReceivableById(recId);
+  if (!rec) return;
+  const isReceived = rec.status === 'recebido' || rec.status === 'recebida';
+  const statusColor = isReceived ? '#10b981' : '#f59e0b';
+  const statusBg = isReceived ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)';
+  const statusLabel = isReceived ? '✓ Recebido' : '⏳ Em Aberto';
+
+  const contentHtml = `
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 0;">
+      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <div>
+            <h4 style="font-size: 16px; font-weight: 800; margin: 0 0 4px 0; color: var(--text-primary);">${escapeHtml(rec.customer || 'Cliente Avulso')}</h4>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+              ${escapeHtml(rec.description)} · ID: <span style="font-family: monospace;">${rec.id}</span>
+              ${rec.orderId ? ` · <strong style="color: #2563eb;">Pedido ${rec.orderId}</strong>` : ''}
+            </div>
+          </div>
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: ${statusBg}; color: ${statusColor};">
+            ${statusLabel}
+          </span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Valor a Receber</div>
+          <div style="font-size: 20px; font-weight: 800; color: #10b981; margin-top: 2px;">${formatCurrency(rec.amount)}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Forma de Pagamento</div>
+          <div style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">${escapeHtml(rec.paymentMethod || 'Pix')}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Data de Vencimento</div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 2px;">${rec.dueDate || '--/--/----'}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Status Atual</div>
+          <div style="font-size: 14px; font-weight: 600; color: ${statusColor}; margin-top: 2px;">${statusLabel}</div>
+        </div>
+      </div>
+
+      ${isReceived ? `
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #065f46;">
+          ✓ <strong>Recebimento Confirmado:</strong> Baixa registrada em <b>${rec.paidDate || '--/--/----'}</b> via <b>${escapeHtml(rec.paymentMethod || 'Pix')}</b>.
+        </div>
+      ` : ''}
+
+      <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+        <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">Observações & Notas</div>
+        <div style="font-size: 13px; color: ${rec.notes ? 'var(--text-primary)' : 'var(--text-muted)'}; white-space: pre-wrap;">${escapeHtml(rec.notes) || 'Nenhuma observação cadastrada.'}</div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end; flex-wrap: wrap;">
+      ${!isReceived ? `
+        <button type="button" class="btn btn-sm btn-primary" id="btn-consult-rec-pay" style="padding: 8px 14px;">
+          💵 Confirmar Recebimento
+        </button>
+      ` : ''}
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-consult-rec-dup" style="padding: 8px 14px;">
+        📋 Duplicar
+      </button>
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-consult-rec-edit" style="padding: 8px 14px;">
+        ✏️ Editar
+      </button>
+      <button type="button" class="btn btn-sm btn-danger" id="btn-consult-rec-del" style="padding: 8px 14px;">
+        🗑️ Excluir
+      </button>
+    </div>
+  `;
+
+  openDrawer({
+    title: '📄 Resumo da Conta a Receber',
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-consult-rec-pay')?.addEventListener('click', () => {
+        close();
+        openReceiveModal(rec.id);
+      });
+      drawer.querySelector('#btn-consult-rec-dup')?.addEventListener('click', () => {
+        close();
+        duplicateReceivable(rec.id);
+      });
+      drawer.querySelector('#btn-consult-rec-edit')?.addEventListener('click', () => {
+        close();
+        openReceivableDrawer(rec.id);
+      });
+      drawer.querySelector('#btn-consult-rec-del')?.addEventListener('click', () => {
+        close();
+        showConfirmDialog({
+          title: 'Excluir Conta a Receber',
+          message: `Deseja realmente excluir o recebível de "${rec.customer}"?`,
+          confirmText: 'Excluir',
+          isDanger: true,
+          onConfirm: () => {
+            deleteReceivable(rec.id);
+            renderFinanceModule();
+          }
+        });
+      });
+    }
+  });
+}
+
+function showPayableConsultationDrawer(payId) {
+  const pay = getPayableById(payId);
+  if (!pay) return;
+  const isPaid = pay.status === 'pago';
+  const statusColor = isPaid ? '#10b981' : '#f59e0b';
+  const statusBg = isPaid ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)';
+  const statusLabel = isPaid ? '✓ Pago' : '⏳ Em Aberto';
+
+  const contentHtml = `
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 0;">
+      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <div>
+            <h4 style="font-size: 16px; font-weight: 800; margin: 0 0 4px 0; color: var(--text-primary);">${escapeHtml(pay.supplierName || 'Fornecedor Avulso')}</h4>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+              ${escapeHtml(pay.description)} · ID: <span style="font-family: monospace;">${pay.id}</span>
+              ${pay.purchaseId ? ` · <strong style="color: #8b5cf6;">Compra ${pay.purchaseId}</strong>` : ''}
+            </div>
+          </div>
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: ${statusBg}; color: ${statusColor};">
+            ${statusLabel}
+          </span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Valor da Conta</div>
+          <div style="font-size: 20px; font-weight: 800; color: #ef4444; margin-top: 2px;">${formatCurrency(pay.amount)}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Forma de Pagamento</div>
+          <div style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">${escapeHtml(pay.paymentMethod || 'Boleto')}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Data de Vencimento</div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 2px;">${pay.dueDate || '--/--/----'}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Status Atual</div>
+          <div style="font-size: 14px; font-weight: 600; color: ${statusColor}; margin-top: 2px;">${statusLabel}</div>
+        </div>
+      </div>
+
+      ${isPaid ? `
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #065f46;">
+          ✓ <strong>Pagamento Realizado:</strong> Baixa registrada em <b>${pay.paidDate || '--/--/----'}</b> via <b>${escapeHtml(pay.paymentMethod || 'Boleto')}</b>.
+        </div>
+      ` : ''}
+
+      <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+        <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">Observações & Notas</div>
+        <div style="font-size: 13px; color: ${pay.notes ? 'var(--text-primary)' : 'var(--text-muted)'}; white-space: pre-wrap;">${escapeHtml(pay.notes) || 'Nenhuma observação cadastrada.'}</div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end; flex-wrap: wrap;">
+      ${!isPaid ? `
+        <button type="button" class="btn btn-sm btn-primary" id="btn-consult-pay-pay" style="padding: 8px 14px;">
+          💵 Confirmar Pagamento
+        </button>
+      ` : ''}
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-consult-pay-dup" style="padding: 8px 14px;">
+        📋 Duplicar
+      </button>
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-consult-pay-edit" style="padding: 8px 14px;">
+        ✏️ Editar
+      </button>
+      <button type="button" class="btn btn-sm btn-danger" id="btn-consult-pay-del" style="padding: 8px 14px;">
+        🗑️ Excluir
+      </button>
+    </div>
+  `;
+
+  openDrawer({
+    title: '📄 Resumo da Conta a Pagar',
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-consult-pay-pay')?.addEventListener('click', () => {
+        close();
+        openPayPayableModal(pay.id);
+      });
+      drawer.querySelector('#btn-consult-pay-dup')?.addEventListener('click', () => {
+        close();
+        duplicatePayable(pay.id);
+      });
+      drawer.querySelector('#btn-consult-pay-edit')?.addEventListener('click', () => {
+        close();
+        openPayableDrawer(pay.id);
+      });
+      drawer.querySelector('#btn-consult-pay-del')?.addEventListener('click', () => {
+        close();
+        showConfirmDialog({
+          title: 'Excluir Conta a Pagar',
+          message: `Deseja realmente excluir a conta a pagar para "${pay.supplierName}"?`,
+          confirmText: 'Excluir',
+          isDanger: true,
+          onConfirm: () => {
+            deletePayable(pay.id);
+            renderFinanceModule();
+          }
+        });
+      });
+    }
+  });
+}
+
+function showSaleConsultationDrawer(orderNumber) {
+  const sales = getSalesFromOrders();
+  const s = sales.find(x => x.orderNumber === orderNumber);
+  if (!s) return;
+
+  const isReceived = s.receivingStatus === 'recebido';
+  const statusColor = isReceived ? '#10b981' : '#f59e0b';
+  const statusBg = isReceived ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)';
+  const statusLabel = isReceived ? '✓ Recebido' : '⏳ Pendente';
+
+  const contentHtml = `
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 0;">
+      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <div>
+            <h4 style="font-size: 16px; font-weight: 800; margin: 0 0 4px 0; color: var(--text-primary);">${s.orderNumber} · ${escapeHtml(s.customer)}</h4>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+              Produto: <strong>${escapeHtml(s.productTitle)}</strong> · Quantidade: <strong>${s.qty} un</strong>
+              ${s.hasSnapshot ? ' · <span style="color: #2563eb; font-weight: 600;">📸 Snapshot Ativo</span>' : ''}
+            </div>
+          </div>
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: ${statusBg}; color: ${statusColor};">
+            ${statusLabel}
+          </span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Receita Total Venda</div>
+          <div style="font-size: 20px; font-weight: 800; color: #10b981; margin-top: 2px;">${formatCurrency(s.totalSale)}</div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Preço unitário: ${formatCurrency(s.unitPrice)}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Custo Técnico Total</div>
+          <div style="font-size: 20px; font-weight: 800; color: #ef4444; margin-top: 2px;">${formatCurrency(s.totalCost)}</div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Custo unitário: ${formatCurrency(s.unitCost)}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Lucro Real Bruto</div>
+          <div style="font-size: 18px; font-weight: 800; color: ${s.profit >= 0 ? '#10b981' : '#ef4444'}; margin-top: 2px;">${formatCurrency(s.profit)}</div>
+        </div>
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Margem de Contribuição</div>
+          <div style="font-size: 18px; font-weight: 800; color: ${s.marginPercent >= 50 ? '#10b981' : '#f59e0b'}; margin-top: 2px;">${s.marginPercent.toFixed(1)}%</div>
+        </div>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+        <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">Recebimento & Integração</div>
+        <div style="font-size: 13px; color: var(--text-secondary);">
+          Forma de pagamento vinculada: <strong>${escapeHtml(s.paymentMethod || 'Pix')}</strong><br/>
+          Status de baixa no fluxo de caixa: <strong style="color: ${statusColor};">${statusLabel}</strong>
+          ${s.receivableId ? `<br/>ID do Título a Receber: <span style="font-family: monospace;">${s.receivableId}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end; flex-wrap: wrap;">
+      ${(!isReceived && s.receivableId) ? `
+        <button type="button" class="btn btn-sm btn-primary" id="btn-consult-sale-receive" style="padding: 8px 14px;">
+          💵 Confirmar Recebimento
+        </button>
+      ` : ''}
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-consult-sale-orders" style="padding: 8px 14px;">
+        📦 Ver Pedido nos Pedidos
+      </button>
+    </div>
+  `;
+
+  openDrawer({
+    title: `📄 Resumo da Venda · Pedido ${s.orderNumber}`,
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-consult-sale-receive')?.addEventListener('click', () => {
+        close();
+        if (s.receivableId) openReceiveModal(s.receivableId);
+      });
+      drawer.querySelector('#btn-consult-sale-orders')?.addEventListener('click', () => {
+        close();
+        switchView('pedidos');
+      });
+    }
+  });
+}
+
+function showCostDetailDrawer(costType, itemId) {
+  const analysis = getDetailedCostsAnalysis();
+
+  if (costType === 'product') {
+    const p = analysis.products.find(x => String(x.id) === String(itemId));
+    if (!p) return;
+
+    const contentHtml = `
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 0;">
+        <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px;">
+          <h4 style="font-size: 16px; font-weight: 800; margin: 0 0 4px 0; color: var(--text-primary);">${escapeHtml(p.name)}</h4>
+          <div style="font-size: 12px; color: var(--text-secondary);">
+            Estrutura Técnica: <strong>${p.hasBOM ? `Engenharia de Produto (${p.bomItemsCount} itens no BOM)` : 'Estimativa Direta de Custo'}</strong>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Preço de Venda</div>
+            <div style="font-size: 18px; font-weight: 800; color: #10b981; margin-top: 2px;">${formatCurrency(p.price)}</div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Custo Técnico Real</div>
+            <div style="font-size: 18px; font-weight: 800; color: #ef4444; margin-top: 2px;">${formatCurrency(p.cost)}</div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Margem em R$</div>
+            <div style="font-size: 18px; font-weight: 800; color: ${p.marginAmount >= 0 ? '#10b981' : '#ef4444'}; margin-top: 2px;">${formatCurrency(p.marginAmount)}</div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Margem %</div>
+            <div style="font-size: 18px; font-weight: 800; color: ${p.marginPercent >= 50 ? '#10b981' : '#f59e0b'}; margin-top: 2px;">${p.marginPercent.toFixed(1)}%</div>
+          </div>
+        </div>
+
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px;">
+            Composição Detalhada de Insumos e Componentes (BOM)
+          </div>
+          ${(!p.bomItems || p.bomItems.length === 0) ? `
+            <div style="font-size: 12px; color: var(--text-muted);">Este produto não possui itens vinculados na ficha técnica.</div>
+          ` : `
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              ${p.bomItems.map(item => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #f8fafc; border-radius: 6px; font-size: 12px;">
+                  <div>
+                    <strong style="color: var(--text-primary);">${escapeHtml(item.name)}</strong>
+                    <div style="color: var(--text-secondary); font-size: 11px;">Consumo: ${item.quantity} ${escapeHtml(item.unit || 'un')} · Custo unitário: ${formatCurrency(item.unitCost)}</div>
+                  </div>
+                  <strong style="color: #ef4444; font-size: 13px;">${formatCurrency(item.subtotalCost)}</strong>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+
+    openDrawer({
+      title: '🧮 Detalhamento Técnico · Produto',
+      contentHtml,
+      onMount: () => {}
+    });
+    return;
+  }
+
+  if (costType === 'component') {
+    const c = analysis.components.find(x => String(x.id) === String(itemId));
+    if (!c) return;
+
+    const contentHtml = `
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 0;">
+        <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px;">
+          <h4 style="font-size: 16px; font-weight: 800; margin: 0 0 4px 0; color: var(--text-primary);">${escapeHtml(c.name)}</h4>
+          <div style="font-size: 12px; color: var(--text-secondary);">
+            Componente Intermediário · Rendimento: <strong>${c.yield} un</strong>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Custo Unitário Calculado</div>
+            <div style="font-size: 18px; font-weight: 800; color: #ef4444; margin-top: 2px;">${formatCurrency(c.unitCost)}</div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Saldo em Estoque</div>
+            <div style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-top: 2px;">${c.currentStock} un</div>
+          </div>
+        </div>
+
+        <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">Insumos Consumidos no Lote</div>
+          ${(!c.items || c.items.length === 0) ? `
+            <div style="font-size: 12px; color: var(--text-muted);">Nenhum insumo associado na receita do componente.</div>
+          ` : `
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              ${c.items.map(it => `
+                <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #f8fafc; border-radius: 6px; font-size: 12px;">
+                  <span>${escapeHtml(it.materialName || it.name || 'Insumo')}</span>
+                  <strong>${it.quantity} ${escapeHtml(it.unit || 'un')}</strong>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+
+    openDrawer({
+      title: '🧮 Detalhamento Técnico · Componente',
+      contentHtml,
+      onMount: () => {}
+    });
+    return;
+  }
+
+  if (costType === 'material') {
+    const m = analysis.materials.find(x => String(x.id) === String(itemId));
+    if (!m) return;
+
+    const contentHtml = `
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 0;">
+        <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px;">
+          <h4 style="font-size: 16px; font-weight: 800; margin: 0 0 4px 0; color: var(--text-primary);">${escapeHtml(m.name)}</h4>
+          <div style="font-size: 12px; color: var(--text-secondary);">
+            Insumo de Produção · Unidade Base: <strong>${escapeHtml(m.baseUnit)}</strong>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Custo Base Unitário</div>
+            <div style="font-size: 18px; font-weight: 800; color: #ef4444; margin-top: 2px;">${formatCurrency(m.baseUnitCost)}</div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Custo Embalagem Compra</div>
+            <div style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-top: 2px;">${formatCurrency(m.packCost)}</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Pacote com ${m.packQuantity} ${escapeHtml(m.baseUnit)}</div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Estoque Atual</div>
+            <div style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-top: 2px;">${m.currentStock} ${escapeHtml(m.baseUnit)}</div>
+          </div>
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Valor Total em Estoque</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0284c7; margin-top: 2px;">${formatCurrency(m.totalStockValue)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    openDrawer({
+      title: '🧮 Detalhamento Técnico · Insumo',
+      contentHtml,
+      onMount: () => {}
+    });
+    return;
+  }
+
+  if (costType === 'order') {
+    showSaleConsultationDrawer(itemId);
+  }
+}
+
+// ----------------------------------------------------
+// EDIT & CREATION DRAWERS (STANDARDIZED VIA GLOBAL openDrawer)
+// ----------------------------------------------------
+
+function openExpenseDrawer(expenseId = null) {
   const isEdit = !!expenseId;
   const expense = isEdit ? getExpenseById(expenseId) : {
     description: '',
@@ -1234,503 +1993,540 @@ function openExpenseDrawer(expenseId = null) {
     notes: ''
   };
 
-  modalContainer.innerHTML = `
-    <div class="modal-backdrop" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; display: flex; justify-content: flex-end;">
-      <div class="drawer" style="width: 100%; max-width: 460px; height: 100%; background: var(--bg-card); padding: 24px; box-shadow: -4px 0 24px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: space-between; overflow-y: auto;">
-        
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
-            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">
-              ${isEdit ? '✏️ Editar Despesa' : '➕ Nova Despesa'}
-            </h3>
-            <button class="btn-close" id="btn-close-drawer" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
+  const title = isEdit ? '✏️ Editar Despesa' : '➕ Nova Despesa';
+
+  const contentHtml = `
+    <div style="padding: 4px 0;">
+      <div class="binder-tabs">
+        <div class="binder-tab active">1. Dados da Despesa</div>
+      </div>
+      <div class="binder-panel" style="margin-bottom: 0;">
+        <form id="form-expense-drawer" style="display: flex; flex-direction: column; gap: 14px;">
+          <div>
+            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição da Despesa *</label>
+            <input type="text" id="exp-drawer-desc" class="form-input" required placeholder="Ex: Energia do ateliê, internet, frete..." value="${escapeHtml(expense.description)}" />
           </div>
 
-          <div class="binder-tabs">
-            <div class="binder-tab active">1. Dados da Despesa</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Categoria</label>
+              <select id="exp-drawer-cat" class="form-select">
+                ${EXPENSE_CATEGORIES.map(cat => `
+                  <option value="${cat}" ${expense.category === cat ? 'selected' : ''}>${cat}</option>
+                `).join('')}
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$) *</label>
+              <input type="number" step="0.01" min="0.01" id="exp-drawer-amount" class="form-input" required placeholder="0.00" value="${expense.amount || ''}" />
+            </div>
           </div>
-          <div class="binder-panel" style="margin-bottom: 0;">
-            <form id="form-expense" style="display: flex; flex-direction: column; gap: 14px;">
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição da Despesa *</label>
-                <input type="text" id="exp-desc" class="form-input" required placeholder="Ex: Energia do ateliê, internet, frete..." value="${escapeHtml(expense.description)}" />
-              </div>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Categoria</label>
-                  <select id="exp-cat" class="form-select">
-                    ${EXPENSE_CATEGORIES.map(cat => `
-                      <option value="${cat}" ${expense.category === cat ? 'selected' : ''}>${cat}</option>
-                    `).join('')}
-                  </select>
-                </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data Emissão</label>
+              <input type="text" id="exp-drawer-date" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(expense.date || '')}" />
+            </div>
 
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$) *</label>
-                  <input type="number" step="0.01" min="0.01" id="exp-amount" class="form-input" required placeholder="0.00" value="${expense.amount || ''}" />
-                </div>
-              </div>
-
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data Emissão</label>
-                  <input type="text" id="exp-date" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(expense.date || '')}" />
-                </div>
-
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data Vencimento</label>
-                  <input type="text" id="exp-duedate" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(expense.dueDate || '')}" />
-                </div>
-              </div>
-
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
-                  <select id="exp-status" class="form-select">
-                    <option value="aberto" ${expense.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
-                    <option value="pago" ${expense.status === 'pago' ? 'selected' : ''}>Pago</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
-                  <select id="exp-method" class="form-select">
-                    ${PAYMENT_METHODS.map(m => `
-                      <option value="${m}" ${expense.paymentMethod === m ? 'selected' : ''}>${m}</option>
-                    `).join('')}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
-                <textarea id="exp-notes" class="form-input" rows="3" placeholder="Informações adicionais...">${escapeHtml(expense.notes || '')}</textarea>
-              </div>
-            </form>
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data Vencimento</label>
+              <input type="text" id="exp-drawer-duedate" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(expense.dueDate || '')}" />
+            </div>
           </div>
-        </div>
 
-        <div style="display: flex; gap: 10px; margin-top: 24px;">
-          <button type="button" class="btn btn-secondary" id="btn-cancel-drawer" style="flex: 1;">Cancelar</button>
-          <button type="submit" form="form-expense" class="btn btn-primary" style="flex: 2;">
-            ${isEdit ? 'Salvar Alterações' : 'Cadastrar Despesa'}
-          </button>
-        </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
+              <select id="exp-drawer-status" class="form-select">
+                <option value="aberto" ${expense.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
+                <option value="pago" ${expense.status === 'pago' ? 'selected' : ''}>Pago</option>
+              </select>
+            </div>
 
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
+              <select id="exp-drawer-method" class="form-select">
+                ${PAYMENT_METHODS.map(m => `
+                  <option value="${m}" ${expense.paymentMethod === m ? 'selected' : ''}>${m}</option>
+                `).join('')}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
+            <textarea id="exp-drawer-notes" class="form-input" rows="3" placeholder="Informações adicionais...">${escapeHtml(expense.notes || '')}</textarea>
+          </div>
+        </form>
       </div>
     </div>
   `;
 
-  // Close handlers
-  const close = () => { modalContainer.innerHTML = ''; };
-  document.getElementById('btn-close-drawer')?.addEventListener('click', close);
-  document.getElementById('btn-cancel-drawer')?.addEventListener('click', close);
+  const footerHtml = `
+    <div style="display: flex; gap: 10px; width: 100%; justify-content: flex-end;">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-expense-drawer" style="flex: 1;">Cancelar</button>
+      <button type="submit" form="form-expense-drawer" class="btn btn-primary" style="flex: 2;">
+        ${isEdit ? 'Salvar Alterações' : 'Cadastrar Despesa'}
+      </button>
+    </div>
+  `;
 
-  // Submit Handler
-  document.getElementById('form-expense')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const data = {
-      description: document.getElementById('exp-desc').value,
-      category: document.getElementById('exp-cat').value,
-      amount: parseFloat(document.getElementById('exp-amount').value),
-      date: document.getElementById('exp-date').value,
-      dueDate: document.getElementById('exp-duedate').value,
-      status: document.getElementById('exp-status').value,
-      paymentMethod: document.getElementById('exp-method').value,
-      notes: document.getElementById('exp-notes').value
-    };
+  openDrawer({
+    title,
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-cancel-expense-drawer')?.addEventListener('click', close);
+      drawer.querySelector('#form-expense-drawer')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const data = {
+          description: drawer.querySelector('#exp-drawer-desc').value,
+          category: drawer.querySelector('#exp-drawer-cat').value,
+          amount: parseFloat(drawer.querySelector('#exp-drawer-amount').value),
+          date: drawer.querySelector('#exp-drawer-date').value,
+          dueDate: drawer.querySelector('#exp-drawer-duedate').value,
+          status: drawer.querySelector('#exp-drawer-status').value,
+          paymentMethod: drawer.querySelector('#exp-drawer-method').value,
+          notes: drawer.querySelector('#exp-drawer-notes').value
+        };
 
-    if (isEdit) {
-      updateExpense(expenseId, data);
-    } else {
-      createExpense(data);
+        if (isEdit) {
+          updateExpense(expenseId, data);
+          showToast('Despesa atualizada com sucesso!');
+        } else {
+          createExpense(data);
+          showToast('Despesa cadastrada com sucesso!');
+        }
+
+        close();
+        renderFinanceModule();
+      });
     }
-
-    close();
-    renderFinanceModule();
   });
 }
 
 function openReceiveModal(recId) {
-  const modalContainer = document.getElementById('finance-modal-container');
-  if (!modalContainer) return;
-
   const rec = getReceivableById(recId);
   if (!rec) return;
 
-  modalContainer.innerHTML = `
-    <div class="modal-backdrop" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px;">
-      <div class="card modal-content" style="max-width: 440px; width: 100%; background: var(--bg-card); padding: 24px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
-        
-        <h3 style="margin: 0 0 12px 0; font-size: 1.125rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-          ✓ Confirmar Recebimento
-        </h3>
-
-        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px;">
-          Confirmar o recebimento de <strong>${formatCurrency(rec.amount)}</strong> referente a: <br/>
-          <em style="color: var(--text-primary);">${escapeHtml(rec.description)} (${escapeHtml(rec.customer)})</em>
-        </p>
-
-        <form id="form-receive" style="display: flex; flex-direction: column; gap: 12px;">
-          <div>
-            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data do Recebimento</label>
-            <input type="text" id="rec-paid-date" class="form-input" value="${formatDateBR(new Date())}" />
-          </div>
-
-          <div>
-            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma de Pagamento</label>
-            <select id="rec-paid-method" class="form-select">
-              ${PAYMENT_METHODS.map(m => `
-                <option value="${m}" ${rec.paymentMethod === m ? 'selected' : ''}>${m}</option>
-              `).join('')}
-            </select>
-          </div>
-
-          <div>
-            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observação do Recebimento</label>
-            <input type="text" id="rec-paid-notes" class="form-input" placeholder="Ex: Comprovante enviado no WhatsApp..." />
-          </div>
-
-          <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
-            <button type="button" class="btn btn-secondary" id="btn-cancel-receive">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Confirmar Recebimento</button>
-          </div>
-        </form>
-
+  const contentHtml = `
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 0;">
+      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+        <div style="font-size: 0.8125rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Conta a Receber</div>
+        <div style="font-size: 1.125rem; font-weight: 800; color: var(--text-primary); margin-top: 2px;">
+          ${escapeHtml(rec.customer || 'Cliente Geral')}
+        </div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 2px;">
+          ${escapeHtml(rec.description)}
+        </div>
+        <div style="font-size: 1.25rem; font-weight: 800; color: #10b981; margin-top: 6px;">
+          ${formatCurrency(rec.amount)}
+        </div>
       </div>
+
+      <form id="form-receive-drawer" style="display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data do Recebimento *</label>
+          <input type="text" id="rec-drawer-paid-date" class="form-input" required value="${formatDateBR(new Date())}" />
+        </div>
+
+        <div>
+          <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma de Pagamento</label>
+          <select id="rec-drawer-paid-method" class="form-select">
+            ${PAYMENT_METHODS.map(m => `
+              <option value="${m}" ${rec.paymentMethod === m ? 'selected' : ''}>${m}</option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observação do Recebimento</label>
+          <input type="text" id="rec-drawer-paid-notes" class="form-input" placeholder="Ex: Comprovante enviado via WhatsApp..." />
+        </div>
+      </form>
     </div>
   `;
 
-  const close = () => { modalContainer.innerHTML = ''; };
-  document.getElementById('btn-cancel-receive')?.addEventListener('click', close);
+  const footerHtml = `
+    <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end;">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-receive-drawer" style="flex: 1;">Cancelar</button>
+      <button type="submit" form="form-receive-drawer" class="btn btn-primary" style="flex: 2;">Confirmar Recebimento</button>
+    </div>
+  `;
 
-  document.getElementById('form-receive')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    receiveReceivable(recId, {
-      paidDate: document.getElementById('rec-paid-date').value,
-      paymentMethod: document.getElementById('rec-paid-method').value,
-      notes: document.getElementById('rec-paid-notes').value
-    });
-    close();
-    renderFinanceModule();
+  openDrawer({
+    title: '✓ Confirmar Recebimento',
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-cancel-receive-drawer')?.addEventListener('click', close);
+      drawer.querySelector('#form-receive-drawer')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        receiveReceivable(recId, {
+          paidDate: drawer.querySelector('#rec-drawer-paid-date').value,
+          paymentMethod: drawer.querySelector('#rec-drawer-paid-method').value,
+          notes: drawer.querySelector('#rec-drawer-paid-notes').value
+        });
+        showToast('Recebimento confirmado com sucesso!');
+        close();
+        renderFinanceModule();
+      });
+    }
   });
 }
 
 function openPayExpenseModal(expId) {
-  const modalContainer = document.getElementById('finance-modal-container');
-  if (!modalContainer) return;
-
   const exp = getExpenseById(expId);
   if (!exp) return;
 
-  modalContainer.innerHTML = `
-    <div class="modal-backdrop" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px;">
-      <div class="card modal-content" style="max-width: 440px; width: 100%; background: var(--bg-card); padding: 24px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
-        
-        <h3 style="margin: 0 0 12px 0; font-size: 1.125rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-          ✓ Confirmar Pagamento de Despesa
-        </h3>
-
-        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px;">
-          Confirmar o pagamento de <strong>${formatCurrency(exp.amount)}</strong> para:<br/>
-          <em style="color: var(--text-primary);">${escapeHtml(exp.description)}</em>
-        </p>
-
-        <form id="form-pay-exp" style="display: flex; flex-direction: column; gap: 12px;">
-          <div>
-            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data do Pagamento</label>
-            <input type="text" id="exp-paid-date" class="form-input" value="${formatDateBR(new Date())}" />
-          </div>
-
-          <div>
-            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma de Pagamento</label>
-            <select id="exp-paid-method" class="form-select">
-              ${PAYMENT_METHODS.map(m => `
-                <option value="${m}" ${exp.paymentMethod === m ? 'selected' : ''}>${m}</option>
-              `).join('')}
-            </select>
-          </div>
-
-          <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
-            <button type="button" class="btn btn-secondary" id="btn-cancel-pay-exp">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Confirmar Baixa</button>
-          </div>
-        </form>
-
+  const contentHtml = `
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 0;">
+      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+        <div style="font-size: 0.8125rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Despesa Operacional</div>
+        <div style="font-size: 1.125rem; font-weight: 800; color: var(--text-primary); margin-top: 2px;">
+          ${escapeHtml(exp.description)}
+        </div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 2px;">
+          Categoria: ${escapeHtml(exp.category || 'Geral')}
+        </div>
+        <div style="font-size: 1.25rem; font-weight: 800; color: #ef4444; margin-top: 6px;">
+          ${formatCurrency(exp.amount)}
+        </div>
       </div>
+
+      <form id="form-pay-exp-drawer" style="display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data do Pagamento *</label>
+          <input type="text" id="exp-drawer-paid-date" class="form-input" required value="${formatDateBR(new Date())}" />
+        </div>
+
+        <div>
+          <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma de Pagamento</label>
+          <select id="exp-drawer-paid-method" class="form-select">
+            ${PAYMENT_METHODS.map(m => `
+              <option value="${m}" ${exp.paymentMethod === m ? 'selected' : ''}>${m}</option>
+            `).join('')}
+          </select>
+        </div>
+      </form>
     </div>
   `;
 
-  const close = () => { modalContainer.innerHTML = ''; };
-  document.getElementById('btn-cancel-pay-exp')?.addEventListener('click', close);
+  const footerHtml = `
+    <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end;">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-pay-exp-drawer" style="flex: 1;">Cancelar</button>
+      <button type="submit" form="form-pay-exp-drawer" class="btn btn-primary" style="flex: 2;">Confirmar Baixa</button>
+    </div>
+  `;
 
-  document.getElementById('form-pay-exp')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    payExpense(expId, {
-      paidDate: document.getElementById('exp-paid-date').value,
-      paymentMethod: document.getElementById('exp-paid-method').value
-    });
-    close();
-    renderFinanceModule();
+  openDrawer({
+    title: '✓ Confirmar Pagamento de Despesa',
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-cancel-pay-exp-drawer')?.addEventListener('click', close);
+      drawer.querySelector('#form-pay-exp-drawer')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        payExpense(expId, {
+          paidDate: drawer.querySelector('#exp-drawer-paid-date').value,
+          paymentMethod: drawer.querySelector('#exp-drawer-paid-method').value
+        });
+        showToast('Pagamento de despesa confirmado com sucesso!');
+        close();
+        renderFinanceModule();
+      });
+    }
   });
 }
 
 function openPayPayableModal(payId) {
-  const modalContainer = document.getElementById('finance-modal-container');
-  if (!modalContainer) return;
-
   const pay = getPayableById(payId);
   if (!pay) return;
 
-  modalContainer.innerHTML = `
-    <div class="modal-backdrop" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px;">
-      <div class="card modal-content" style="max-width: 440px; width: 100%; background: var(--bg-card); padding: 24px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
-        
-        <h3 style="margin: 0 0 12px 0; font-size: 1.125rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-          ✓ Confirmar Pagamento de Conta
-        </h3>
+  const contentHtml = `
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 0;">
+      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
+        <div style="font-size: 0.8125rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Conta a Pagar</div>
+        <div style="font-size: 1.125rem; font-weight: 800; color: var(--text-primary); margin-top: 2px;">
+          ${escapeHtml(pay.supplierName || 'Fornecedor')}
+        </div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 2px;">
+          ${escapeHtml(pay.description)}
+        </div>
+        <div style="font-size: 1.25rem; font-weight: 800; color: #ef4444; margin-top: 6px;">
+          ${formatCurrency(pay.amount)}
+        </div>
+      </div>
 
-        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px;">
-          Confirmar o pagamento de <strong>${formatCurrency(pay.amount)}</strong> para:<br/>
-          <em style="color: var(--text-primary);">${escapeHtml(pay.description)} (${escapeHtml(pay.supplierName)})</em>
-        </p>
+      <form id="form-pay-pay-drawer" style="display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data do Pagamento *</label>
+          <input type="text" id="pay-drawer-paid-date" class="form-input" required value="${formatDateBR(new Date())}" />
+        </div>
 
-        <form id="form-pay-payable" style="display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma de Pagamento</label>
+          <select id="pay-drawer-paid-method" class="form-select">
+            ${PAYMENT_METHODS.map(m => `
+              <option value="${m}" ${pay.paymentMethod === m ? 'selected' : ''}>${m}</option>
+            `).join('')}
+          </select>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end;">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-pay-pay-drawer" style="flex: 1;">Cancelar</button>
+      <button type="submit" form="form-pay-pay-drawer" class="btn btn-primary" style="flex: 2;">Confirmar Pagamento</button>
+    </div>
+  `;
+
+  openDrawer({
+    title: '✓ Confirmar Pagamento de Conta',
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-cancel-pay-pay-drawer')?.addEventListener('click', close);
+      drawer.querySelector('#form-pay-pay-drawer')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        payPayable(payId, {
+          paidDate: drawer.querySelector('#pay-drawer-paid-date').value,
+          paymentMethod: drawer.querySelector('#pay-drawer-paid-method').value
+        });
+        showToast('Pagamento registrado com sucesso!');
+        close();
+        renderFinanceModule();
+      });
+    }
+  });
+}
+
+function openReceivableDrawer(recId = null) {
+  const isEdit = !!recId;
+  const rec = isEdit ? getReceivableById(recId) : {
+    customer: '',
+    description: '',
+    amount: '',
+    dueDate: formatDateBR(new Date()),
+    status: 'aberto',
+    paymentMethod: 'Pix',
+    notes: ''
+  };
+
+  const title = isEdit ? '✏️ Editar Conta a Receber' : '➕ Nova Conta a Receber';
+
+  const contentHtml = `
+    <div style="padding: 4px 0;">
+      <div class="binder-tabs">
+        <div class="binder-tab active">1. Dados da Conta</div>
+      </div>
+      <div class="binder-panel" style="margin-bottom: 0;">
+        <form id="form-rec-drawer" style="display: flex; flex-direction: column; gap: 14px;">
           <div>
-            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Data do Pagamento</label>
-            <input type="text" id="payable-paid-date" class="form-input" value="${formatDateBR(new Date())}" />
+            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Cliente / Pagador *</label>
+            <input type="text" id="rec-drawer-customer" class="form-input" required placeholder="Nome do cliente" value="${escapeHtml(rec.customer || '')}" />
           </div>
 
           <div>
-            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma de Pagamento</label>
-            <select id="payable-paid-method" class="form-select">
-              ${PAYMENT_METHODS.map(m => `
-                <option value="${m}" ${pay.paymentMethod === m ? 'selected' : ''}>${m}</option>
-              `).join('')}
-            </select>
+            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição da Conta *</label>
+            <input type="text" id="rec-drawer-desc" class="form-input" required placeholder="Ex: Encomenda de cadernos, entrada..." value="${escapeHtml(rec.description || '')}" />
           </div>
 
-          <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
-            <button type="button" class="btn btn-secondary" id="btn-cancel-pay-payable">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Confirmar Pagamento</button>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$) *</label>
+              <input type="number" step="0.01" min="0.01" id="rec-drawer-amount" class="form-input" required placeholder="0.00" value="${rec.amount || ''}" />
+            </div>
+
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Vencimento</label>
+              <input type="text" id="rec-drawer-duedate" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(rec.dueDate || '')}" />
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
+              <select id="rec-drawer-status" class="form-select">
+                <option value="aberto" ${rec.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
+                <option value="recebido" ${rec.status === 'recebido' ? 'selected' : ''}>Recebido</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
+              <select id="rec-drawer-method" class="form-select">
+                ${PAYMENT_METHODS.map(m => `
+                  <option value="${m}" ${rec.paymentMethod === m ? 'selected' : ''}>${m}</option>
+                `).join('')}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
+            <textarea id="rec-drawer-notes" class="form-input" rows="3" placeholder="Detalhes ou condições...">${escapeHtml(rec.notes || '')}</textarea>
           </div>
         </form>
-
       </div>
     </div>
   `;
 
-  const close = () => { modalContainer.innerHTML = ''; };
-  document.getElementById('btn-cancel-pay-payable')?.addEventListener('click', close);
+  const footerHtml = `
+    <div style="display: flex; gap: 10px; width: 100%; justify-content: flex-end;">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-rec-drawer" style="flex: 1;">Cancelar</button>
+      <button type="submit" form="form-rec-drawer" class="btn btn-primary" style="flex: 2;">
+        ${isEdit ? 'Salvar Alterações' : 'Cadastrar Recebível'}
+      </button>
+    </div>
+  `;
 
-  document.getElementById('form-pay-payable')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    payPayable(payId, {
-      paidDate: document.getElementById('payable-paid-date').value,
-      paymentMethod: document.getElementById('payable-paid-method').value
-    });
-    close();
-    renderFinanceModule();
+  openDrawer({
+    title,
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-cancel-rec-drawer')?.addEventListener('click', close);
+      drawer.querySelector('#form-rec-drawer')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const data = {
+          customer: drawer.querySelector('#rec-drawer-customer').value,
+          description: drawer.querySelector('#rec-drawer-desc').value,
+          amount: parseFloat(drawer.querySelector('#rec-drawer-amount').value),
+          dueDate: drawer.querySelector('#rec-drawer-duedate').value,
+          status: drawer.querySelector('#rec-drawer-status').value,
+          paymentMethod: drawer.querySelector('#rec-drawer-method').value,
+          notes: drawer.querySelector('#rec-drawer-notes').value
+        };
+
+        if (isEdit) {
+          updateReceivable(recId, data);
+          showToast('Conta a receber atualizada com sucesso!');
+        } else {
+          createReceivable(data);
+          showToast('Conta a receber cadastrada com sucesso!');
+        }
+
+        close();
+        renderFinanceModule();
+      });
+    }
   });
 }
 
-function openReceivableDrawer(recId) {
-  const modalContainer = document.getElementById('finance-modal-container');
-  if (!modalContainer) return;
+function openPayableDrawer(payId = null) {
+  const isEdit = !!payId;
+  const pay = isEdit ? getPayableById(payId) : {
+    supplierName: '',
+    description: '',
+    amount: '',
+    dueDate: formatDateBR(new Date()),
+    status: 'aberto',
+    paymentMethod: 'Boleto',
+    notes: ''
+  };
 
-  const rec = getReceivableById(recId);
-  if (!rec) return;
+  const title = isEdit ? '✏️ Editar Conta a Pagar' : '➕ Nova Conta a Pagar';
 
-  modalContainer.innerHTML = `
-    <div class="modal-backdrop" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; display: flex; justify-content: flex-end;">
-      <div class="drawer" style="width: 100%; max-width: 440px; height: 100%; background: var(--bg-card); padding: 24px; box-shadow: -4px 0 24px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: space-between; overflow-y: auto;">
-        
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
-            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">
-              ✏️ Editar Conta a Receber
-            </h3>
-            <button class="btn-close" id="btn-close-rec-drawer" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
+  const contentHtml = `
+    <div style="padding: 4px 0;">
+      <div class="binder-tabs">
+        <div class="binder-tab active">1. Dados da Conta</div>
+      </div>
+      <div class="binder-panel" style="margin-bottom: 0;">
+        <form id="form-pay-drawer" style="display: flex; flex-direction: column; gap: 14px;">
+          <div>
+            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Fornecedor / Favorecido *</label>
+            <input type="text" id="pay-drawer-supplier" class="form-input" required placeholder="Nome do fornecedor" value="${escapeHtml(pay.supplierName || '')}" />
           </div>
 
-          <div class="binder-tabs">
-            <div class="binder-tab active">1. Dados da Conta</div>
+          <div>
+            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição da Conta *</label>
+            <input type="text" id="pay-drawer-desc" class="form-input" required placeholder="Ex: Compra de papéis especiais, tinta..." value="${escapeHtml(pay.description || '')}" />
           </div>
-          <div class="binder-panel" style="margin-bottom: 0;">
-            <form id="form-edit-rec" style="display: flex; flex-direction: column; gap: 14px;">
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Cliente</label>
-                <input type="text" id="rec-customer" class="form-input" value="${escapeHtml(rec.customer)}" />
-              </div>
 
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição</label>
-                <input type="text" id="rec-description" class="form-input" value="${escapeHtml(rec.description)}" />
-              </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$) *</label>
+              <input type="number" step="0.01" min="0.01" id="pay-drawer-amount" class="form-input" required placeholder="0.00" value="${pay.amount || ''}" />
+            </div>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$)</label>
-                  <input type="number" step="0.01" min="0.01" id="rec-amount" class="form-input" value="${rec.amount}" />
-                </div>
-
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Vencimento</label>
-                  <input type="text" id="rec-duedate" class="form-input" value="${escapeHtml(rec.dueDate || '')}" />
-                </div>
-              </div>
-
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
-                  <select id="rec-status" class="form-select">
-                    <option value="aberto" ${rec.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
-                    <option value="recebido" ${rec.status === 'recebido' ? 'selected' : ''}>Recebido</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
-                  <select id="rec-method" class="form-select">
-                    ${PAYMENT_METHODS.map(m => `
-                      <option value="${m}" ${rec.paymentMethod === m ? 'selected' : ''}>${m}</option>
-                    `).join('')}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
-                <textarea id="rec-notes" class="form-input" rows="3">${escapeHtml(rec.notes || '')}</textarea>
-              </div>
-            </form>
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Vencimento</label>
+              <input type="text" id="pay-drawer-duedate" class="form-input" placeholder="DD/MM/AAAA" value="${escapeHtml(pay.dueDate || '')}" />
+            </div>
           </div>
-        </div>
 
-        <div style="display: flex; gap: 10px; margin-top: 24px;">
-          <button type="button" class="btn btn-secondary" id="btn-cancel-rec-drawer" style="flex: 1;">Cancelar</button>
-          <button type="submit" form="form-edit-rec" class="btn btn-primary" style="flex: 2;">Salvar</button>
-        </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
+              <select id="pay-drawer-status" class="form-select">
+                <option value="aberto" ${pay.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
+                <option value="pago" ${pay.status === 'pago' ? 'selected' : ''}>Pago</option>
+              </select>
+            </div>
 
+            <div>
+              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
+              <select id="pay-drawer-method" class="form-select">
+                ${PAYMENT_METHODS.map(m => `
+                  <option value="${m}" ${pay.paymentMethod === m ? 'selected' : ''}>${m}</option>
+                `).join('')}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
+            <textarea id="pay-drawer-notes" class="form-input" rows="3" placeholder="Informações adicionais...">${escapeHtml(pay.notes || '')}</textarea>
+          </div>
+        </form>
       </div>
     </div>
   `;
 
-  const close = () => { modalContainer.innerHTML = ''; };
-  document.getElementById('btn-close-rec-drawer')?.addEventListener('click', close);
-  document.getElementById('btn-cancel-rec-drawer')?.addEventListener('click', close);
-
-  document.getElementById('form-edit-rec')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    updateReceivable(recId, {
-      customer: document.getElementById('rec-customer').value,
-      description: document.getElementById('rec-description').value,
-      amount: parseFloat(document.getElementById('rec-amount').value),
-      dueDate: document.getElementById('rec-duedate').value,
-      status: document.getElementById('rec-status').value,
-      paymentMethod: document.getElementById('rec-method').value,
-      notes: document.getElementById('rec-notes').value
-    });
-    close();
-    renderFinanceModule();
-  });
-}
-
-function openPayableDrawer(payId) {
-  const modalContainer = document.getElementById('finance-modal-container');
-  if (!modalContainer) return;
-
-  const pay = getPayableById(payId);
-  if (!pay) return;
-
-  modalContainer.innerHTML = `
-    <div class="modal-backdrop" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; display: flex; justify-content: flex-end;">
-      <div class="drawer" style="width: 100%; max-width: 440px; height: 100%; background: var(--bg-card); padding: 24px; box-shadow: -4px 0 24px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: space-between; overflow-y: auto;">
-        
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
-            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">
-              ✏️ Editar Conta a Pagar
-            </h3>
-            <button class="btn-close" id="btn-close-pay-drawer" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
-          </div>
-
-          <form id="form-edit-pay" style="display: flex; flex-direction: column; gap: 14px;">
-            <div>
-              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Fornecedor</label>
-              <input type="text" id="pay-supplier" class="form-input" value="${escapeHtml(pay.supplierName || '')}" />
-            </div>
-
-            <div>
-              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Descrição</label>
-              <input type="text" id="pay-description" class="form-input" value="${escapeHtml(pay.description)}" />
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Valor (R$)</label>
-                <input type="number" step="0.01" min="0.01" id="pay-amount" class="form-input" value="${pay.amount}" />
-              </div>
-
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Vencimento</label>
-                <input type="text" id="pay-duedate" class="form-input" value="${escapeHtml(pay.dueDate || '')}" />
-              </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Status</label>
-                <select id="pay-status" class="form-select">
-                  <option value="aberto" ${pay.status === 'aberto' ? 'selected' : ''}>Em Aberto</option>
-                  <option value="pago" ${pay.status === 'pago' ? 'selected' : ''}>Pago</option>
-                </select>
-              </div>
-
-              <div>
-                <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Forma Pagamento</label>
-                <select id="pay-method" class="form-select">
-                  ${PAYMENT_METHODS.map(m => `
-                    <option value="${m}" ${pay.paymentMethod === m ? 'selected' : ''}>${m}</option>
-                  `).join('')}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Observações</label>
-              <textarea id="pay-notes" class="form-input" rows="3">${escapeHtml(pay.notes || '')}</textarea>
-            </div>
-          </form>
-        </div>
-
-        <div style="display: flex; gap: 10px; margin-top: 24px;">
-          <button type="button" class="btn btn-secondary" id="btn-cancel-pay-drawer" style="flex: 1;">Cancelar</button>
-          <button type="submit" form="form-edit-pay" class="btn btn-primary" style="flex: 2;">Salvar</button>
-        </div>
-
-      </div>
+  const footerHtml = `
+    <div style="display: flex; gap: 10px; width: 100%; justify-content: flex-end;">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-pay-drawer" style="flex: 1;">Cancelar</button>
+      <button type="submit" form="form-pay-drawer" class="btn btn-primary" style="flex: 2;">
+        ${isEdit ? 'Salvar Alterações' : 'Cadastrar Conta'}
+      </button>
     </div>
   `;
 
-  const close = () => { modalContainer.innerHTML = ''; };
-  document.getElementById('btn-close-pay-drawer')?.addEventListener('click', close);
-  document.getElementById('btn-cancel-pay-drawer')?.addEventListener('click', close);
+  openDrawer({
+    title,
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      drawer.querySelector('#btn-cancel-pay-drawer')?.addEventListener('click', close);
+      drawer.querySelector('#form-pay-drawer')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const data = {
+          supplierName: drawer.querySelector('#pay-drawer-supplier').value,
+          description: drawer.querySelector('#pay-drawer-desc').value,
+          amount: parseFloat(drawer.querySelector('#pay-drawer-amount').value),
+          dueDate: drawer.querySelector('#pay-drawer-duedate').value,
+          status: drawer.querySelector('#pay-drawer-status').value,
+          paymentMethod: drawer.querySelector('#pay-drawer-method').value,
+          notes: drawer.querySelector('#pay-drawer-notes').value
+        };
 
-  document.getElementById('form-edit-pay')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    updatePayable(payId, {
-      supplierName: document.getElementById('pay-supplier').value,
-      description: document.getElementById('pay-description').value,
-      amount: parseFloat(document.getElementById('pay-amount').value),
-      dueDate: document.getElementById('pay-duedate').value,
-      status: document.getElementById('pay-status').value,
-      paymentMethod: document.getElementById('pay-method').value,
-      notes: document.getElementById('pay-notes').value
-    });
-    close();
-    renderFinanceModule();
+        if (isEdit) {
+          updatePayable(payId, data);
+          showToast('Conta a pagar atualizada com sucesso!');
+        } else {
+          createPayable(data);
+          showToast('Conta a pagar cadastrada com sucesso!');
+        }
+
+        close();
+        renderFinanceModule();
+      });
+    }
   });
 }
 
@@ -1767,122 +2563,117 @@ function handleExportCurrentTabCSV() {
 }
 
 function openImportCSVModal() {
-  const modalContainer = document.getElementById('finance-modal-container');
-  if (!modalContainer) return;
-
-  modalContainer.innerHTML = `
-    <div class="modal-backdrop" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px;">
-      <div class="card modal-content" style="max-width: 500px; width: 100%; background: var(--bg-card); padding: 24px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
-        
-        <h3 style="margin: 0 0 12px 0; font-size: 1.125rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-          ⬆ Importar CSV Financeiro
-        </h3>
-
-        <div style="display: flex; flex-direction: column; gap: 14px;">
-          <div>
-            <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Tipo de Importação</label>
-            <select id="select-import-type" class="form-select">
-              <option value="despesas">💸 Despesas Operacionais</option>
-              <option value="receber">📥 Contas a Receber</option>
-              <option value="pagar">📤 Contas a Pagar</option>
-            </select>
-          </div>
-
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.8125rem; color: var(--text-secondary);">Precisa do modelo?</span>
-            <button class="btn btn-sm btn-secondary" id="btn-download-template">⬇ Baixar Modelo CSV</button>
-          </div>
-
-          <div style="border: 2px dashed var(--border-subtle); padding: 20px; border-radius: 8px; text-align: center; background: var(--bg-hover);">
-            <input type="file" id="csv-file-input" accept=".csv" style="display: none;" />
-            <button class="btn btn-secondary" id="btn-browse-csv">Selecionar Arquivo .CSV</button>
-            <div id="csv-file-name" style="margin-top: 8px; font-size: 0.8125rem; color: var(--text-secondary);">Nenhum arquivo selecionado</div>
-          </div>
-
-          <div id="import-errors-log" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 10px; border-radius: 6px; font-size: 0.8125rem; max-height: 120px; overflow-y: auto;"></div>
-
-          <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;">
-            <button type="button" class="btn btn-secondary" id="btn-cancel-import">Cancelar</button>
-            <button type="button" class="btn btn-primary" id="btn-execute-import" disabled>Importar Dados</button>
-          </div>
-        </div>
-
+  const contentHtml = `
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 0;">
+      <div>
+        <label class="form-label" style="font-weight: 600; font-size: 0.875rem;">Tipo de Importação</label>
+        <select id="select-import-type" class="form-select">
+          <option value="despesas">💸 Despesas Operacionais</option>
+          <option value="receber">📥 Contas a Receber</option>
+          <option value="pagar">📤 Contas a Pagar</option>
+        </select>
       </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.8125rem; color: var(--text-secondary);">Precisa do modelo?</span>
+        <button class="btn btn-sm btn-secondary" id="btn-download-template" type="button">⬇ Baixar Modelo CSV</button>
+      </div>
+
+      <div style="border: 2px dashed var(--border-subtle); padding: 20px; border-radius: 8px; text-align: center; background: var(--bg-hover);">
+        <input type="file" id="csv-file-input" accept=".csv" style="display: none;" />
+        <button class="btn btn-secondary" id="btn-browse-csv" type="button">Selecionar Arquivo .CSV</button>
+        <div id="csv-file-name" style="margin-top: 8px; font-size: 0.8125rem; color: var(--text-secondary);">Nenhum arquivo selecionado</div>
+      </div>
+
+      <div id="import-errors-log" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 10px; border-radius: 6px; font-size: 0.8125rem; max-height: 120px; overflow-y: auto;"></div>
     </div>
   `;
 
-  let selectedCSVText = '';
-  const close = () => { modalContainer.innerHTML = ''; };
-  document.getElementById('btn-cancel-import')?.addEventListener('click', close);
+  const footerHtml = `
+    <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end;">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-import" style="flex: 1;">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="btn-execute-import" disabled style="flex: 2;">Importar Dados</button>
+    </div>
+  `;
 
-  // Download template
-  document.getElementById('btn-download-template')?.addEventListener('click', () => {
-    const type = document.getElementById('select-import-type').value;
-    let templateContent = '';
-    let templateName = 'modelo_despesas.csv';
+  openDrawer({
+    title: '⬆ Importar CSV Financeiro',
+    contentHtml,
+    footerHtml,
+    onMount: (drawer, close) => {
+      let selectedCSVText = '';
+      drawer.querySelector('#btn-cancel-import')?.addEventListener('click', close);
 
-    if (type === 'despesas') {
-      templateContent = exportExpensesCSVTemplate();
-      templateName = 'modelo_despesas.csv';
-    } else if (type === 'receber') {
-      templateContent = exportReceivablesCSVTemplate();
-      templateName = 'modelo_contas_a_receber.csv';
-    } else if (type === 'pagar') {
-      templateContent = exportPayablesCSVTemplate();
-      templateName = 'modelo_contas_a_pagar.csv';
-    }
+      // Download template
+      drawer.querySelector('#btn-download-template')?.addEventListener('click', () => {
+        const type = drawer.querySelector('#select-import-type').value;
+        let templateContent = '';
+        let templateName = 'modelo_despesas.csv';
 
-    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', templateName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  });
+        if (type === 'despesas') {
+          templateContent = exportExpensesCSVTemplate();
+          templateName = 'modelo_despesas.csv';
+        } else if (type === 'receber') {
+          templateContent = exportReceivablesCSVTemplate();
+          templateName = 'modelo_contas_a_receber.csv';
+        } else if (type === 'pagar') {
+          templateContent = exportPayablesCSVTemplate();
+          templateName = 'modelo_contas_a_pagar.csv';
+        }
 
-  // Browse file
-  const fileInput = document.getElementById('csv-file-input');
-  document.getElementById('btn-browse-csv')?.addEventListener('click', () => fileInput.click());
+        const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', templateName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
 
-  fileInput?.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      document.getElementById('csv-file-name').textContent = `Arquivo: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        selectedCSVText = event.target.result;
-        document.getElementById('btn-execute-import').removeAttribute('disabled');
-      };
-      reader.readAsText(file);
-    }
-  });
+      // Browse file
+      const fileInput = drawer.querySelector('#csv-file-input');
+      drawer.querySelector('#btn-browse-csv')?.addEventListener('click', () => fileInput.click());
 
-  // Execute import
-  document.getElementById('btn-execute-import')?.addEventListener('click', () => {
-    if (!selectedCSVText) return;
-    const type = document.getElementById('select-import-type').value;
-    let result = null;
+      fileInput?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          drawer.querySelector('#csv-file-name').textContent = `Arquivo: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            selectedCSVText = event.target.result;
+            drawer.querySelector('#btn-execute-import').removeAttribute('disabled');
+          };
+          reader.readAsText(file);
+        }
+      });
 
-    if (type === 'despesas') {
-      result = importExpensesCSV(selectedCSVText);
-    } else if (type === 'receber') {
-      result = importReceivablesCSV(selectedCSVText);
-    } else if (type === 'pagar') {
-      result = importPayablesCSV(selectedCSVText);
-    }
+      // Execute import
+      drawer.querySelector('#btn-execute-import')?.addEventListener('click', () => {
+        if (!selectedCSVText) return;
+        const type = drawer.querySelector('#select-import-type').value;
+        let result = null;
 
-    if (result && result.success) {
-      alert(`✓ Sucesso! ${result.count} registros importados com êxito.`);
-      close();
-      renderFinanceModule();
-    } else {
-      const errLog = document.getElementById('import-errors-log');
-      if (errLog) {
-        errLog.style.display = 'block';
-        errLog.innerHTML = `<strong>Falha na importação:</strong><br/>${(result?.errors || ['Erro desconhecido']).join('<br/>')}`;
-      }
+        if (type === 'despesas') {
+          result = importExpensesCSV(selectedCSVText);
+        } else if (type === 'receber') {
+          result = importReceivablesCSV(selectedCSVText);
+        } else if (type === 'pagar') {
+          result = importPayablesCSV(selectedCSVText);
+        }
+
+        if (result && result.success) {
+          showToast(`✓ Sucesso! ${result.count} registros importados com êxito.`, '✓');
+          close();
+          renderFinanceModule();
+        } else {
+          const errLog = drawer.querySelector('#import-errors-log');
+          if (errLog) {
+            errLog.style.display = 'block';
+            errLog.innerHTML = `<strong>Falha na importação:</strong><br/>${(result?.errors || ['Erro desconhecido']).join('<br/>')}`;
+          }
+        }
+      });
     }
   });
 }

@@ -24,6 +24,7 @@ import {
   markOrderDeliveredById
 } from '../orders/orders.js';
 import { escapeHtml, formatDateBR, formatNumberXX } from '../../utils/sanitize.js';
+import { showToast } from '../../core/events.js';
 
 /**
  * Generates the visual Production Stepper HTML (Vertical Timeline with Date and Time History)
@@ -575,7 +576,7 @@ export function openReturnStageModal({ order, onConfirm, openDrawer, closeDrawer
         const select = d.querySelector('#select-return-stage');
         const notes = d.querySelector('#textarea-return-notes').value.trim();
         if (!notes) {
-          alert('Por favor, informe o motivo do retorno da etapa para rastreabilidade.');
+          showToast('Por favor, informe o motivo do retorno da etapa para rastreabilidade.', '⚠️');
           return;
         }
         closeDrawer();

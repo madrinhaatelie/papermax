@@ -4,7 +4,7 @@
  */
 
 import { bus, showToast } from './core/events.js';
-import { onSaveStatusChange, loadSettings, saveSettings } from './data/storage.js';
+import { onSaveStatusChange, loadSettings, saveSettings, clearAllSystemData } from './data/storage.js';
 import { exportBackup, restoreBackup, getLastBackupTimestamp } from './data/backup.engine.js';
 import { getAuthenticatedUser, renderLoginScreen, getGreetingPhrase } from './data/auth.js';
 import { calculateDashboardMetrics } from './modules/dashboard/dashboard.js';
@@ -68,6 +68,8 @@ import {
   renderProductsTrendsView,
   renderProductsCapacityView,
   openProductIntelligenceDrawer,
+  renderCommercialVitrine,
+  openProductCommercialPreviewDrawer,
   INTELLIGENCE_PERIODS
 } from './modules/products/products.js';
 
@@ -80,6 +82,7 @@ import {
 } from './modules/categories/categories.js';
 import { renderStockModule, openPurchaseDrawer } from './modules/stock/stock.ui.js';
 import { renderFinanceModule } from './modules/finance/finance.ui.js';
+import { renderSettingsView as renderSettingsModule, setActiveSettingsTab } from './modules/settings/settings.ui.js';
 import { openBulkPersonalizationModal } from './modules/personalization/bulk.ui.js';
 import { generatePersonalizedPdf, triggerPdfDownload } from './modules/personalization/pdf.engine.js';
 import { openProductConfigDrawer } from './modules/products/product.editor.ui.js';
@@ -92,13 +95,14 @@ import {
 } from './modules/orders/orders.ui.js';
 import { renderOrderApprovalPage } from './modules/orders/order.approval.ui.js';
 import { fileStorage } from './data/filestorage.js';
-import { escapeHtml, formatCurrency, formatDateBR, formatDateShortBR, parseDateBRToISO, generateId, formatNumberXX } from './utils/sanitize.js';
+import { escapeHtml, formatCurrency, formatDateBR, formatDateShortBR, parseDateBRToISO, generateId, formatNumberXX, formatPhone, formatCPF, formatCNPJ, formatCPFOrCNPJ } from './utils/sanitize.js';
 import { initCopilotUI } from './modules/copilot/copilot.ui.js';
 
 // Application State
 let currentView = 'inicio'; // 'inicio' | 'pedidos' | 'produtos' | 'estoque' | 'financeiro' | 'ajustes'
 let ordersTab = 'em_andamento'; // 'em_andamento' | 'todos' | 'aguardando' | 'producao' | 'fila_impressao' | 'prontos' | 'entregues' | 'cancelados'
 let productsTab = 'todos'; // 'todos' | 'vitrine' | 'ranking' | 'categorias'
+let currentSettingsTab = 'prefs'; // 'prefs' | 'autos' | 'logs' | 'notifs'
 let orderSearchTerm = '';
 let productSearchTerm = '';
 let dashboardStageFilter = null;
@@ -737,14 +741,14 @@ function renderDashboardOrdersList() {
       const orderNum = order.number || order.id;
       showConfirmDialog({
         title: 'Excluir Pedido',
-        message: `Tem certeza que deseja excluir o <b>Pedido #${orderNum}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
+        message: `Tem certeza que deseja excluir o <b>Pedido ${orderNum}</b>?<br><br>Esta ação é irreversível e removerá o pedido e todo o seu histórico.`,
         confirmText: 'Sim, Excluir Pedido',
         isDanger: true,
         onConfirm: () => {
           try {
             deleteOrder(btn.dataset.id);
             renderDashboard();
-            showToast(`Pedido #${orderNum} excluído com sucesso!`, '✅');
+            showToast(`Pedido ${orderNum} excluído com sucesso!`, '✅');
           } catch (err) {
             showToast(err.message, '⚠');
           }
@@ -793,7 +797,19 @@ function renderProductsView() {
   const container = document.getElementById('view-container');
   if (!container) return;
 
-  const products = getProducts({ search: productSearchTerm });
+  const allProducts = getProducts({ search: productSearchTerm });
+  const activeProducts = allProducts.filter(p => p.status !== 'inativo' && p.active !== false);
+  const inactiveProducts = allProducts.filter(p => p.status === 'inativo' || p.active === false);
+
+  let displayedProducts = activeProducts;
+  if (productsTab === 'inativos') {
+    displayedProducts = inactiveProducts;
+  } else if (productsTab === 'todos_geral') {
+    displayedProducts = allProducts;
+  } else {
+    displayedProducts = activeProducts;
+  }
+
   const categories = getCategories();
 
   container.innerHTML = `
@@ -806,25 +822,34 @@ function renderProductsView() {
       </div>
     </div>
 
-    <!-- Search & Filters -->
+    <!-- Search & Quick Stats -->
     <div class="filter-bar" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
       <div class="search-wrapper flex-1" style="min-width: 240px;">
         <span class="search-icon">🔍</span>
         <input class="search w-full" id="input-products-search" placeholder="Buscar por nome do produto, descrição ou categoria..." value="${escapeHtml(productSearchTerm)}" />
       </div>
-      
-      <div style="min-width: 180px;">
-        <select class="form-select" id="select-products-tab" style="width: 100%; height: 38px; font-size: 13px; font-weight: 600; cursor: pointer; background-color: #fff;">
-          <option value="todos" ${productsTab === 'todos' ? 'selected' : ''}>Todos os Produtos</option>
-          <option value="vitrine" ${productsTab === 'vitrine' ? 'selected' : ''}>Vitrine</option>
-          <option value="ranking" ${productsTab === 'ranking' ? 'selected' : ''}>🏆 Ranking</option>
-          <option value="tendencias" ${productsTab === 'tendencias' ? 'selected' : ''}>📈 Tendências</option>
-          <option value="capacidade" ${productsTab === 'capacidade' ? 'selected' : ''}>📦 Capacidade</option>
-          <option value="categorias" ${productsTab === 'categorias' ? 'selected' : ''}>Categorias (${categories.length})</option>
-        </select>
-      </div>
+      <span class="badge-count">${displayedProducts.length} produtos</span>
+    </div>
 
-      <span class="badge-count">${products.length} produtos</span>
+    <!-- Navigation Tabs Bar (Divisórias de Fichário Horizontais) -->
+    <div class="products-tab-bar" style="display: flex; gap: 4px; margin: 16px 0 20px 0; border-bottom: 2px solid #cbd5e1; padding-bottom: 0; overflow-x: auto; align-items: flex-end;">
+      ${[
+        { id: 'todos', label: `Ativos (${activeProducts.length})` },
+        { id: 'inativos', label: `Ocultos / Inativos (${inactiveProducts.length})` },
+        { id: 'todos_geral', label: `Todos (${allProducts.length})` },
+        { id: 'vitrine', label: 'Vitrine' },
+        { id: 'ranking', label: '🏆 Ranking' },
+        { id: 'tendencias', label: '📈 Tendências' },
+        { id: 'capacidade', label: '📦 Capacidade' },
+        { id: 'categorias', label: `📁 Categorias (${categories.length})` }
+      ].map(tab => {
+        const isActive = productsTab === tab.id;
+        return `
+          <button class="tab-btn ${isActive ? 'active' : ''}" data-products-tab="${tab.id}">
+            ${tab.label}
+          </button>
+        `;
+      }).join('')}
     </div>
 
     <div id="products-tab-content">
@@ -834,10 +859,10 @@ function renderProductsView() {
 
   // Render tab content
   const tabContent = document.getElementById('products-tab-content');
-  if (productsTab === 'todos') {
-    renderProductsTable(tabContent, products, categories);
+  if (productsTab === 'todos' || productsTab === 'inativos' || productsTab === 'todos_geral') {
+    renderProductsTable(tabContent, displayedProducts, categories);
   } else if (productsTab === 'vitrine') {
-    renderProductsVitrine(tabContent, products, categories);
+    renderProductsVitrine(tabContent, displayedProducts, categories);
   } else if (productsTab === 'ranking') {
     renderProductsRankingView(tabContent, { openDrawer, closeDrawer, showToast });
   } else if (productsTab === 'tendencias') {
@@ -848,14 +873,13 @@ function renderProductsView() {
     renderCategoriesManagerInline(tabContent, categories);
   }
 
-  // Bind view select filter
-  const selectTab = container.querySelector('#select-products-tab');
-  if (selectTab) {
-    selectTab.addEventListener('change', e => {
-      productsTab = e.target.value;
+  // Bind view tabs
+  container.querySelectorAll('[data-products-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      productsTab = btn.dataset.productsTab;
       renderProductsView();
     });
-  }
+  });
 
   // Search
   const searchInput = document.getElementById('input-products-search');
@@ -925,7 +949,10 @@ function renderProductsTable(container, products, categories) {
                   <button class="dots-menu-item" data-action="dup-product" data-id="${p.id}">📋 Duplicar</button>
                   <button class="dots-menu-item" data-action="intel-product" data-id="${p.id}">📊 Intel</button>
                   <button class="dots-menu-item" data-action="bulk-product" data-id="${p.id}">⚡ Lote</button>
-                  <button class="dots-menu-item" data-action="hide-product" data-id="${p.id}">👁️ Ocultar</button>
+                  ${(p.status === 'inativo' || p.active === false)
+                    ? `<button class="dots-menu-item" data-action="unhide-product" data-id="${p.id}">👁️‍🗨️ Reativar</button>`
+                    : `<button class="dots-menu-item" data-action="hide-product" data-id="${p.id}">👁️ Ocultar</button>`
+                  }
                   <div style="height: 1px; background: var(--border-subtle); margin: 4px 0;"></div>
                   <button class="dots-menu-item" data-action="del-product" data-id="${p.id}" style="color: #ef4444;">🗑️ Excluir</button>
                 </div>
@@ -1033,81 +1060,49 @@ function renderProductsTable(container, products, categories) {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
-      const row = el.closest('.list-row');
-      if (row) {
-        row.style.display = 'none';
+      const p = getProductById(el.dataset.id);
+      if (p) {
+        updateProduct(p.id, { status: 'inativo', active: false });
+        renderProductsView();
+        showToast(`Produto "${p.name}" ocultado do catálogo com sucesso.`);
       }
-      showToast('Produto ocultado da visualização.');
+    });
+  });
+
+  container.querySelectorAll('[data-action="unhide-product"]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      const p = getProductById(el.dataset.id);
+      if (p) {
+        updateProduct(p.id, { status: 'ativo', active: true });
+        renderProductsView();
+        showToast(`Produto "${p.name}" reativado no catálogo!`, '✅');
+      }
     });
   });
 }
 
 function renderProductsVitrine(container, products, categories) {
-  const catMap = new Map(categories.map(c => [c.id, c.name]));
-  
-  // Calculate intelligence for tags
-  let intelMap = new Map();
-  try {
-    const intel = calculateProductIntelligence({ period: INTELLIGENCE_PERIODS.DIAS_30 });
-    intel.ranking.forEach(r => intelMap.set(r.productId, r));
-  } catch (err) {
-    // Graceful fallback
-  }
-
-  container.innerHTML = `
-    <div class="vitrine-grid">
-      ${products.map(p => {
-        const catName = catMap.get(p.categoryId) || 'Geral';
-        const rData = intelMap.get(p.id);
-        const topBadge = rData?.position === 1 ? '🏆 Mais Vendido' :
-                         (rData?.marginPct >= 60 ? '💎 Alta Margem' :
-                         (rData?.growthQtyPct > 20 ? '📈 Em Alta' : null));
-
-        return `
-          <div class="vitrine-card">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-              <div class="vitrine-tag">${escapeHtml(catName)}</div>
-              ${topBadge ? `<span class="diag-badge diag-growth">${topBadge}</span>` : ''}
-            </div>
-            <h3 class="vitrine-title">${escapeHtml(p.name)}</h3>
-            <p class="vitrine-desc">${escapeHtml(p.description || 'Produto personalizado com acabamento profissional.')}</p>
-            <div class="vitrine-meta">
-              <span class="vitrine-price">${formatCurrency(p.price)}</span>
-              <span class="vitrine-time">⏱ ${p.productionTime || 1} dias</span>
-            </div>
-            <div class="vitrine-footer" style="display: flex; gap: 6px;">
-              <button class="btn btn-primary" style="flex: 1;" data-action="order-from-vitrine" data-id="${p.id}">
-                + Criar Pedido
-              </button>
-              <button class="btn" data-action="intel-from-vitrine" data-id="${p.id}" title="Inteligência Comercial" style="padding: 6px 10px;">
-                📊
-              </button>
-              <button class="btn" data-action="bulk-from-vitrine" data-id="${p.id}" title="Personalização em Massa" style="font-weight: 600;">
-                ⚡ Lote
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `;
-
-  container.querySelectorAll('[data-action="order-from-vitrine"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      openNewOrderDrawer({ productId: btn.dataset.id });
-    });
-  });
-
-  container.querySelectorAll('[data-action="intel-from-vitrine"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      openProductIntelligenceDrawer({ productId: btn.dataset.id, openDrawer, closeDrawer });
-    });
-  });
-
-  container.querySelectorAll('[data-action="bulk-from-vitrine"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      openBulkPersonalizationModal(openDrawer, closeDrawer, btn.dataset.id);
-    });
+  renderCommercialVitrine(container, products, categories, {
+    onOrder: (productId) => {
+      openNewOrderDrawer({ productId });
+    },
+    onPreview: (productId) => {
+      openProductCommercialPreviewDrawer({
+        productId,
+        openDrawerFn: openDrawer,
+        closeDrawerFn: closeDrawer,
+        onOrderCreate: (prefill) => openNewOrderDrawer(prefill),
+        onEditProduct: (id) => openEditProductDrawer(id)
+      });
+    },
+    onBulk: (productId) => {
+      openBulkPersonalizationModal(openDrawer, closeDrawer, productId);
+    },
+    onIntel: (productId) => {
+      openProductIntelligenceDrawer({ productId, openDrawer, closeDrawer });
+    }
   });
 }
 
@@ -1157,13 +1152,22 @@ function renderCategoriesManagerInline(container, categories) {
 
   container.querySelectorAll('[data-action="del-cat"]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const res = deleteCategory(btn.dataset.id);
-      if (!res.success) {
-        alert(res.message);
-      } else {
-        showToast(res.message);
-        renderProductsView();
-      }
+      const catId = btn.dataset.id;
+      showConfirmDialog({
+        title: 'Excluir Categoria',
+        message: 'Tem certeza que deseja excluir esta categoria? Os produtos associados não serão apagados, mas ficarão sem categoria.',
+        confirmText: 'Sim, Excluir',
+        isDanger: true,
+        onConfirm: () => {
+          const res = deleteCategory(catId);
+          if (!res.success) {
+            showToast(res.message, '⚠️');
+          } else {
+            showToast(res.message, '✓');
+            renderProductsView();
+          }
+        }
+      });
     });
   });
 }
@@ -1176,7 +1180,7 @@ function showOrderDetailsDrawer(orderId) {
 }
 
 function openNewOrderDrawer(prefill = {}) {
-  switchView('pedidos-novo');
+  switchView('pedidos-novo', prefill);
 }
 
 function openEditOrderDrawer(orderId) {
@@ -1187,195 +1191,12 @@ function openEditOrderDrawer(orderId) {
 // DRAWERS: PRODUCT DETAILS & EDIT/NEW
 // ==========================================
 function showProductDetailsDrawer(productId) {
-  const p = getProductById(productId);
-  if (!p) return;
-
-  const categories = getCategories();
-  const cat = categories.find(c => c.id === p.categoryId);
-  const price = Number(p.price) || 0;
-  const priceFrom = Number(p.priceFrom) || price;
-  const cost = Number(p.cost) || 0;
-  const profit = Math.max(0, price - cost);
-  const marginPct = price > 0 ? ((profit / price) * 100).toFixed(0) : 0;
-  const history = p.priceHistory || [{ price: price, date: '16/09/2026' }];
-
-  let currentAngle = 'front';
-
-  function getMockupHtml(angle) {
-    const labels = { front: 'Frente', angle: 'Frente / Lateral', back: 'Verso' };
-    const photo = p.mockups?.[angle] || (angle === 'front' ? (p.imageUrl || p.image || p.photo) : '');
-    return `
-      <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; margin-bottom: 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">Preview Mockup 3D Estático (03 Posições)</span>
-          <span class="badge-count" style="font-size: 9.5px; background: #e0e7ff; color: #4338ca;">${labels[angle]}</span>
-        </div>
-        <div style="display: flex; gap: 6px; margin-bottom: 10px;">
-          <button type="button" class="btn btn-sm ${angle === 'front' ? 'btn-primary' : ''}" data-view-mockup="front" style="flex: 1; font-size: 11px;">1. Frente</button>
-          <button type="button" class="btn btn-sm ${angle === 'angle' ? 'btn-primary' : ''}" data-view-mockup="angle" style="flex: 1; font-size: 11px;">2. Frente / Lateral</button>
-          <button type="button" class="btn btn-sm ${angle === 'back' ? 'btn-primary' : ''}" data-view-mockup="back" style="flex: 1; font-size: 11px;">3. Verso</button>
-        </div>
-        <div style="height: 140px; background: #ffffff; border: 1px dashed var(--border-subtle); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-          ${photo ? `
-            <img src="${escapeHtml(photo)}" alt="${escapeHtml(p.name)}" style="height: 100%; object-fit: contain;" />
-          ` : `
-            <div style="text-align: center; color: var(--text-muted);">
-              <div style="font-size: 32px; margin-bottom: 2px;">${angle === 'front' ? '🛍️' : angle === 'angle' ? '📦' : '✨'}</div>
-              <div style="font-size: 11px; font-weight: 600;">Mockup 3D: ${labels[angle]}</div>
-            </div>
-          `}
-        </div>
-        <div style="margin-top: 10px; padding: 8px 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 11px; color: #166534; display: flex; align-items: center; gap: 6px;">
-          <span>🔗</span>
-          <span><b>Link para o cliente:</b> O link interativo de visualização 3D é gerado automaticamente no Pedido após o preenchimento.</span>
-        </div>
-      </div>
-    `;
-  }
-
-  function getDrawerHtml() {
-    return `
-      <!-- Mockup 3D Estático 3 Posições -->
-      <div id="mockup-viewer-container">
-        ${getMockupHtml(currentAngle)}
-      </div>
-
-      <div class="drawer-detail-section">
-        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-          <span class="badge-count">${cat ? escapeHtml(cat.name) : 'Geral'}</span>
-          ${p.subcategoryId ? `<span class="badge-count" style="background: #eef2ff; color: #4338ca;">${escapeHtml(p.subcategoryId)}</span>` : ''}
-          <span class="badge-count" style="background: ${p.status === 'ativo' ? '#dcfce7' : '#f1f5f9'}; color: ${p.status === 'ativo' ? '#15803d' : '#64748b'};">
-            ${p.status === 'ativo' ? 'Ativo' : 'Desativado'}
-          </span>
-        </div>
-        <h2 style="font-size: 18px; font-weight: 700; margin: 6px 0 4px 0;">${escapeHtml(p.name)}</h2>
-        <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
-          ${escapeHtml(p.description || 'Sem descrição cadastrada.')}
-        </p>
-        <div class="detail-grid">
-          <div class="detail-item">
-            <span class="detail-label">Preço "POR" (Venda)</span>
-            <span class="detail-val"><b style="color: #16a34a;">${formatCurrency(price)}</b></span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">Preço "DE" (Tabela)</span>
-            <span class="detail-val" style="text-decoration: ${priceFrom > price ? 'line-through' : 'none'}; color: var(--text-muted);">${formatCurrency(priceFrom)}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">Custo Base Estimado</span>
-            <span class="detail-val">${formatCurrency(cost)}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">Lucro Unitário</span>
-            <span class="detail-val"><b style="color: #16a34a;">${formatCurrency(profit)} (${marginPct}%)</b></span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">Dias de Produção</span>
-            <span class="detail-val">${p.productionTime || 1} dias</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">Versão do Molde</span>
-            <span class="detail-val">v${p.configurationVersion || 1}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Histórico de Valor -->
-      <div class="drawer-detail-section">
-        <h4 class="drawer-subtitle">Histórico de Valor</h4>
-        <div style="background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; font-family: monospace; font-size: 11.5px; display: flex; flex-direction: column; gap: 4px;">
-          ${history.map((h, i) => `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0; border-bottom: ${i < history.length - 1 ? '1px dashed var(--border-subtle)' : 'none'};">
-              <span style="font-weight: 700; color: #16a34a;">- R$ ${Number(h.price || 0).toFixed(2).replace('.', ',')}</span>
-              <span style="color: var(--text-secondary);">${escapeHtml(h.date || '')}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-
-      <!-- Molde do Produto: Personalização + Opções -->
-      <div class="drawer-detail-section">
-        <h4 class="drawer-subtitle">Campos de Personalização (${(p.personalizationFields || []).length})</h4>
-        ${(p.personalizationFields || []).length === 0 ? `
-          <div style="font-size: 12px; color: var(--text-muted);">Nenhum texto configurado.</div>
-        ` : `
-          <div class="detail-grid">
-            ${p.personalizationFields.map(f => `
-              <div class="detail-item">
-                <span class="detail-label">${escapeHtml(f.name)} (${f.type || 'text'})</span>
-                <span class="detail-val">${f.required ? 'Obrigatório' : 'Opcional'}</span>
-              </div>
-            `).join('')}
-          </div>
-        `}
-      </div>
-
-      <div class="drawer-detail-section">
-        <h4 class="drawer-subtitle">Opções de Alteração / Variações (${(p.changeOptions || []).length})</h4>
-        ${(p.changeOptions || []).length === 0 ? `
-          <div style="font-size: 12px; color: var(--text-muted);">Nenhuma opção configurada.</div>
-        ` : `
-          <div class="detail-grid">
-            ${p.changeOptions.map(opt => `
-              <div class="detail-item">
-                <span class="detail-label">${escapeHtml(opt.name)}</span>
-                <span class="detail-val">${(opt.choices || []).join(', ')}</span>
-              </div>
-            `).join('')}
-          </div>
-        `}
-      </div>
-
-      <div class="drawer-detail-section">
-        <h4 class="drawer-subtitle">PDF + Gabarito (Molde do Produto)</h4>
-        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
-          <div>Áreas de Texto mapeadas: <b>${(p.editor?.textAreas || []).length}</b></div>
-          <div>Gabarito Base: <b>${p.basePdfMetadata ? escapeHtml(p.basePdfMetadata.name) : 'Gabarito Padrão'}</b></div>
-        </div>
-      </div>
-    `;
-  }
-
-  const footerHtml = `
-    <button class="btn" id="btn-prod-intel-drawer" style="color: #4f46e5; font-weight: 600;">📊 Inteligência Comercial</button>
-    <button class="btn" id="btn-prod-bulk-drawer" style="font-weight: 600;">⚡ Personalização em Massa</button>
-    <button class="btn" id="btn-edit-prod-drawer">⚙ Editar Produto</button>
-    <button class="btn btn-primary" id="btn-close-prod-drawer">Fechar</button>
-  `;
-
-  openDrawer({
-    title: `Resumo do Produto · ${p.name}`,
-    contentHtml: `<div id="product-detail-body">${getDrawerHtml()}</div>`,
-    footerHtml,
-    onMount: (drawer) => {
-      const bindMockupClicks = () => {
-        drawer.querySelectorAll('[data-view-mockup]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            currentAngle = btn.dataset.viewMockup;
-            const container = drawer.querySelector('#mockup-viewer-container');
-            if (container) {
-              container.innerHTML = getMockupHtml(currentAngle);
-              bindMockupClicks();
-            }
-          });
-        });
-      };
-      bindMockupClicks();
-
-      drawer.querySelector('#btn-close-prod-drawer').addEventListener('click', closeDrawer);
-      drawer.querySelector('#btn-prod-intel-drawer').addEventListener('click', () => {
-        closeDrawer();
-        openProductIntelligenceDrawer({ productId: p.id, openDrawer, closeDrawer });
-      });
-      drawer.querySelector('#btn-prod-bulk-drawer').addEventListener('click', () => {
-        closeDrawer();
-        openBulkPersonalizationModal(openDrawer, closeDrawer, p.id);
-      });
-      drawer.querySelector('#btn-edit-prod-drawer').addEventListener('click', () => {
-        closeDrawer();
-        openEditProductDrawer(p.id);
-      });
-    }
+  openProductCommercialPreviewDrawer({
+    productId,
+    openDrawerFn: openDrawer,
+    closeDrawerFn: closeDrawer,
+    onOrderCreate: (prefill) => openNewOrderDrawer(prefill),
+    onEditProduct: (id) => openEditProductDrawer(id)
   });
 }
 
@@ -1447,7 +1268,7 @@ function openCategoryEditDrawer(catId = null) {
           closeDrawer();
           renderProductsView();
         } catch (err) {
-          alert(err.message);
+          showToast(err.message || 'Erro ao salvar categoria.', '⚠️');
         }
       });
     }
@@ -1515,7 +1336,7 @@ function openImportCSVDrawer(type = 'pedidos') {
       drawer.querySelector('#btn-process-csv').addEventListener('click', () => {
         const csvContent = rawTextarea.value.trim();
         if (!csvContent) {
-          alert('Informe ou carregue o conteúdo CSV.');
+          showToast('Informe ou carregue o conteúdo CSV.', '⚠️');
           return;
         }
 
@@ -1585,294 +1406,11 @@ function renderFinanceView() {
   renderFinanceModule();
 }
 
-function renderSettingsView() {
+function renderSettingsView(payload = null) {
   const container = document.getElementById('view-container');
   if (!container) return;
-
-  const settings = loadSettings();
-  const rules = getAutomationRules();
-  const logs = getAutomationLogs();
-  const notifications = getNotifications();
-
-  container.innerHTML = `
-    <div class="module-header">
-      <div>
-        <h2 class="module-title">⚙ Ajustes & Automação Operacional</h2>
-      </div>
-    </div>
-
-    <div style="display: flex; gap: 8px; margin-top: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-      <button class="btn btn-sm btn-primary" id="set-tab-prefs" style="font-size: 12px;">⚙ Preferências</button>
-      <button class="btn btn-sm" id="set-tab-automations" style="font-size: 12px; background: #ffffff;">⚡ Automações (${rules.filter(r => r.active).length} ativas)</button>
-      <button class="btn btn-sm" id="set-tab-logs" style="font-size: 12px; background: #ffffff;">📋 Auditoria e Logs (${logs.length})</button>
-      <button class="btn btn-sm" id="set-tab-notifs" style="font-size: 12px; background: #ffffff;">🔔 Alertas (${notifications.filter(n => !n.read).length})</button>
-    </div>
-
-    <!-- TAB 1: PREFERÊNCIAS -->
-    <div id="settings-content-prefs" class="panel" style="margin-top: 16px; max-width: 650px;">
-      <form id="form-settings">
-        <div class="form-group">
-          <label class="form-label" for="inp-set-name">Nome do Ateliê</label>
-          <input class="form-input" id="inp-set-name" value="${escapeHtml(settings.atelierName)}" />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="inp-set-owner">Responsável / Proprietário</label>
-          <input class="form-input" id="inp-set-owner" value="${escapeHtml(settings.ownerName)}" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Persistência Operacional</label>
-          <div style="font-size: 12px; color: var(--text-muted); background: var(--bg-surface-raised); padding: 12px; border-radius: 6px;">
-            ✓ Armazenamento local versionado ativo (<code>papermax.*.v1</code>)<br />
-            ✓ Autosave ativo com debounce de 350ms<br />
-            ✓ FileStorage IndexedDB preparado para motor PDF
-          </div>
-        </div>
-        <button class="btn btn-primary" id="btn-save-settings" style="margin-top: 12px;">Salvar Preferências</button>
-      </form>
-
-      <!-- Backup e Segurança dos Dados -->
-      <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-        <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 6px;">💾 Backup e segurança dos dados</h3>
-        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
-          Exporte todos os dados operacionais em formato JSON seguro ou restaure um backup anterior caso necessário.
-        </p>
-        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-          Último backup realizado: <b>${getLastBackupTimestamp() ? new Date(getLastBackupTimestamp()).toLocaleString('pt-BR') : 'Nenhum backup recente registrado'}</b>
-        </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn btn-primary" id="btn-export-backup" style="font-size: 12px;">⬇ Exportar backup</button>
-          <button class="btn btn-secondary" id="btn-import-backup-trigger" style="font-size: 12px;">⬆ Restaurar backup</button>
-          <input type="file" id="inp-restore-file" accept=".json" style="display: none;" />
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 2: AUTOMAÇÕES -->
-    <div id="settings-content-automations" class="panel" style="margin-top: 16px; display: none; max-width: 850px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 14px; font-weight: 600;">Regras de Automação Operacional (Evento → Condição → Ação)</h3>
-        <span style="font-size: 11px; color: var(--text-muted);">“O PAPER MAX trabalha. Você acompanha.”</span>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        ${rules.map(rule => `
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-surface-raised); border-radius: 8px; border: 1px solid var(--border-color);">
-            <div>
-              <div style="font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px;">
-                <span>${rule.active ? '🟢' : '⚪'}</span> ${escapeHtml(rule.name)}
-              </div>
-              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
-                <b>Evento:</b> ${rule.event} | <b>Condição:</b> ${rule.condition} | <b>Ação:</b> ${rule.action}
-              </div>
-              <div style="font-size: 11px; color: var(--text-main); margin-top: 4px;">
-                ${escapeHtml(rule.description || '')}
-              </div>
-            </div>
-            <div>
-              <label class="switch" style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;">
-                <input type="checkbox" data-rule-toggle="${rule.id}" ${rule.active ? 'checked' : ''} style="cursor: pointer;" />
-                <span>${rule.active ? 'Ativa' : 'Inativa'}</span>
-              </label>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-
-    <!-- TAB 3: LOGS DE AUDITORIA -->
-    <div id="settings-content-logs" class="panel" style="margin-top: 16px; display: none; max-width: 900px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 14px; font-weight: 600;">Histórico Centralizado de Execuções e Auditoria</h3>
-        <span style="font-size: 11px; color: var(--text-muted);">Registro automático vs intervenção manual</span>
-      </div>
-      <div style="max-height: 450px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: #ffffff;">
-        <table class="table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="background: var(--bg-surface-raised); text-align: left; border-bottom: 1px solid var(--border-color);">
-              <th style="padding: 8px;">Data / Hora</th>
-              <th style="padding: 8px;">Regra / Evento</th>
-              <th style="padding: 8px;">Pedido</th>
-              <th style="padding: 8px;">Resultado</th>
-              <th style="padding: 8px;">Detalhes</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${logs.length === 0 ? '<tr><td colspan="5" style="padding: 16px; text-align: center; color: var(--text-muted);">Nenhum log de automação registrado ainda.</td></tr>' : logs.map(log => `
-              <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 8px; white-space: nowrap;">${formatDateBR(log.timestamp)}</td>
-                <td style="padding: 8px;"><b>${escapeHtml(log.ruleName)}</b><br><span style="font-size: 10px; color: var(--text-muted);">${log.event}</span></td>
-                <td style="padding: 8px;">${log.orderId}</td>
-                <td style="padding: 8px;">
-                  <span class="badge ${log.result === 'Executada' ? 'badge-success' : log.result === 'Falhou' ? 'badge-danger' : 'badge-warning'}" style="font-size: 10px;">
-                    ${log.result}
-                  </span>
-                </td>
-                <td style="padding: 8px; font-size: 11px; color: var(--text-muted);">${escapeHtml(log.details || log.error || '—')}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- TAB 4: NOTIFICAÇÕES INTERNAS -->
-    <div id="settings-content-notifs" class="panel" style="margin-top: 16px; display: none; max-width: 800px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 14px; font-weight: 600;">Central de Notificações Operacionais Internas</h3>
-        <button class="btn btn-sm" id="btn-clear-notifs" style="font-size: 11px; background: #ffffff;">Limpar Notificações</button>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 8px; max-height: 450px; overflow-y: auto;">
-        ${notifications.length === 0 ? '<div style="padding: 24px; text-align: center; color: var(--text-muted); background: var(--bg-surface-raised); border-radius: 8px;">Nenhuma notificação interna no momento. Tudo operando perfeitamente.</div>' : notifications.map(notif => `
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 12px; background: ${notif.read ? 'var(--bg-surface-raised)' : '#eff6ff'}; border-radius: 8px; border: 1px solid ${notif.read ? 'var(--border-color)' : '#bfdbfe'};">
-            <div>
-              <div style="font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px;">
-                <span>${notif.severity === 'success' ? '🟢' : notif.severity === 'warning' ? '🟠' : notif.severity === 'error' ? '🔴' : '🔵'}</span>
-                ${escapeHtml(notif.title)}
-              </div>
-              <div style="font-size: 12px; color: var(--text-main); margin-top: 4px;">
-                ${escapeHtml(notif.message)}
-              </div>
-              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">
-                ${formatDateBR(notif.timestamp)} ${notif.orderId ? `• Pedido: ${notif.orderId}` : ''}
-              </div>
-            </div>
-            <div>
-              ${!notif.read ? `<button class="btn btn-sm" data-notif-read="${notif.id}" style="font-size: 11px; background: #ffffff;">Marcar Lida</button>` : '<span style="font-size: 11px; color: var(--text-muted);">Lida</span>'}
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
-
-  // Bind Tab Switching
-  const tabPrefs = container.querySelector('#set-tab-prefs');
-  const tabAutos = container.querySelector('#set-tab-automations');
-  const tabLogs = container.querySelector('#set-tab-logs');
-  const tabNotifs = container.querySelector('#set-tab-notifs');
-
-  const contentPrefs = container.querySelector('#settings-content-prefs');
-  const contentAutos = container.querySelector('#settings-content-automations');
-  const contentLogs = container.querySelector('#settings-content-logs');
-  const contentNotifs = container.querySelector('#settings-content-notifs');
-
-  if (tabPrefs && tabAutos && tabLogs && tabNotifs && contentPrefs && contentAutos && contentLogs && contentNotifs) {
-    function switchTab(tab) {
-      tabPrefs.className = `btn btn-sm ${tab === 'prefs' ? 'btn-primary' : ''}`;
-      if (tab !== 'prefs') tabPrefs.style.background = '#ffffff';
-
-      tabAutos.className = `btn btn-sm ${tab === 'autos' ? 'btn-primary' : ''}`;
-      if (tab !== 'autos') tabAutos.style.background = '#ffffff';
-
-      tabLogs.className = `btn btn-sm ${tab === 'logs' ? 'btn-primary' : ''}`;
-      if (tab !== 'logs') tabLogs.style.background = '#ffffff';
-
-      tabNotifs.className = `btn btn-sm ${tab === 'notifs' ? 'btn-primary' : ''}`;
-      if (tab !== 'notifs') tabNotifs.style.background = '#ffffff';
-
-      contentPrefs.style.display = tab === 'prefs' ? 'block' : 'none';
-      contentAutos.style.display = tab === 'autos' ? 'block' : 'none';
-      contentLogs.style.display = tab === 'logs' ? 'block' : 'none';
-      contentNotifs.style.display = tab === 'notifs' ? 'block' : 'none';
-    }
-
-    tabPrefs.onclick = () => switchTab('prefs');
-    tabAutos.onclick = () => switchTab('autos');
-    tabLogs.onclick = () => switchTab('logs');
-    tabNotifs.onclick = () => switchTab('notifs');
-  }
-
-  // Bind Rule Toggles
-  container.querySelectorAll('input[data-rule-toggle]').forEach(chk => {
-    chk.onchange = e => {
-      const ruleId = e.target.dataset.ruleToggle;
-      const active = e.target.checked;
-      updateAutomationRuleStatus(ruleId, active);
-      showToast('Status da regra atualizado com sucesso');
-      renderSettingsView();
-    };
-  });
-
-  // Bind Notifications Read
-  container.querySelectorAll('button[data-notif-read]').forEach(btn => {
-    btn.onclick = e => {
-      const notifId = e.target.dataset.notifRead;
-      markNotificationAsRead(notifId);
-      renderSettingsView();
-    };
-  });
-
-  const clearNotifsBtn = container.querySelector('#btn-clear-notifs');
-  if (clearNotifsBtn) {
-    clearNotifsBtn.onclick = () => {
-      clearAllNotifications();
-      showToast('Notificações limpas');
-      renderSettingsView();
-    };
-  }
-
-  const btnExport = container.querySelector('#btn-export-backup');
-  if (btnExport) {
-    btnExport.addEventListener('click', () => {
-      const res = exportBackup();
-      if (res.success) {
-        showToast('Backup exportado com sucesso!', '💾');
-        renderSettingsView();
-      } else {
-        showToast(`Erro ao exportar backup: ${res.error}`, '⚠');
-      }
-    });
-  }
-
-  const btnImportTrigger = container.querySelector('#btn-import-backup-trigger');
-  const inpRestoreFile = container.querySelector('#inp-restore-file');
-  if (btnImportTrigger && inpRestoreFile) {
-    btnImportTrigger.addEventListener('click', () => {
-      inpRestoreFile.click();
-    });
-
-    inpRestoreFile.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const confirmRestore = confirm('Atenção: A restauração de um backup irá substituir TODOS os dados atuais do PAPER MAX pelos dados do arquivo. Deseja prosseguir?');
-      if (!confirmRestore) {
-        inpRestoreFile.value = '';
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const jsonContent = event.target.result;
-        const res = restoreBackup(jsonContent);
-        if (res.success) {
-          showToast('Dados restaurados com sucesso! Recarregando aplicação...', '✓');
-          setTimeout(() => {
-            window.location.reload();
-          }, 800);
-        } else {
-          alert(`Falha ao restaurar backup: ${res.error}`);
-          showToast('Falha na restauração do backup.', '⚠');
-        }
-        inpRestoreFile.value = '';
-      };
-      reader.onerror = () => {
-        alert('Erro ao ler o arquivo selecionado.');
-        inpRestoreFile.value = '';
-      };
-      reader.readAsText(file);
-    });
-  }
-
-  const saveBtn = container.querySelector('#btn-save-settings');
-  if (saveBtn) {
-    saveBtn.addEventListener('click', e => {
-      e.preventDefault();
-      const atelierName = document.getElementById('inp-set-name').value;
-      const ownerName = document.getElementById('inp-set-owner').value;
-      saveSettings({ atelierName, ownerName });
-      showToast('Preferências salvas com sucesso');
-    });
-  }
+  const tab = (typeof payload === 'string') ? payload : (payload && payload.tab) ? payload.tab : undefined;
+  renderSettingsModule(container, { tab });
 }
 
 // ==========================================
@@ -1904,10 +1442,10 @@ export function switchView(viewName, payload = null) {
       renderOrdersView();
       break;
     case 'pedidos-novo':
-      renderNewOrderPage(document.getElementById('view-container'), getOrdersContext(), null);
+      renderNewOrderPage(document.getElementById('view-container'), getOrdersContext(), null, payload);
       break;
     case 'pedidos-editar':
-      renderNewOrderPage(document.getElementById('view-container'), getOrdersContext(), payload);
+      renderNewOrderPage(document.getElementById('view-container'), getOrdersContext(), payload, null);
       break;
     case 'produtos':
       renderProductsView();
@@ -1919,7 +1457,7 @@ export function switchView(viewName, payload = null) {
       renderFinanceView();
       break;
     case 'ajustes':
-      renderSettingsView();
+      renderSettingsView(payload);
       break;
     case 'aprovar-arte':
       renderOrderApprovalPage(document.getElementById('view-container'), payload || 1048, () => switchView('pedidos'));
@@ -1945,6 +1483,15 @@ export function initApp() {
 }
 
 function initAppAfterAuth() {
+  // Garantir que a base inicia limpa e sem dados fictícios para uso real
+  try {
+    if (!localStorage.getItem('papermax.clean_production_ready.v1')) {
+      clearAllSystemData(true);
+    }
+  } catch (e) {
+    console.warn('[Init] LocalStorage access check:', e);
+  }
+
   initClock();
   initCopilotUI();
 
@@ -2019,10 +1566,74 @@ function initAppAfterAuth() {
   });
 
   // Keyboard Shortcuts:
-  // - Escape closes open drawer
+  // - Escape closes the topmost open layer in strict hierarchical order:
+  //   1. Context menu
+  //   2. Three dots dropdown menus
+  //   3. Confirmation modal
+  //   4. Finance modal container
+  //   5. Generic active modal
+  //   6. Global App Drawer
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      closeDrawer();
+      // 1. Context Menu
+      const contextMenu = document.getElementById('app-context-menu');
+      if (contextMenu) {
+        contextMenu.remove();
+        return;
+      }
+
+      // 2. Dropdown Dots Menus
+      let closedDots = false;
+      document.querySelectorAll('.dots-dropdown-menu').forEach(m => {
+        if (m.style.display === 'block') {
+          m.style.display = 'none';
+          closedDots = true;
+        }
+      });
+      if (closedDots) return;
+
+      // 3. Confirmation Dialogs
+      const confirmBackdrop = document.querySelector('.confirm-dialog-backdrop, #orders-confirm-backdrop');
+      if (confirmBackdrop) {
+        const cancelBtn = confirmBackdrop.querySelector('#confirm-cancel-btn') || confirmBackdrop.querySelector('.btn-secondary');
+        if (cancelBtn) {
+          cancelBtn.click();
+        } else {
+          confirmBackdrop.remove();
+        }
+        return;
+      }
+
+      // 4. Finance Modal Container
+      const finModal = document.getElementById('finance-modal-container');
+      if (finModal && finModal.children.length > 0 && finModal.innerHTML.trim() !== '') {
+        const closeBtn = finModal.querySelector('.btn-close, #btn-close-drawer, #btn-cancel-drawer, #btn-cancel-receive, #btn-cancel-pay-exp, #btn-cancel-pay-payable, #btn-close-rec-drawer, #btn-cancel-rec-drawer, #btn-close-pay-drawer, #btn-cancel-pay-drawer, #btn-cancel-import');
+        if (closeBtn) {
+          closeBtn.click();
+        } else {
+          finModal.innerHTML = '';
+        }
+        return;
+      }
+
+      // 5. Generic Modals / Overlays
+      const genericModal = document.querySelector('.modal-backdrop:not(.confirm-dialog-backdrop):not(#orders-confirm-backdrop)');
+      if (genericModal) {
+        const closeBtn = genericModal.querySelector('.btn-close, .btn-secondary, [data-action="close"], #btn-cancel');
+        if (closeBtn) {
+          closeBtn.click();
+        } else {
+          genericModal.remove();
+        }
+        return;
+      }
+
+      // 6. Global App Drawer
+      const drawer = document.getElementById('app-drawer');
+      if (drawer && drawer.classList.contains('active')) {
+        closeDrawer();
+        return;
+      }
     }
   });
 
@@ -2087,6 +1698,64 @@ function initAppAfterAuth() {
       console.log('SW registration note:', err);
     });
   }
+
+  // Global Masking Engine for Contact/WhatsApp, CPF, and CNPJ
+  document.addEventListener('input', (e) => {
+    const target = e.target;
+    if (!target || target.tagName !== 'INPUT') return;
+    if (target.type === 'file' || target.type === 'checkbox' || target.type === 'radio' || target.type === 'date' || target.type === 'number') return;
+    
+    const id = (target.id || '').toLowerCase();
+    const name = (target.name || '').toLowerCase();
+    const mask = target.getAttribute('data-mask');
+
+    // Telefone / Contato / WhatsApp -> (XX) 9 XXXX-XXXX
+    if (mask === 'phone' || id.includes('contato') || id.includes('phone') || id.includes('whatsapp') || id.includes('tel') || name.includes('phone') || name.includes('contato') || target.type === 'tel') {
+      const val = target.value;
+      const formatted = formatPhone(val);
+      if (val !== formatted) {
+        const cursor = target.selectionStart;
+        target.value = formatted;
+        // Keep cursor near position if reasonable
+        if (cursor && cursor <= formatted.length) {
+          try { target.setSelectionRange(target.value.length, target.value.length); } catch (_) {}
+        }
+      }
+      return;
+    }
+
+    // CPF -> XXX.XXX.XXX-XX
+    if (mask === 'cpf' || id.includes('cpf') || name.includes('cpf')) {
+      const val = target.value;
+      const formatted = formatCPF(val);
+      if (val !== formatted) {
+        target.value = formatted;
+        try { target.setSelectionRange(target.value.length, target.value.length); } catch (_) {}
+      }
+      return;
+    }
+
+    // CNPJ -> XX.XXX.XXX/XXXX-XX
+    if (mask === 'cnpj' || id.includes('cnpj') || name.includes('cnpj')) {
+      const val = target.value;
+      const formatted = formatCNPJ(val);
+      if (val !== formatted) {
+        target.value = formatted;
+        try { target.setSelectionRange(target.value.length, target.value.length); } catch (_) {}
+      }
+      return;
+    }
+
+    // Documento misto (CPF ou CNPJ)
+    if (mask === 'doc' || mask === 'document' || id.includes('docnumber') || id.includes('documento')) {
+      const val = target.value;
+      const formatted = formatCPFOrCNPJ(val);
+      if (val !== formatted) {
+        target.value = formatted;
+        try { target.setSelectionRange(target.value.length, target.value.length); } catch (_) {}
+      }
+    }
+  });
 }
 
 // Auto-run when DOM is ready
@@ -2099,9 +1768,15 @@ if (document.readyState === 'loading') {
 export function openContextMenu(event, options) {
   event.stopPropagation();
   const existing = document.getElementById('app-context-menu');
-  if (existing) existing.remove();
+  if (existing) {
+    if (existing._closeListener) {
+      document.removeEventListener('click', existing._closeListener);
+    }
+    existing.remove();
+  }
 
-  const rect = event.currentTarget.getBoundingClientRect();
+  const targetEl = event.currentTarget || event.target;
+  const rect = targetEl.getBoundingClientRect();
   const menu = document.createElement('div');
   menu.id = 'app-context-menu';
   menu.style.position = 'fixed';
@@ -2127,10 +1802,17 @@ export function openContextMenu(event, options) {
 
   document.body.appendChild(menu);
 
+  const removeMenu = () => {
+    if (menu._closeListener) {
+      document.removeEventListener('click', menu._closeListener);
+    }
+    menu.remove();
+  };
+
   menu.querySelectorAll('.context-menu-item').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      menu.remove();
+      removeMenu();
       const idx = Number(btn.getAttribute('data-idx'));
       if (options[idx] && typeof options[idx].action === 'function') {
         options[idx].action();
@@ -2140,9 +1822,9 @@ export function openContextMenu(event, options) {
 
   const closeListener = (e) => {
     if (!menu.contains(e.target)) {
-      menu.remove();
-      document.removeEventListener('click', closeListener);
+      removeMenu();
     }
   };
+  menu._closeListener = closeListener;
   setTimeout(() => document.addEventListener('click', closeListener), 0);
 }

@@ -40,7 +40,11 @@ export const STORAGE_KEYS = {
   AUTOMATION_RULES: 'papermax.automation_rules.v1',
   AUTOMATION_LOGS: 'papermax.automation_logs.v1',
   AUTOMATION_EVENTS: 'papermax.automation_events.v1',
-  NOTIFICATIONS: 'papermax.notifications.v1'
+  NOTIFICATIONS: 'papermax.notifications.v1',
+  PRINT_QUEUE: 'papermax.print_queue.v1',
+  AUDIT_LOGS: 'papermax.audit_logs.v1',
+  DOC_CONFIGS: 'papermax.doc_configs.v1',
+  ALERTS_CONFIG: 'papermax.alerts_config.v1'
 };
 
 // Autosave Status: 'idle' | 'saving' | 'saved' | 'error'
@@ -50,17 +54,35 @@ let debounceTimer = null;
 const pendingSaves = new Map();
 
 /**
+ * PAPER MAX - Safe LocalStorage Access Wrapper
+ */
+export function getLocalStorage() {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage;
+    }
+    if (typeof localStorage !== 'undefined') {
+      return localStorage;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * Retrieves the raw JSON string for a storage key.
  * First checks pendingSaves (in-memory unpersisted debounce buffer) to guarantee
  * that any read operation immediately following a save gets the most up-to-date data,
  * even before the 350ms persistence debounce expires.
  */
-function getStorageItem(key) {
+export function getStorageItem(key) {
   if (pendingSaves.has(key)) {
     return pendingSaves.get(key);
   }
   try {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+    const storage = getLocalStorage();
+    return storage ? storage.getItem(key) : null;
   } catch (e) {
     console.warn('[Storage] Error accessing localStorage for key:', key, e);
     return null;
@@ -88,9 +110,10 @@ function executePendingSaves() {
   if (pendingSaves.size === 0) return;
 
   try {
-    if (typeof localStorage !== 'undefined') {
+    const storage = getLocalStorage();
+    if (storage) {
       for (const [key, jsonString] of pendingSaves.entries()) {
-        localStorage.setItem(key, jsonString);
+        storage.setItem(key, jsonString);
       }
     }
     pendingSaves.clear();
@@ -129,18 +152,13 @@ export function loadCategories() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.CATEGORIES);
     if (!raw) {
-      saveCategories(SEED_CATEGORIES, true);
-      return SEED_CATEGORIES;
+      saveCategories([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      saveCategories(SEED_CATEGORIES, true);
-      return SEED_CATEGORIES;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading categories, fallback to seed:', e);
-    return SEED_CATEGORIES;
+    return [];
   }
 }
 
@@ -155,18 +173,13 @@ export function loadProducts() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.PRODUCTS);
     if (!raw) {
-      saveProducts(SEED_PRODUCTS, true);
-      return SEED_PRODUCTS;
+      saveProducts([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      saveProducts(SEED_PRODUCTS, true);
-      return SEED_PRODUCTS;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading products, fallback to seed:', e);
-    return SEED_PRODUCTS;
+    return [];
   }
 }
 
@@ -181,13 +194,13 @@ export function loadOrders() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.ORDERS);
     if (!raw) {
-      saveOrders(SEED_ORDERS, true);
-      return SEED_ORDERS;
+      saveOrders([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      saveOrders(SEED_ORDERS, true);
-      return SEED_ORDERS;
+    if (!Array.isArray(parsed)) {
+      saveOrders([], true);
+      return [];
     }
 
     // Smooth migration: guarantee every order has required fields & snapshot fallback
@@ -254,8 +267,7 @@ export function loadOrders() {
 
     return migrated;
   } catch (e) {
-    console.warn('[Storage] Error loading orders, fallback to seed:', e);
-    return SEED_ORDERS;
+    return [];
   }
 }
 
@@ -266,11 +278,72 @@ export function saveOrders(orders, immediate = false) {
 // ==========================================
 // SETTINGS
 // ==========================================
-const DEFAULT_SETTINGS = {
+export const DEFAULT_SETTINGS = {
+  // Identidade do Ateliê
   atelierName: 'Ateliê Papel',
   ownerName: 'Papelaria Criativa',
-  currency: 'BRL',
+  logo: '',
+  phone: '(11) 9 8765-4321',
+  whatsapp: '(11) 9 8765-4321',
+  email: 'contato@ateliepapel.com.br',
+  address: 'Rua das Flores, 123 - Centro - São Paulo/SP - CEP: 01001-000',
+  instagram: '@ateliepapelmax',
+  docNumber: '12.345.678/0001-90',
+  docVisibility: {
+    atelierName: true,
+    ownerName: true,
+    logo: true,
+    phone: true,
+    whatsapp: true,
+    email: true,
+    address: true,
+    instagram: true,
+    docNumber: true
+  },
+  // Interface
   theme: 'light',
+  density: 'compact',
+  showLeds: true,
+  dateFormat: 'dd/mm/aaaa',
+  // Impressão
+  printer: {
+    defaultPrinter: 'Térmica 58mm (Padrão)',
+    thermalWidth: '58mm',
+    margins: '3mm',
+    customHeader: 'PAPER MAX · ATELIÊ DE PAPELARIA PERSONALIZADA',
+    customFooter: 'Obrigado pela preferência! Feito com amor e carinho.',
+    printLogo: true
+  },
+  printBehavior: {
+    autoSendToQueue: true,
+    autoPrintWhenAvailable: false,
+    askBeforePrint: true,
+    allowReprint: true
+  },
+  // Automações
+  automationSwitches: {
+    // Pedidos
+    autoDocOnCreate: true,
+    autoDocOnApprove: true,
+    autoOS: true,
+    autoLabels: true,
+    autoReceipt: true,
+    autoSendToPrintQueue: true,
+    // Estoque
+    alertMinStock: true,
+    alertMissingMaterial: true,
+    reserveStockOnApprove: true,
+    deductStockStage: 'embalagem',
+    // Produção
+    autoAdvanceStage: true,
+    createBlockPendency: true,
+    createReworkOnQCFail: true,
+    // Financeiro
+    createReceivableOnSale: true,
+    createPayableOnPurchase: true,
+    autoCashFlow: true
+  },
+  currency: 'BRL',
   motivationalPhrases: [
     'criar projetos encantadores com carinho',
     'organizar produções e fidelizar clientes',
@@ -286,7 +359,15 @@ export function loadSettings() {
       saveSettings(DEFAULT_SETTINGS, true);
       return DEFAULT_SETTINGS;
     }
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      docVisibility: { ...DEFAULT_SETTINGS.docVisibility, ...(parsed.docVisibility || {}) },
+      printer: { ...DEFAULT_SETTINGS.printer, ...(parsed.printer || {}) },
+      printBehavior: { ...DEFAULT_SETTINGS.printBehavior, ...(parsed.printBehavior || {}) },
+      automationSwitches: { ...DEFAULT_SETTINGS.automationSwitches, ...(parsed.automationSwitches || {}) }
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -303,42 +384,13 @@ export function loadMaterials() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.MATERIALS);
     if (!raw) {
-      saveMaterials(SEED_MATERIALS, true);
-      return SEED_MATERIALS;
+      saveMaterials([], true);
+      return [];
     }
-    let parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      saveMaterials(SEED_MATERIALS, true);
-      return SEED_MATERIALS;
-    }
-
-    // Guarantee every material has category set
-    let updated = false;
-    parsed = parsed.map(m => {
-      if (!m.category) {
-        updated = true;
-        return { ...m, category: 'producao' };
-      }
-      return m;
-    });
-
-    // If no reposicao items exist in user's saved list, merge seed reposicao items
-    const hasReposicao = parsed.some(m => m.category === 'reposicao');
-    if (!hasReposicao) {
-      const seedReposicao = SEED_MATERIALS.filter(m => m.category === 'reposicao');
-      if (seedReposicao.length > 0) {
-        parsed = [...parsed, ...seedReposicao];
-        updated = true;
-      }
-    }
-
-    if (updated) {
-      saveMaterials(parsed, true);
-    }
-    return parsed;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading materials, fallback to seed:', e);
-    return SEED_MATERIALS;
+    return [];
   }
 }
 
@@ -353,18 +405,13 @@ export function loadComponents() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.COMPONENTS);
     if (!raw) {
-      saveComponents(SEED_COMPONENTS, true);
-      return SEED_COMPONENTS;
+      saveComponents([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      saveComponents(SEED_COMPONENTS, true);
-      return SEED_COMPONENTS;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading components, fallback to seed:', e);
-    return SEED_COMPONENTS;
+    return [];
   }
 }
 
@@ -379,18 +426,13 @@ export function loadSuppliers() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.SUPPLIERS);
     if (!raw) {
-      saveSuppliers(SEED_SUPPLIERS, true);
-      return SEED_SUPPLIERS;
+      saveSuppliers([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      saveSuppliers(SEED_SUPPLIERS, true);
-      return SEED_SUPPLIERS;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading suppliers, fallback to seed:', e);
-    return SEED_SUPPLIERS;
+    return [];
   }
 }
 
@@ -405,18 +447,13 @@ export function loadPurchases() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.PURCHASES);
     if (!raw) {
-      savePurchases(SEED_PURCHASES, true);
-      return SEED_PURCHASES;
+      savePurchases([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      savePurchases(SEED_PURCHASES, true);
-      return SEED_PURCHASES;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading purchases, fallback to seed:', e);
-    return SEED_PURCHASES;
+    return [];
   }
 }
 
@@ -431,18 +468,13 @@ export function loadMovements() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.MOVEMENTS);
     if (!raw) {
-      saveMovements(SEED_MOVEMENTS, true);
-      return SEED_MOVEMENTS;
+      saveMovements([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      saveMovements(SEED_MOVEMENTS, true);
-      return SEED_MOVEMENTS;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading movements, fallback to seed:', e);
-    return SEED_MOVEMENTS;
+    return [];
   }
 }
 
@@ -461,13 +493,8 @@ export function loadInventories() {
       return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      saveInventories([], true);
-      return [];
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading inventories:', e);
     return [];
   }
 }
@@ -483,18 +510,13 @@ export function loadExpenses() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.EXPENSES);
     if (!raw) {
-      saveExpenses(SEED_EXPENSES, true);
-      return SEED_EXPENSES;
+      saveExpenses([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      saveExpenses(SEED_EXPENSES, true);
-      return SEED_EXPENSES;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading expenses, fallback to seed:', e);
-    return SEED_EXPENSES;
+    return [];
   }
 }
 
@@ -509,18 +531,13 @@ export function loadReceivables() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.RECEIVABLES);
     if (!raw) {
-      saveReceivables(SEED_RECEIVABLES, true);
-      return SEED_RECEIVABLES;
+      saveReceivables([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      saveReceivables(SEED_RECEIVABLES, true);
-      return SEED_RECEIVABLES;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading receivables, fallback to seed:', e);
-    return SEED_RECEIVABLES;
+    return [];
   }
 }
 
@@ -535,18 +552,13 @@ export function loadPayables() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.PAYABLES);
     if (!raw) {
-      savePayables(SEED_PAYABLES, true);
-      return SEED_PAYABLES;
+      savePayables([], true);
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      savePayables(SEED_PAYABLES, true);
-      return SEED_PAYABLES;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading payables, fallback to seed:', e);
-    return SEED_PAYABLES;
+    return [];
   }
 }
 
@@ -564,7 +576,6 @@ export function loadAutomationRules() {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : null;
   } catch (e) {
-    console.warn('[Storage] Error loading automation rules:', e);
     return null;
   }
 }
@@ -583,7 +594,6 @@ export function loadAutomationLogs() {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading automation logs:', e);
     return [];
   }
 }
@@ -602,7 +612,6 @@ export function loadAutomationEvents() {
     const parsed = JSON.parse(raw);
     return typeof parsed === 'object' && parsed !== null ? parsed : {};
   } catch (e) {
-    console.warn('[Storage] Error loading automation events:', e);
     return {};
   }
 }
@@ -621,13 +630,298 @@ export function loadNotifications() {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('[Storage] Error loading notifications:', e);
     return [];
   }
 }
 
 export function saveNotifications(notifications, immediate = false) {
   scheduleSave(STORAGE_KEYS.NOTIFICATIONS, notifications, immediate);
+}
+
+// ==========================================
+// PRINT QUEUE (FILA DE IMPRESSÃO)
+// ==========================================
+export const SEED_PRINT_QUEUE = [];
+
+export function loadPrintQueue() {
+  try {
+    const raw = getStorageItem(STORAGE_KEYS.PRINT_QUEUE);
+    if (!raw) {
+      savePrintQueue([], true);
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function savePrintQueue(queue, immediate = false) {
+  scheduleSave(STORAGE_KEYS.PRINT_QUEUE, queue, immediate);
+}
+
+// ==========================================
+// AUDIT LOGS (AUDITORIA E LOGS)
+// ==========================================
+export const SEED_AUDIT_LOGS = [];
+
+export function loadAuditLogs() {
+  try {
+    const raw = getStorageItem(STORAGE_KEYS.AUDIT_LOGS);
+    if (!raw) {
+      saveAuditLogs([], true);
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveAuditLogs(logs, immediate = false) {
+  scheduleSave(STORAGE_KEYS.AUDIT_LOGS, logs, immediate);
+}
+
+// ==========================================
+// LIMPEZA TOTAL DE DADOS (USO REAL)
+// ==========================================
+export function clearAllSystemData(keepSettings = true) {
+  saveOrders([], true);
+  saveProducts([], true);
+  saveCategories([], true);
+  saveMaterials([], true);
+  saveComponents([], true);
+  saveSuppliers([], true);
+  savePurchases([], true);
+  saveMovements([], true);
+  saveInventories([], true);
+  saveExpenses([], true);
+  saveReceivables([], true);
+  savePayables([], true);
+  savePrintQueue([], true);
+  saveNotifications([], true);
+  saveAutomationLogs([], true);
+  saveAutomationEvents({}, true);
+  saveAuditLogs([], true);
+
+  const storage = getLocalStorage();
+  if (storage) {
+    storage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.COMPONENTS, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.INVENTORIES, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.RECEIVABLES, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.PAYABLES, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.PRINT_QUEUE, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.AUTOMATION_LOGS, JSON.stringify([]));
+    storage.setItem(STORAGE_KEYS.AUTOMATION_EVENTS, JSON.stringify({}));
+    storage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify([]));
+    storage.setItem('papermax.clean_production_ready.v1', 'true');
+  }
+}
+
+// ==========================================
+// DOCUMENT CONFIGURATIONS (DOCUMENTOS)
+// ==========================================
+export const DEFAULT_DOC_CONFIGS = {
+  os: {
+    title: 'Ordem de Serviço (O.S.)',
+    showCustomer: true,
+    showDeliveryDate: true,
+    showEventDate: true,
+    showAddress: true,
+    showItems: true,
+    showPersonalization: true,
+    showFinancial: true,
+    showObservations: true,
+    showSignatureLine: true,
+    signatureText: 'Assinatura do Responsável / Retirada',
+    paperSize: 'A4',
+    fontSize: '12px'
+  },
+  receipt: {
+    title: 'Cupom Não Fiscal',
+    format: '58mm',
+    showHeader: true,
+    showItems: true,
+    showFinancial: true,
+    showCustomer: true,
+    showFooterMsg: true,
+    footerMessage: 'Agradecemos a confiança! Feito com carinho.'
+  },
+  summary: {
+    title: 'Resumo do Pedido',
+    showItems: true,
+    showPhotos: true,
+    showProductionStage: true,
+    showFinancial: true
+  },
+  packageLabel: {
+    title: 'Etiqueta de Embalagem',
+    size: '100x150mm',
+    showSender: true,
+    showRecipient: true,
+    showOrderNumber: true,
+    showQty: true,
+    showFragileWarning: true,
+    showQrCode: true,
+    showBarcode: true
+  },
+  techPdf: {
+    title: 'PDF Técnico & Gabarito',
+    showBleedMarks: true,
+    showCutLines: true,
+    showCreaseLines: true,
+    showColorPalettes: true,
+    showDimensions: true
+  },
+  productLabel: {
+    title: 'Etiqueta de Produto',
+    size: '50x30mm',
+    model: 'Padrao',
+    perSheet: 24,
+    showCode: true,
+    showName: true,
+    showOrder: true,
+    showCustomer: true,
+    showQty: true,
+    showQrCode: true,
+    showBarcode: true,
+    showPrice: true
+  },
+  materialLabel: {
+    title: 'Etiqueta de Controle Interno de Insumo',
+    size: '50x30mm',
+    showName: true,
+    showInternalCode: true,
+    showCategory: true,
+    showUnit: true,
+    showSupplier: true,
+    showBatch: true,
+    showEntryDate: true,
+    showCost: true,
+    showStock: true,
+    showLocation: true,
+    defaultLocation: 'Armário 02 · Gaveta 04',
+    showBarcode: true
+  }
+};
+
+export function loadDocConfigs() {
+  try {
+    const raw = getStorageItem(STORAGE_KEYS.DOC_CONFIGS);
+    if (!raw) {
+      saveDocConfigs(DEFAULT_DOC_CONFIGS, true);
+      return DEFAULT_DOC_CONFIGS;
+    }
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_DOC_CONFIGS, ...parsed };
+  } catch (e) {
+    console.warn('[Storage] Error loading doc configs:', e);
+    return DEFAULT_DOC_CONFIGS;
+  }
+}
+
+export function saveDocConfigs(configs, immediate = false) {
+  scheduleSave(STORAGE_KEYS.DOC_CONFIGS, configs, immediate);
+}
+
+// ==========================================
+// ALERTS CONFIGURATION (ALERTAS)
+// ==========================================
+export const DEFAULT_ALERTS_CONFIG = [
+  {
+    id: 'alert_min_stock',
+    name: 'Estoque mínimo atingido',
+    type: 'stock_min',
+    active: true,
+    priority: 'alta',
+    condition: 'Estoque atual <= Estoque mínimo',
+    message: 'Insumo com estoque abaixo ou igual ao limite mínimo.'
+  },
+  {
+    id: 'alert_missing_material',
+    name: 'Falta de material para pedido',
+    type: 'stock_missing',
+    active: true,
+    priority: 'alta',
+    condition: 'Materiais insuficientes para pedidos ativos',
+    message: 'Falta de insumos para produção do pedido.'
+  },
+  {
+    id: 'alert_delivery_near',
+    name: 'Pedido próximo da entrega',
+    type: 'delivery_near',
+    active: true,
+    priority: 'media',
+    daysAdvance: 2,
+    condition: 'Prazo de entrega em até 2 dias',
+    message: 'Pedido próximo do prazo final de entrega.'
+  },
+  {
+    id: 'alert_delivery_overdue',
+    name: 'Pedido com entrega atrasada',
+    type: 'delivery_overdue',
+    active: true,
+    priority: 'alta',
+    condition: 'Data limite expirada e pedido não entregue',
+    message: 'Pedido atrasado necessitando prioridade máxima.'
+  },
+  {
+    id: 'alert_pending_payment',
+    name: 'Pagamento pendente em pedido',
+    type: 'payment_pending',
+    active: true,
+    priority: 'media',
+    condition: 'Valor restante > 0',
+    message: 'Saldo em aberto pendente de recebimento.'
+  },
+  {
+    id: 'alert_print_queue_pending',
+    name: 'Documento aguardando impressão',
+    type: 'print_pending',
+    active: true,
+    priority: 'baixa',
+    condition: 'Documentos na fila com status Aguardando',
+    message: 'Documentos na fila de impressão prontos para emissão.'
+  },
+  {
+    id: 'alert_production_blocked',
+    name: 'Problema / Bloqueio na produção',
+    type: 'production_block',
+    active: true,
+    priority: 'alta',
+    condition: 'Status Bloqueado ou Não Conformidade no CQ',
+    message: 'Interrupção na linha de produção requer intervenção.'
+  }
+];
+
+export function loadAlertsConfig() {
+  try {
+    const raw = getStorageItem(STORAGE_KEYS.ALERTS_CONFIG);
+    if (!raw) {
+      saveAlertsConfig(DEFAULT_ALERTS_CONFIG, true);
+      return DEFAULT_ALERTS_CONFIG;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : DEFAULT_ALERTS_CONFIG;
+  } catch (e) {
+    console.warn('[Storage] Error loading alerts config:', e);
+    return DEFAULT_ALERTS_CONFIG;
+  }
+}
+
+export function saveAlertsConfig(config, immediate = false) {
+  scheduleSave(STORAGE_KEYS.ALERTS_CONFIG, config, immediate);
 }
 
 

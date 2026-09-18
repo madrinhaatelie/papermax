@@ -739,6 +739,28 @@ export function updateReceivable(id, data) {
   return receivables[idx];
 }
 
+export function createReceivable(data) {
+  const receivables = loadReceivables();
+  const newRec = {
+    id: data.id || generateId('REC'),
+    orderId: data.orderId || null,
+    customer: data.customer || 'Cliente Avulso',
+    description: data.description || 'Recebimento Avulso',
+    amount: Number(Number(data.amount || 0).toFixed(2)),
+    dueDate: data.dueDate || formatDateBR(new Date()),
+    status: data.status || 'aberto',
+    paymentMethod: data.paymentMethod || 'Pix',
+    paidDate: data.status === 'recebido' ? (data.paidDate || formatDateBR(new Date())) : null,
+    notes: data.notes || '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  receivables.unshift(newRec);
+  saveReceivables(receivables, true);
+  bus.emit('finance:changed', { type: 'receivable_created', receivable: newRec });
+  return newRec;
+}
+
 export function deleteReceivable(id) {
   const receivables = loadReceivables();
   const rec = receivables.find(r => r.id === id);
@@ -814,6 +836,29 @@ export function updatePayable(id, data) {
   savePayables(payables, true);
   bus.emit('finance:changed', { type: 'payable_updated', payable: payables[idx] });
   return payables[idx];
+}
+
+export function createPayable(data) {
+  const payables = loadPayables();
+  const newPay = {
+    id: data.id || generateId('PAY'),
+    purchaseId: data.purchaseId || null,
+    supplierId: data.supplierId || null,
+    supplierName: data.supplierName || 'Fornecedor Avulso',
+    description: data.description || 'Conta a Pagar Avulsa',
+    amount: Number(Number(data.amount || 0).toFixed(2)),
+    dueDate: data.dueDate || formatDateBR(new Date()),
+    status: data.status || 'aberto',
+    paymentMethod: data.paymentMethod || 'Boleto',
+    paidDate: data.status === 'pago' ? (data.paidDate || formatDateBR(new Date())) : null,
+    notes: data.notes || '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  payables.unshift(newPay);
+  savePayables(payables, true);
+  bus.emit('finance:changed', { type: 'payable_created', payable: newPay });
+  return newPay;
 }
 
 export function deletePayable(id) {

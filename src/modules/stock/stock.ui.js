@@ -43,7 +43,9 @@ import {
   exportSuppliersCSV, importSuppliersCSV,
   exportMovementsCSV
 } from './stock.csv.js';
-import { escapeHtml, generateId, formatNumberXX, formatDateBR } from '../../utils/sanitize.js';
+import { escapeHtml, generateId, formatNumberXX, formatDateBR, formatPhone } from '../../utils/sanitize.js';
+import { showConfirmDialog } from '../orders/orders.ui.js';
+import { showToast } from '../../core/events.js';
 
 let currentStockSubTab = 'visao_geral'; // 'visao_geral' | 'materiais' | 'movimentacoes' | 'inventario' | 'alertas' | 'fornecedores'
 let materialsSubFilter = 'insumos'; // 'insumos' | 'componentes'
@@ -77,26 +79,23 @@ export function renderStockModule() {
       </div>
     </div>
 
-    <!-- Stock Navigation Tabs (Horizontal Dividers) -->
-    <div class="stock-tab-bar" style="display: flex; gap: 4px; margin: 16px 0; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0; overflow-x: auto;">
-      <button class="tab-btn-clean ${currentStockSubTab === 'visao_geral' ? 'active' : ''}" data-stock-tab="visao_geral" style="border: none; background: transparent; padding: 10px 16px; font-size: 13px; font-weight: ${currentStockSubTab === 'visao_geral' ? '700' : '600'}; color: ${currentStockSubTab === 'visao_geral' ? 'var(--primary)' : 'var(--text-secondary)'}; cursor: pointer; border-bottom: 2.5px solid ${currentStockSubTab === 'visao_geral' ? 'var(--primary)' : 'transparent'}; margin-bottom: -1px; white-space: nowrap; transition: all 0.15s ease;">
-        📊 Visão Geral
-      </button>
-      <button class="tab-btn-clean ${currentStockSubTab === 'materiais' ? 'active' : ''}" data-stock-tab="materiais" style="border: none; background: transparent; padding: 10px 16px; font-size: 13px; font-weight: ${currentStockSubTab === 'materiais' ? '700' : '600'}; color: ${currentStockSubTab === 'materiais' ? 'var(--primary)' : 'var(--text-secondary)'}; cursor: pointer; border-bottom: 2.5px solid ${currentStockSubTab === 'materiais' ? 'var(--primary)' : 'transparent'}; margin-bottom: -1px; white-space: nowrap; transition: all 0.15s ease;">
-        📦 Materiais
-      </button>
-      <button class="tab-btn-clean ${currentStockSubTab === 'movimentacoes' ? 'active' : ''}" data-stock-tab="movimentacoes" style="border: none; background: transparent; padding: 10px 16px; font-size: 13px; font-weight: ${currentStockSubTab === 'movimentacoes' ? '700' : '600'}; color: ${currentStockSubTab === 'movimentacoes' ? 'var(--primary)' : 'var(--text-secondary)'}; cursor: pointer; border-bottom: 2.5px solid ${currentStockSubTab === 'movimentacoes' ? 'var(--primary)' : 'transparent'}; margin-bottom: -1px; white-space: nowrap; transition: all 0.15s ease;">
-        🔄 Movimentações
-      </button>
-      <button class="tab-btn-clean ${currentStockSubTab === 'inventario' ? 'active' : ''}" data-stock-tab="inventario" style="border: none; background: transparent; padding: 10px 16px; font-size: 13px; font-weight: ${currentStockSubTab === 'inventario' ? '700' : '600'}; color: ${currentStockSubTab === 'inventario' ? 'var(--primary)' : 'var(--text-secondary)'}; cursor: pointer; border-bottom: 2.5px solid ${currentStockSubTab === 'inventario' ? 'var(--primary)' : 'transparent'}; margin-bottom: -1px; white-space: nowrap; transition: all 0.15s ease;">
-        📋 Inventário
-      </button>
-      <button class="tab-btn-clean ${currentStockSubTab === 'alertas' ? 'active' : ''}" data-stock-tab="alertas" style="border: none; background: transparent; padding: 10px 16px; font-size: 13px; font-weight: ${currentStockSubTab === 'alertas' ? '700' : '600'}; color: ${currentStockSubTab === 'alertas' ? 'var(--primary)' : 'var(--text-secondary)'}; cursor: pointer; border-bottom: 2.5px solid ${currentStockSubTab === 'alertas' ? 'var(--primary)' : 'transparent'}; margin-bottom: -1px; white-space: nowrap; transition: all 0.15s ease;">
-        🚨 Alertas
-      </button>
-      <button class="tab-btn-clean ${currentStockSubTab === 'fornecedores' ? 'active' : ''}" data-stock-tab="fornecedores" style="border: none; background: transparent; padding: 10px 16px; font-size: 13px; font-weight: ${currentStockSubTab === 'fornecedores' ? '700' : '600'}; color: ${currentStockSubTab === 'fornecedores' ? 'var(--primary)' : 'var(--text-secondary)'}; cursor: pointer; border-bottom: 2.5px solid ${currentStockSubTab === 'fornecedores' ? 'var(--primary)' : 'transparent'}; margin-bottom: -1px; white-space: nowrap; transition: all 0.15s ease;">
-        🏢 Fornecedores & Compras
-      </button>
+    <!-- Stock Navigation Tabs Bar (Divisórias de Fichário Horizontais Padrão Global) -->
+    <div class="stock-tab-bar" style="display: flex; gap: 4px; margin: 16px 0 20px 0; border-bottom: 2px solid #cbd5e1; padding-bottom: 0; overflow-x: auto; align-items: flex-end;">
+      ${[
+        { id: 'visao_geral', label: '📊 Visão Geral' },
+        { id: 'materiais', label: '📦 Materiais' },
+        { id: 'movimentacoes', label: '🔄 Movimentações' },
+        { id: 'inventario', label: '📋 Inventário' },
+        { id: 'alertas', label: '🚨 Alertas' },
+        { id: 'fornecedores', label: '🏢 Fornecedores & Compras' }
+      ].map(tab => {
+        const isActive = currentStockSubTab === tab.id;
+        return `
+          <button class="tab-btn ${isActive ? 'active' : ''}" data-stock-tab="${tab.id}">
+            ${tab.label}
+          </button>
+        `;
+      }).join('')}
     </div>
 
     <!-- Subtab Content Container -->
@@ -220,24 +219,24 @@ function renderMaterialsTab(balanceData, materials, components, suppliers) {
   else if (materialsSubFilter === 'todos') list = balanceData.all;
 
   return `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
-      <!-- Categorias / Filtros de Insumos -->
-      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-        <button class="btn ${materialsSubFilter === 'insumos' ? 'btn-primary' : 'btn-secondary'}" id="btn-sub-insumos" style="font-size: 12.5px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; border-bottom: 2px solid #cbd5e1; padding-bottom: 0;">
+      <!-- Categorias / Filtros de Insumos (Divisórias de Fichário Horizontais) -->
+      <div style="display: flex; gap: 4px; overflow-x: auto; align-items: flex-end;">
+        <button class="tab-btn ${materialsSubFilter === 'insumos' ? 'active' : ''}" id="btn-sub-insumos">
           🌿 Insumos de Produção
         </button>
-        <button class="btn ${materialsSubFilter === 'reposicao' ? 'btn-primary' : 'btn-secondary'}" id="btn-sub-reposicao" style="font-size: 12.5px; ${materialsSubFilter === 'reposicao' ? 'background: #0284c7; border-color: #0284c7;' : ''}">
+        <button class="tab-btn ${materialsSubFilter === 'reposicao' ? 'active' : ''}" id="btn-sub-reposicao">
           ⚙️ Reposição & Maquinário
         </button>
-        <button class="btn ${materialsSubFilter === 'componentes' ? 'btn-primary' : 'btn-secondary'}" id="btn-sub-componentes" style="font-size: 12.5px;">
+        <button class="tab-btn ${materialsSubFilter === 'componentes' ? 'active' : ''}" id="btn-sub-componentes">
           🧩 Componentes Fabricados
         </button>
-        <button class="btn ${materialsSubFilter === 'todos' ? 'btn-primary' : 'btn-secondary'}" id="btn-sub-todos" style="font-size: 12.5px;">
+        <button class="tab-btn ${materialsSubFilter === 'todos' ? 'active' : ''}" id="btn-sub-todos">
           📦 Todos
         </button>
       </div>
 
-      <div style="display: flex; gap: 8px;">
+      <div style="display: flex; gap: 8px; margin-bottom: 6px;">
         <button class="btn btn-secondary" onclick="window.print()" style="font-size: 12px;">🖨️ PDF</button>
         <button class="btn btn-primary" id="btn-new-stock-item" style="font-weight: 700;">
           + Novo
@@ -261,7 +260,7 @@ function renderMaterialsTab(balanceData, materials, components, suppliers) {
                   <div class="list-main" style="cursor: pointer;" data-action="view-material-summary" data-id="${item.id}" data-type="${item.type}">
                     <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
                       <span>${escapeHtml(item.name)}</span>
-                      ${isComp ? '<span class="badge-count" style="background: #fdf2f8; color: #db2777; font-size: 10px;">🧩 Componente BOM</span>' : ''}
+                      ${isComp ? '<span class="badge-count" style="background: #fdf2f8; color: #db2777; font-size: 10px;">🧩 Componente Fabricado</span>' : ''}
                       ${isRep ? '<span class="badge-count" style="background: #e0f2fe; color: #0369a1; font-size: 10px;">⚙️ Reposição / Máquina</span>' : ''}
                       ${!isComp && !isRep ? '<span class="badge-count" style="background: #f1f5f9; color: #475569; font-size: 10px;">🌿 Insumo</span>' : ''}
                     </div>
@@ -525,7 +524,7 @@ function renderSuppliersList(suppliers) {
               ${s.companyName ? `<span style="font-size: 11px; color: var(--text-secondary); font-weight: normal;">• ${escapeHtml(s.companyName)}</span>` : ''}
             </div>
             <div class="list-meta">
-              Contato: ${escapeHtml(s.contact || '-')} · Tel: ${escapeHtml(s.phone || '-')} · Email: ${escapeHtml(s.email || '-')}
+              Contato: ${escapeHtml(s.contact || '-')} · Tel: ${escapeHtml(formatPhone(s.phone) || '-')} · Email: ${escapeHtml(s.email || '-')}
             </div>
           </div>
           <div style="text-align: right; min-width: 120px;">
@@ -770,11 +769,19 @@ function bindStockEvents(container, balanceData, materials, components, supplier
       e.stopPropagation();
       const id = btn.getAttribute('data-id');
       const s = suppliers.find(x => x.id === id);
-      if (s && confirm(`Deseja excluir o fornecedor ${s.name}?`)) {
-        let list = loadSuppliers();
-        list = list.filter(x => x.id !== id);
-        saveSuppliers(list);
-        renderStockModule();
+      if (s) {
+        showConfirmDialog({
+          title: 'Excluir Fornecedor',
+          message: `Deseja realmente excluir o fornecedor <b>${escapeHtml(s.name)}</b>?`,
+          confirmText: 'Excluir',
+          isDanger: true,
+          onConfirm: () => {
+            let list = loadSuppliers();
+            list = list.filter(x => x.id !== id);
+            saveSuppliers(list);
+            renderStockModule();
+          }
+        });
       }
     });
   });
@@ -814,11 +821,19 @@ function bindStockEvents(container, balanceData, materials, components, supplier
       e.stopPropagation();
       const id = btn.getAttribute('data-id');
       const p = purchases.find(x => x.id === id);
-      if (p && confirm(`Deseja excluir a ordem de compra ${p.code || p.id}?`)) {
-        let list = loadPurchases();
-        list = list.filter(x => x.id !== id);
-        savePurchases(list);
-        renderStockModule();
+      if (p) {
+        showConfirmDialog({
+          title: 'Excluir Ordem de Compra',
+          message: `Deseja realmente excluir a ordem de compra <b>${escapeHtml(p.code || p.id)}</b>?`,
+          confirmText: 'Excluir',
+          isDanger: true,
+          onConfirm: () => {
+            let list = loadPurchases();
+            list = list.filter(x => x.id !== id);
+            savePurchases(list);
+            renderStockModule();
+          }
+        });
       }
     });
   });
@@ -871,18 +886,24 @@ function bindStockEvents(container, balanceData, materials, components, supplier
       e.stopPropagation();
       const id = btn.getAttribute('data-id');
       const type = btn.getAttribute('data-type') || 'insumo';
-      if (confirm('Tem certeza que deseja excluir este item?')) {
-        if (type === 'componente' || type === 'component') {
-          let comps = loadComponents();
-          comps = comps.filter(c => c.id !== id);
-          saveComponents(comps);
-        } else {
-          let mats = loadMaterials();
-          mats = mats.filter(m => m.id !== id);
-          saveMaterials(mats);
+      showConfirmDialog({
+        title: 'Excluir Item do Estoque',
+        message: 'Tem certeza que deseja excluir este item? Esta ação é irreversível.',
+        confirmText: 'Excluir',
+        isDanger: true,
+        onConfirm: () => {
+          if (type === 'componente' || type === 'component') {
+            let comps = loadComponents();
+            comps = comps.filter(c => c.id !== id);
+            saveComponents(comps);
+          } else {
+            let mats = loadMaterials();
+            mats = mats.filter(m => m.id !== id);
+            saveMaterials(mats);
+          }
+          renderStockModule();
         }
-        renderStockModule();
-      }
+      });
     });
   });
 
@@ -904,6 +925,21 @@ function bindStockEvents(container, balanceData, materials, components, supplier
       const suggestedQty = Number(btn.getAttribute('data-suggested-qty')) || 1;
       const unit = btn.getAttribute('data-unit') || 'un';
       openPurchaseDrawer(null, suppliers, materials, { materialId: id, quantity: suggestedQty, unit });
+    });
+  });
+
+  // Row Click -> Open Material Summary Drawer
+  container.querySelectorAll('.list-row, [data-action="view-material-summary"]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.actions') || e.target.closest('button') || e.target.closest('.btn-mat-summary-btn') || e.target.closest('.btn-quick-buy')) {
+        return;
+      }
+      const row = el.closest('.list-row') || el;
+      const id = row.getAttribute('data-id') || el.getAttribute('data-id');
+      const item = balanceData.all.find(it => it.id === id);
+      if (item) {
+        openMaterialSummaryDrawer(item, balanceData, materials, components, orders, purchases, suppliers, products);
+      }
     });
   });
 
@@ -951,18 +987,24 @@ function bindStockEvents(container, balanceData, materials, components, supplier
           }
         },
         { label: '🗑️ Excluir', icon: '🗑️', danger: true, action: () => {
-            if (confirm(`Deseja realmente excluir "${item.name}"?`)) {
-              if (item.type === 'componente' || item.type === 'component') {
-                let comps = loadComponents();
-                comps = comps.filter(c => c.id !== id);
-                saveComponents(comps);
-              } else {
-                let mats = loadMaterials();
-                mats = mats.filter(m => m.id !== id);
-                saveMaterials(mats);
+            showConfirmDialog({
+              title: 'Excluir Item',
+              message: `Deseja realmente excluir "<b>${escapeHtml(item.name)}</b>"?`,
+              confirmText: 'Excluir',
+              isDanger: true,
+              onConfirm: () => {
+                if (item.type === 'componente' || item.type === 'component') {
+                  let comps = loadComponents();
+                  comps = comps.filter(c => c.id !== id);
+                  saveComponents(comps);
+                } else {
+                  let mats = loadMaterials();
+                  mats = mats.filter(m => m.id !== id);
+                  saveMaterials(mats);
+                }
+                renderStockModule();
               }
-              renderStockModule();
-            }
+            });
           }
         }
       ]);
@@ -980,12 +1022,18 @@ function bindStockEvents(container, balanceData, materials, components, supplier
       openContextMenu(e, [
         { label: '📄 Ver Resumo', icon: '📄', action: () => openMovementSummaryDrawer(m) },
         { label: '🗑️ Excluir Registro', icon: '🗑️', danger: true, action: () => {
-            if (confirm('Deseja excluir este registro de movimentação?')) {
-              let list = loadMovements();
-              list = list.filter(x => x.id !== id);
-              saveMovements(list);
-              renderStockModule();
-            }
+            showConfirmDialog({
+              title: 'Excluir Registro de Movimentação',
+              message: 'Deseja excluir este registro de movimentação?',
+              confirmText: 'Excluir',
+              isDanger: true,
+              onConfirm: () => {
+                let list = loadMovements();
+                list = list.filter(x => x.id !== id);
+                saveMovements(list);
+                renderStockModule();
+              }
+            });
           }
         }
       ]);
@@ -1016,12 +1064,18 @@ function bindStockEvents(container, balanceData, materials, components, supplier
           }
         },
         { label: '🗑️ Excluir', icon: '🗑️', danger: true, action: () => {
-            if (confirm(`Deseja excluir o fornecedor ${s.name}?`)) {
-              let list = loadSuppliers();
-              list = list.filter(x => x.id !== id);
-              saveSuppliers(list);
-              renderStockModule();
-            }
+            showConfirmDialog({
+              title: 'Excluir Fornecedor',
+              message: `Deseja excluir o fornecedor <b>${escapeHtml(s.name)}</b>?`,
+              confirmText: 'Excluir',
+              isDanger: true,
+              onConfirm: () => {
+                let list = loadSuppliers();
+                list = list.filter(x => x.id !== id);
+                saveSuppliers(list);
+                renderStockModule();
+              }
+            });
           }
         }
       ]);
@@ -1044,17 +1098,22 @@ function bindStockEvents(container, balanceData, materials, components, supplier
       if (!isReceived) {
         menuOptions.push({
           label: '📥 Receber', icon: '📥', action: () => {
-            if (confirm(`Confirmar o recebimento da Compra ${p.code || p.id}? O estoque físico dos itens será atualizado.`)) {
-              const res = receivePurchase(p, { materials, components, movements, operator: 'Almoxarife' });
-              if (res.success) {
-                savePurchases(purchases);
-                saveMaterials(materials);
-                saveComponents(components);
-                saveMovements(movements);
-                alert(res.message);
-                renderStockModule();
+            showConfirmDialog({
+              title: 'Confirmar Recebimento de Compra',
+              message: `Confirmar o recebimento da Compra <b>${escapeHtml(p.code || p.id)}</b>? O estoque físico dos itens será atualizado.`,
+              confirmText: 'Confirmar Recebimento',
+              isDanger: false,
+              onConfirm: () => {
+                const res = receivePurchase(p, { materials, components, movements, operator: 'Almoxarife' });
+                if (res.success) {
+                  savePurchases(purchases);
+                  saveMaterials(materials);
+                  saveComponents(components);
+                  saveMovements(movements);
+                  renderStockModule();
+                }
               }
-            }
+            });
           }
         });
       }
@@ -1076,12 +1135,18 @@ function bindStockEvents(container, balanceData, materials, components, supplier
           }
         },
         { label: '🗑️ Excluir', icon: '🗑️', danger: true, action: () => {
-            if (confirm(`Deseja excluir a ordem de compra ${p.code || p.id}?`)) {
-              let list = loadPurchases();
-              list = list.filter(x => x.id !== id);
-              savePurchases(list);
-              renderStockModule();
-            }
+            showConfirmDialog({
+              title: 'Excluir Ordem de Compra',
+              message: `Deseja excluir a ordem de compra <b>${escapeHtml(p.code || p.id)}</b>?`,
+              confirmText: 'Excluir',
+              isDanger: true,
+              onConfirm: () => {
+                let list = loadPurchases();
+                list = list.filter(x => x.id !== id);
+                savePurchases(list);
+                renderStockModule();
+              }
+            });
           }
         }
       );
@@ -1218,7 +1283,7 @@ function openMaterialSummaryDrawer(item, balanceData, materials, components, ord
               <h4 style="font-size: 16px; font-weight: 800; margin: 0; color: var(--text-primary);">${escapeHtml(item.name)}</h4>
             </div>
             <div style="font-size: 12px; color: var(--text-secondary); margin-left: 20px;">
-              ${isComponent ? '🧩 Componente Fabricado (BOM)' : (item.category === 'reposicao' ? '⚙️ Peça de Reposição / Maquinário' : '🌿 Insumo de Produção')} · Unidade Base: <b>${escapeHtml(item.baseUnit || 'un')}</b>
+              ${isComponent ? '🧩 Componente Fabricado' : (item.category === 'reposicao' ? '⚙️ Peça de Reposição / Maquinário' : '🌿 Insumo de Produção')} · Unidade Base: <b>${escapeHtml(item.baseUnit || 'un')}</b>
             </div>
           </div>
           <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; background: ${isCrit ? '#fee2e2' : isWarn ? '#fef3c7' : '#dcfce7'}; color: ${isCrit ? '#b91c1c' : isWarn ? '#b45309' : '#15803d'};">
@@ -1781,21 +1846,26 @@ export function openStockItemDrawer({ item = null, itemType = 'material', suppli
       try {
         const created = createCategory({ name: name.trim() });
         populateCategories(created.id);
+        showToast('Categoria criada com sucesso.', '✓');
       } catch (err) {
-        alert(err.message || 'Erro ao criar categoria.');
+        showToast(err.message || 'Erro ao criar categoria.', '⚠️');
       }
     });
 
     drawer.querySelector('#btn-add-maq-subcat')?.addEventListener('click', () => {
       const catId = catSelect?.value;
-      if (!catId) return alert('Selecione uma categoria primeiro antes de criar uma subcategoria.');
+      if (!catId) {
+        showToast('Selecione uma categoria primeiro antes de criar uma subcategoria.', '⚠️');
+        return;
+      }
       const subName = window.prompt('Nome da nova subcategoria:');
       if (!subName || !subName.trim()) return;
       try {
         const createdSub = createSubcategory(catId, subName.trim());
         populateSubcategories(catId, createdSub);
+        showToast('Subcategoria criada com sucesso.', '✓');
       } catch (err) {
-        alert(err.message || 'Erro ao criar subcategoria.');
+        showToast(err.message || 'Erro ao criar subcategoria.', '⚠️');
       }
     });
 
@@ -1904,7 +1974,10 @@ export function openStockItemDrawer({ item = null, itemType = 'material', suppli
     };
 
     drawer.querySelector('#btn-add-comp-insumo')?.addEventListener('click', () => {
-      if (currentMaterials.length === 0) return alert('Cadastre ao menos um insumo primeiro.');
+      if (currentMaterials.length === 0) {
+        showToast('Cadastre ao menos um insumo primeiro.', '⚠️');
+        return;
+      }
       compItems.push({ materialId: currentMaterials[0].id, quantity: 1, unit: currentMaterials[0].baseUnit || 'un' });
       renderCompItems();
     });
@@ -2010,7 +2083,7 @@ export function openStockItemDrawer({ item = null, itemType = 'material', suppli
       const componentsMap = Object.fromEntries(allComponents.map(c => [c.id, c]));
       const cycleCheck = detectCompositionCycle(compId, compItems, componentsMap);
       if (cycleCheck.hasCycle) {
-        alert(cycleCheck.message || 'Ciclo de composição detectado. Um componente não pode conter a si próprio direta ou indiretamente.');
+        showToast(cycleCheck.message || 'Ciclo de composição detectado. Um componente não pode conter a si próprio direta ou indiretamente.', '⚠️');
         return;
       }
 
@@ -2172,7 +2245,7 @@ function openSupplierDrawer(supplier = null) {
           </div>
           <div class="form-group">
             <label class="form-label">Telefone / WhatsApp</label>
-            <input class="form-input" id="inp-sup-phone" value="${escapeHtml(supplier?.phone || '')}" />
+            <input class="form-input" id="inp-sup-phone" data-mask="phone" value="${escapeHtml(formatPhone(supplier?.phone || ''))}" placeholder="(XX) 9 XXXX-XXXX" />
           </div>
         </div>
 
@@ -2213,7 +2286,7 @@ function openSupplierDrawer(supplier = null) {
         name,
         companyName: drawer.querySelector('#inp-sup-company').value.trim(),
         contact: drawer.querySelector('#inp-sup-contact').value.trim(),
-        phone: drawer.querySelector('#inp-sup-phone').value.trim(),
+        phone: formatPhone(drawer.querySelector('#inp-sup-phone').value.trim()),
         email: drawer.querySelector('#inp-sup-email').value.trim(),
         storeUrl: drawer.querySelector('#inp-sup-url').value.trim(),
         notes: drawer.querySelector('#inp-sup-notes').value.trim(),
@@ -2357,7 +2430,10 @@ export function openPurchaseDrawer(purchase = null, suppliers = [], materials = 
     };
 
     drawer.querySelector('#btn-add-pur-item').addEventListener('click', () => {
-      if (materials.length === 0) return alert('Cadastre materiais primeiro.');
+      if (materials.length === 0) {
+        showToast('Cadastre materiais primeiro.', '⚠️');
+        return;
+      }
       const m = materials[0];
       items.push({ materialId: m.id, materialType: 'insumo', name: m.name, quantity: 1, unit: m.baseUnit, packCost: m.purchaseCost });
       renderItems();
@@ -2367,7 +2443,10 @@ export function openPurchaseDrawer(purchase = null, suppliers = [], materials = 
 
     drawer.querySelector('#form-purchase').addEventListener('submit', (e) => {
       e.preventDefault();
-      if (items.length === 0) return alert('Adicione pelo menos um item à compra.');
+      if (items.length === 0) {
+        showToast('Adicione pelo menos um item à compra.', '⚠️');
+        return;
+      }
 
       const purchases = loadPurchases();
       const supId = drawer.querySelector('#inp-pur-supplier').value;
@@ -2486,7 +2565,7 @@ function openInventorySessionDrawer(materials, components, movements) {
         saveMaterials(materials);
         saveComponents(components);
         saveMovements(movements);
-        alert(`Inventário concluído com sucesso! ${res.totalAdjusted} ajustes registrados.`);
+        showToast(`Inventário concluído com sucesso! ${res.totalAdjusted} ajustes registrados.`, '✓');
         close();
         renderStockModule();
       }
@@ -2533,7 +2612,10 @@ function openImportStockCSVDrawer() {
 
     drawer.querySelector('#btn-process-csv').addEventListener('click', () => {
       const text = rawInp.value.trim();
-      if (!text) return alert('Informe o conteúdo CSV.');
+      if (!text) {
+        showToast('Informe o conteúdo CSV.', '⚠️');
+        return;
+      }
 
       const materials = loadMaterials();
       const res = importMaterialsCSV(text, materials);
@@ -2550,7 +2632,7 @@ function openImportStockCSVDrawer() {
       }
 
       saveMaterials(res.materials);
-      alert(`${res.count} insumos importados com sucesso!`);
+      showToast(`${res.count} insumos importados com sucesso!`, '✓');
       close();
       renderStockModule();
     });
@@ -2569,7 +2651,7 @@ function openSupplierSummaryDrawer(supplier, purchases) {
         <h4 style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">${escapeHtml(supplier.name)}</h4>
         ${supplier.companyName ? `<div style="color: var(--text-secondary); margin-bottom: 4px;">Razão Social: <b>${escapeHtml(supplier.companyName)}</b></div>` : ''}
         ${supplier.contact ? `<div style="color: var(--text-secondary); margin-bottom: 4px;">Contato: <b>${escapeHtml(supplier.contact)}</b></div>` : ''}
-        ${supplier.phone ? `<div style="color: var(--text-secondary); margin-bottom: 4px;">Telefone: <b>${escapeHtml(supplier.phone)}</b></div>` : ''}
+        ${supplier.phone ? `<div style="color: var(--text-secondary); margin-bottom: 4px;">Telefone: <b>${escapeHtml(formatPhone(supplier.phone))}</b></div>` : ''}
         ${supplier.email ? `<div style="color: var(--text-secondary); margin-bottom: 4px;">Email: <b>${escapeHtml(supplier.email)}</b></div>` : ''}
         ${supplier.storeUrl ? `<div style="margin-top: 6px;"><a href="${escapeHtml(supplier.storeUrl)}" target="_blank" style="color: var(--accent-primary); font-weight: 600;">🔗 Acessar Loja / Link ↗</a></div>` : ''}
         ${supplier.notes ? `<div style="margin-top: 8px; font-style: italic; color: var(--text-secondary);">Obs: ${escapeHtml(supplier.notes)}</div>` : ''}

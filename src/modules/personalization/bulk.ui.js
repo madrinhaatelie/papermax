@@ -29,6 +29,7 @@ import { triggerPdfDownload } from './pdf.engine.js';
 import { fileStorage } from '../../data/filestorage.js';
 import { escapeHtml } from '../../utils/sanitize.js';
 import { showToast } from '../../core/events.js';
+import { showConfirmDialog } from '../orders/orders.ui.js';
 
 let activeProduct = null;
 let structuredItems = [];
@@ -41,7 +42,7 @@ let generatedBatchFiles = [];
 export function openBulkPersonalizationModal(openDrawerFn, closeDrawerFn, initialProductId = null) {
   const products = getProducts({ status: 'ativo' });
   if (products.length === 0) {
-    alert('Nenhum produto cadastrado para personalização.');
+    showToast('Nenhum produto cadastrado para personalização.', '⚠️');
     return;
   }
 
@@ -306,12 +307,19 @@ function bindBulkEvents(drawer, closeDrawerFn) {
 
   // Limpar lista
   drawer.querySelector('#btn-clear-items').addEventListener('click', () => {
-    if (confirm('Deseja realmente limpar toda a lista?')) {
-      structuredItems = [createEmptyItem(activeProduct, 1)];
-      clearBulkDraft();
-      renderTable(drawer);
-      updateStats(drawer);
-    }
+    showConfirmDialog({
+      title: 'Limpar Lista',
+      message: 'Deseja realmente limpar toda a lista?',
+      confirmText: 'Limpar Lista',
+      isDanger: true,
+      onConfirm: () => {
+        structuredItems = [createEmptyItem(activeProduct, 1)];
+        clearBulkDraft();
+        renderTable(drawer);
+        updateStats(drawer);
+        showToast('Lista limpa com sucesso.', '✓');
+      }
+    });
   });
 
   // Download modelo dinâmico CSV
@@ -350,7 +358,7 @@ function bindBulkEvents(drawer, closeDrawerFn) {
   drawer.querySelector('#btn-process-bulk-csv').addEventListener('click', () => {
     const csvContent = csvRawTextarea.value.trim();
     if (!csvContent) {
-      alert('Informe o conteúdo do CSV.');
+      showToast('Informe o conteúdo do CSV.', '⚠️');
       return;
     }
 
@@ -679,14 +687,22 @@ async function executeBatch(drawer) {
 
   const validation = validateAllItems(structuredItems, activeProduct);
   if (validation.errorCount > 0) {
-    if (!confirm(`A lista possui ${validation.errorCount} item(ns) com erro. Deseja prosseguir gerando apenas os válidos?`)) {
-      return;
-    }
+    showConfirmDialog({
+      title: 'Itens com Inconsistências',
+      message: `A lista possui ${validation.errorCount} item(ns) com erro. Deseja prosseguir gerando apenas os válidos?`,
+      confirmText: 'Prosseguir com Válidos',
+      onConfirm: () => startBatchProcessing(drawer)
+    });
+    return;
   }
 
+  startBatchProcessing(drawer);
+}
+
+async function startBatchProcessing(drawer) {
   const validItems = structuredItems.filter(i => i.isValid);
   if (validItems.length === 0) {
-    alert('Não há itens válidos para gerar.');
+    showToast('Não há itens válidos para gerar.', '⚠️');
     return;
   }
 
@@ -769,37 +785,42 @@ async function executeBatch(drawer) {
 
     // Listener para criar pedidos automaticamente a partir do lote
     drawer.querySelector('#btn-create-orders-from-batch').onclick = () => {
-      if (confirm(`Deseja criar ${validItems.length} novo(s) pedido(s) no sistema vinculando estes PDFs gerados?`)) {
-        let created = 0;
-        validItems.forEach((item, i) => {
-          const genFile = generatedBatchFiles[i];
-          const cust = item.personalization.field_nome || item.personalization.nome || `Cliente ${i + 1}`;
-          createOrder({
-            customer: cust,
-            productId: activeProduct.id,
-            qty: 1,
-            personalization: item.personalization,
-            changeOptions: item.changeOptions,
-            generatedFiles: genFile ? [{
-              fileId: genFile.fileId,
-              fileName: genFile.fileName,
-              size: genFile.size,
-              createdAt: genFile.createdAt
-            }] : [],
-            notes: `Gerado via Personalização em Massa (${activeProduct.name})`
+      showConfirmDialog({
+        title: 'Criar Pedidos a Partir do Lote',
+        message: `Deseja criar ${validItems.length} novo(s) pedido(s) no sistema vinculando estes PDFs gerados?`,
+        confirmText: 'Criar Pedidos',
+        onConfirm: () => {
+          let created = 0;
+          validItems.forEach((item, i) => {
+            const genFile = generatedBatchFiles[i];
+            const cust = item.personalization.field_nome || item.personalization.nome || `Cliente ${i + 1}`;
+            createOrder({
+              customer: cust,
+              productId: activeProduct.id,
+              qty: 1,
+              personalization: item.personalization,
+              changeOptions: item.changeOptions,
+              generatedFiles: genFile ? [{
+                fileId: genFile.fileId,
+                fileName: genFile.fileName,
+                size: genFile.size,
+                createdAt: genFile.createdAt
+              }] : [],
+              notes: `Gerado via Personalização em Massa (${activeProduct.name})`
+            });
+            created++;
           });
-          created++;
-        });
 
-        clearBulkDraft();
-        showToast(`${created} pedidos criados com sucesso!`);
-      }
+          clearBulkDraft();
+          showToast(`${created} pedidos criados com sucesso!`, '✓');
+        }
+      });
     };
 
     showToast(`Geração concluída: ${batchResult.successCount} PDFs gerados com sucesso!`);
   } catch (err) {
     batchProcessing = false;
     progressCard.style.display = 'none';
-    alert(`Erro no processamento do lote: ${err.message}`);
+    showToast(`Erro no processamento do lote: ${err.message}`, '⚠️');
   }
 }

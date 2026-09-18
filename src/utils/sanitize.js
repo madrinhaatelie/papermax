@@ -72,6 +72,16 @@ export function formatDateShortBR(dateInput) {
   return full;
 }
 
+export function formatDateDayMonthBR(dateInput) {
+  if (!dateInput) return '';
+  const full = formatDateBR(dateInput);
+  const parts = full.split('/');
+  if (parts.length >= 2) {
+    return `${parts[0]}/${parts[1]}`;
+  }
+  return full;
+}
+
 export function formatDateWithHoursBR(dateInput) {
   if (!dateInput) return '';
   const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
@@ -137,3 +147,68 @@ export function parseDateBRToISO(brDate) {
 export function generateId(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
 }
+
+/**
+ * Formats a Brazilian Phone / WhatsApp number:
+ * - 11 digits (mobile): (XX) 9 XXXX-XXXX
+ * - 10 digits (landline): (XX) XXXX-XXXX
+ */
+export function formatPhone(value) {
+  if (!value) return '';
+  const digits = String(value).replace(/\D/g, '').slice(0, 11);
+  if (!digits) return '';
+  
+  if (digits.length <= 2) {
+    return `(${digits}`;
+  }
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  // 11 digits: (XX) 9 XXXX-XXXX
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 3)} ${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+}
+
+/**
+ * Formats CPF: XXX.XXX.XXX-XX
+ */
+export function formatCPF(value) {
+  if (!value) return '';
+  const digits = String(value).replace(/\D/g, '').slice(0, 11);
+  if (!digits) return '';
+  
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+}
+
+/**
+ * Formats CNPJ: XX.XXX.XXX/XXXX-XX
+ */
+export function formatCNPJ(value) {
+  if (!value) return '';
+  const digits = String(value).replace(/\D/g, '').slice(0, 14);
+  if (!digits) return '';
+  
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
+}
+
+/**
+ * Formats CPF or CNPJ depending on digit length
+ */
+export function formatCPFOrCNPJ(value) {
+  if (!value) return '';
+  const digits = String(value).replace(/\D/g, '');
+  if (digits.length <= 11) {
+    return formatCPF(digits);
+  }
+  return formatCNPJ(digits);
+}
+

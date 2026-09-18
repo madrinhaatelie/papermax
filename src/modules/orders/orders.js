@@ -17,7 +17,7 @@ import {
 } from '../../data/storage.js';
 import { bus } from '../../core/events.js';
 import { createSnapshotFromProduct } from '../../data/seed.js';
-import { formatDateBR, parseDateBRToISO } from '../../utils/sanitize.js';
+import { formatDateBR, parseDateBRToISO, generateId } from '../../utils/sanitize.js';
 import { generateCSV, parseCSV } from '../../utils/csv.js';
 import { consumeOrderMaterials } from '../stock/stock.engine.js';
 import {
@@ -291,8 +291,8 @@ export function createOrder(payload) {
   
   const eventDateFormatted = payload.eventDate ? formatDateBR(payload.eventDate) : '';
   const limitDateFormatted = payload.limitDate ? formatDateBR(payload.limitDate) : '';
-  const deliveryDateFormatted = formatDateBR(payload.deliveryDate || new Date());
-  const orderDateFormatted = formatDateBR(payload.orderDate || new Date());
+  const deliveryDateFormatted = formatDateBR(payload.deliveryDate || payload.limitDate || new Date());
+  const orderDateFormatted = payload.orderDate ? (typeof payload.orderDate === 'string' && payload.orderDate.includes('/') ? payload.orderDate : formatDateBR(payload.orderDate)) : formatDateBR(new Date());
 
   const primaryItem = processedItems[0];
   const orderTitle = processedItems.length > 1 ? `Vários Itens (${processedItems.length})` : primaryItem.productTitle;
@@ -444,6 +444,7 @@ export function updateOrder(id, payload) {
     customer: customer || existing.customer,
     qty,
     productTitle: productTitle || existing.productTitle,
+    orderDate: payload.orderDate ? (payload.orderDate.includes('/') ? payload.orderDate : formatDateBR(payload.orderDate)) : existing.orderDate,
     deliveryDate: payload.deliveryDate ? (payload.deliveryDate.includes('/') ? payload.deliveryDate : formatDateBR(payload.deliveryDate)) : existing.deliveryDate,
     eventDate: payload.eventDate ? (payload.eventDate.includes('/') ? payload.eventDate : formatDateBR(payload.eventDate)) : existing.eventDate,
     status: statusKey,

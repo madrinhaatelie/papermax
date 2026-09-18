@@ -34,28 +34,90 @@ class EventBus {
 
 export const bus = new EventBus();
 
+let currentDismissHandler = null;
+
 /**
- * Toast Notification Dispatcher
- * Centralized in core/events to ensure modules can show notifications without circular dependencies.
+ * Toast / Snackbar Notification Dispatcher
+ * Centralized in core/events. Implements iOS Spring Animation, Liquid Glass + NEON border UI.
+ * Dismisses only when the user clicks anywhere on the screen.
  */
-export function showToast(message, icon = '✓') {
+export function showToast(message, typeOrIcon = '✓') {
   if (typeof document === 'undefined') return;
   const toast = document.getElementById('system-toast');
-  const iconEl = document.getElementById('toast-icon');
-  const textEl = document.getElementById('toast-text') || toast;
+  if (!toast) return;
 
-  if (iconEl) iconEl.textContent = icon;
-  if (textEl && textEl !== toast) {
-    textEl.textContent = message;
-  } else if (toast) {
-    toast.innerHTML = `<span id="toast-icon">${icon}</span> <span>${message}</span>`;
+  // Resolve icon/emoji based on parameter or keywords
+  let icon = '✨';
+  if (typeOrIcon === 'success' || typeOrIcon === '✓' || typeOrIcon === '✅') {
+    icon = '✓';
+  } else if (typeOrIcon === 'error' || typeOrIcon === 'erro' || typeOrIcon === '❌') {
+    icon = '✕';
+  } else if (typeOrIcon === 'warning' || typeOrIcon === 'alerta' || typeOrIcon === '⚠️' || typeOrIcon === '⚠') {
+    icon = '⚠';
+  } else if (typeOrIcon === 'info' || typeOrIcon === 'ℹ️' || typeOrIcon === 'ℹ') {
+    icon = 'ℹ';
+  } else if (typeof typeOrIcon === 'string' && typeOrIcon.trim()) {
+    icon = typeOrIcon;
   }
 
-  if (toast) {
-    toast.classList.add('show');
-    clearTimeout(toast._timeout);
-    toast._timeout = setTimeout(() => {
+  const iconEl = document.getElementById('toast-icon');
+  const msgEl = document.getElementById('toast-message') || document.getElementById('toast-text');
+
+  if (iconEl) iconEl.textContent = icon;
+  if (msgEl) {
+    msgEl.textContent = message;
+  } else {
+    toast.innerHTML = `
+      <div class="snackbar-content">
+        <div class="snackbar-icon-pill">
+          <span id="toast-icon">${icon}</span>
+        </div>
+        <div class="snackbar-body">
+          <span id="toast-message" class="snackbar-message">${message}</span>
+        </div>
+      </div>
+      <button type="button" class="snackbar-close-btn" id="toast-close-btn" aria-label="Fechar notificação">✕</button>
+    `;
+  }
+
+  // Remove previous dismiss listener if active
+  if (currentDismissHandler) {
+    document.removeEventListener('click', currentDismissHandler, true);
+    document.removeEventListener('touchstart', currentDismissHandler, true);
+    currentDismissHandler = null;
+  }
+
+  // Show Snackbar with iOS Spring Animation
+  toast.classList.remove('show');
+  void toast.offsetWidth; // Trigger reflow for spring restart
+  toast.classList.add('show');
+
+  // Register screen-wide dismiss on NEXT user interaction
+  setTimeout(() => {
+    currentDismissHandler = (event) => {
       toast.classList.remove('show');
-    }, 2800);
+      if (currentDismissHandler) {
+        document.removeEventListener('click', currentDismissHandler, true);
+        document.removeEventListener('touchstart', currentDismissHandler, true);
+        currentDismissHandler = null;
+      }
+    };
+
+    document.addEventListener('click', currentDismissHandler, true);
+    document.addEventListener('touchstart', currentDismissHandler, { capture: true, passive: true });
+  }, 80);
+
+  // Close button direct handler
+  const closeBtn = document.getElementById('toast-close-btn');
+  if (closeBtn) {
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      toast.classList.remove('show');
+      if (currentDismissHandler) {
+        document.removeEventListener('click', currentDismissHandler, true);
+        document.removeEventListener('touchstart', currentDismissHandler, true);
+        currentDismissHandler = null;
+      }
+    };
   }
 }

@@ -123,7 +123,8 @@ export function updateProduct(id, payload) {
     ...existing,
     name,
     categoryId: payload.categoryId !== undefined ? payload.categoryId : existing.categoryId,
-    status: payload.status !== undefined ? payload.status : existing.status,
+    status: payload.status !== undefined ? payload.status : (payload.active !== undefined ? (payload.active ? 'ativo' : 'inativo') : existing.status),
+    active: payload.active !== undefined ? payload.active : (payload.status !== undefined ? payload.status === 'ativo' : (existing.active !== undefined ? existing.active : existing.status === 'ativo')),
     type: payload.type !== undefined ? payload.type : existing.type,
     description: payload.description !== undefined ? payload.description : existing.description,
     price: payload.price !== undefined ? Number(payload.price) || 0 : existing.price,
@@ -168,12 +169,15 @@ export function duplicateProduct(id) {
 
 export function deleteProduct(id) {
   const orders = loadOrders();
-  const linkedOrders = orders.filter(o => o.productId === id);
+  const linkedOrders = orders.filter(o => 
+    o.productId === id || 
+    (Array.isArray(o.items) && o.items.some(it => it.productId === id))
+  );
 
   if (linkedOrders.length > 0) {
     return {
       success: false,
-      message: `Não é possível excluir: existem ${linkedOrders.length} pedido(s) associado(s) a este produto. Recomenda-se inativar o produto para preservar o histórico.`
+      message: `Não é possível excluir: existem ${linkedOrders.length} pedido(s) associado(s) a este produto. Recomendamos ocultar/inativar o produto para preservar o histórico dos pedidos.`
     };
   }
 
@@ -284,3 +288,20 @@ export function importProductsCSV(csvText) {
 
   return { success: true, count: validProducts.length, errors };
 }
+
+// Re-export Commercial Intelligence & Vitrine helpers
+export {
+  calculateProductIntelligence,
+  exportProductIntelligenceCSV,
+  INTELLIGENCE_PERIODS
+} from './products.intelligence.js';
+
+export {
+  renderProductsRankingView,
+  renderProductsTrendsView,
+  renderProductsCapacityView,
+  openProductIntelligenceDrawer,
+  renderCommercialVitrine,
+  openProductCommercialPreviewDrawer
+} from './products.ui.js';
+
