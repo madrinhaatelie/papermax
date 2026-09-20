@@ -23,6 +23,85 @@ import {
 } from '../stock/stock.engine.js';
 import { formatCurrency, escapeHtml, generateId } from '../../utils/sanitize.js';
 import { showToast } from '../../core/events.js';
+import { fileStorage } from '../../data/filestorage.js';
+
+/**
+ * Processa e otimiza um arquivo de imagem utilizando HTML5 Canvas.
+ * Redimensiona proporcionalmente para até maxWidth x maxHeight e gera DataURL compactada,
+ * persistindo também no IndexedDB via fileStorage.
+ */
+export async function processImageFile(file, maxWidth = 900, maxHeight = 900, quality = 0.85) {
+  if (!file) throw new Error('Nenhum arquivo informado.');
+  if (!file.type || !file.type.startsWith('image/')) {
+    throw new Error('Por favor, selecione um arquivo de imagem válido (PNG, JPG, WEBP).');
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
+
+          if (width > maxWidth || height > maxHeight) {
+            if (width / height > maxWidth / maxHeight) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          let dataUrl = canvas.toDataURL('image/webp', quality);
+          if (!dataUrl.startsWith('data:image/webp')) {
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+
+          const fileId = 'img_' + generateId('f');
+
+          canvas.toBlob(async (blob) => {
+            if (blob) {
+              try {
+                await fileStorage.saveFile(fileId, blob, {
+                  name: file.name,
+                  type: blob.type,
+                  width,
+                  height
+                });
+              } catch (err) {
+                console.warn('[ImageUpload] IndexedDB save warning:', err);
+              }
+            }
+          }, 'image/webp', quality);
+
+          resolve({
+            fileId,
+            dataUrl,
+            name: file.name,
+            size: file.size,
+            width,
+            height
+          });
+        } catch (procErr) {
+          reject(procErr);
+        }
+      };
+      img.onerror = () => reject(new Error('Falha ao decodificar a imagem selecionada.'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Erro ao ler os dados do arquivo.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 export function openProductConfigDrawer({
   productId = null,
@@ -55,6 +134,8 @@ export function openProductConfigDrawer({
       priceHistory: [
         { price: 30.00, date: new Date().toLocaleDateString('pt-BR') }
       ],
+      imageUrl: '',
+      images: [],
       mockups: {
         front: '',
         angle: '',
@@ -88,6 +169,33 @@ export function openProductConfigDrawer({
     }
     if (!product.mockups) {
       product.mockups = { front: product.imageUrl || '', angle: '', back: '' };
+    }
+    if (!product.images || !Array.isArray(product.images)) {
+      product.images = [];
+      if (product.mockups?.front || product.imageUrl) {
+        product.images.push({
+          id: 'img_' + generateId('i'),
+          url: product.mockups?.front || product.imageUrl,
+          angle: 'front',
+          name: 'Foto Principal'
+        });
+      }
+      if (product.mockups?.angle && product.mockups.angle !== (product.mockups?.front || product.imageUrl)) {
+        product.images.push({
+          id: 'img_' + generateId('i'),
+          url: product.mockups.angle,
+          angle: 'angle',
+          name: 'Foto Lateral'
+        });
+      }
+      if (product.mockups?.back && product.mockups.back !== (product.mockups?.front || product.imageUrl) && product.mockups.back !== product.mockups.angle) {
+        product.images.push({
+          id: 'img_' + generateId('i'),
+          url: product.mockups.back,
+          angle: 'back',
+          name: 'Foto Verso'
+        });
+      }
     }
     if (!product.composition || !Array.isArray(product.composition)) {
       product.composition = [];
@@ -307,12 +415,101 @@ export function openProductConfigDrawer({
             <textarea class="form-textarea" id="inp-pcfg-desc" rows="3" placeholder="Gramatura do papel, especificações técnicas, acabamento e dimensões em cm...">${escapeHtml(product.description || '')}</textarea>
           </div>
 
+          <!-- Bloco: Upload de Fotos e Galeria do Produto -->
+          <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+              <div>
+                <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                  <span>📸</span>
+                  <span>Fotos e Galeria do Produto</span>
+                </div>
+                <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px;">
+                  Adicione fotos do produto. A foto principal será exibida na vitrine, catálogo e pedidos.
+                </div>
+              </div>
+              <span class="badge-count" style="font-size: 10.5px; background: #f1f5f9; color: #475569;">
+                ${(product.images || []).length} ${(product.images || []).length === 1 ? 'foto' : 'fotos'}
+              </span>
+            </div>
+
+            <!-- Input Oculto de Seleção de Imagens -->
+            <input type="file" id="inp-pcfg-gallery-upload" accept="image/png,image/jpeg,image/webp,image/jpg" multiple style="display: none;" />
+
+            <!-- Dropzone com Drag & Drop e Clique -->
+            <div id="pcfg-dropzone-gallery" style="border: 2px dashed #cbd5e1; border-radius: 8px; padding: 18px 14px; text-align: center; background: #f8fafc; cursor: pointer; transition: all 0.2s ease;">
+              <div style="font-size: 30px; line-height: 1; margin-bottom: 6px;">☁️</div>
+              <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
+                Arraste e solte fotos aqui ou <span style="color: #4f46e5; text-decoration: underline;">clique para selecionar</span>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">
+                Formatos aceitos: PNG, JPG, JPEG, WEBP (suporta seleção múltipla)
+              </div>
+              <button type="button" class="btn btn-sm btn-primary" id="btn-trigger-gallery-upload" style="pointer-events: none;">
+                📁 Selecionar Fotos
+              </button>
+            </div>
+
+            <div id="pcfg-upload-feedback" style="margin-top: 6px; font-size: 11.5px; text-align: center;"></div>
+
+            <!-- Miniaturas da Galeria de Fotos Carregadas -->
+            ${(product.images && product.images.length > 0) ? `
+              <div style="margin-top: 14px; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">
+                  Fotos Adicionadas (${product.images.length})
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 10px;">
+                  ${product.images.map((img, idx) => {
+                    const isFront = img.url === product.mockups?.front || img.url === product.imageUrl;
+                    const isAngle = !isFront && img.url === product.mockups?.angle;
+                    const isBack = !isFront && !isAngle && img.url === product.mockups?.back;
+                    
+                    let roleBadge = '<span class="badge-count" style="font-size: 9.5px; background: #f1f5f9; color: #475569;">Galeria</span>';
+                    if (isFront) roleBadge = '<span class="badge-count" style="font-size: 9.5px; background: #dcfce7; color: #15803d; font-weight: 700;">⭐ Principal</span>';
+                    else if (isAngle) roleBadge = '<span class="badge-count" style="font-size: 9.5px; background: #dbeafe; color: #1d4ed8; font-weight: 700;">📐 Lateral</span>';
+                    else if (isBack) roleBadge = '<span class="badge-count" style="font-size: 9.5px; background: #ede9fe; color: #6d28d9; font-weight: 700;">🔄 Verso</span>';
+
+                    return `
+                      <div class="product-gallery-card" style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                        <div style="height: 100px; background: #f8fafc; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;">
+                          <img src="${escapeHtml(img.url)}" alt="Foto ${idx + 1}" style="width: 100%; height: 100%; object-fit: cover;" />
+                          <div style="position: absolute; top: 4px; left: 4px;">
+                            ${roleBadge}
+                          </div>
+                          <button type="button" class="btn-del-gallery-img" data-img-idx="${idx}" title="Excluir esta foto" style="position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; background: rgba(220,38,38,0.9); color: #ffffff; border: none; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; line-height: 1; transition: transform 0.1s;">
+                            ✕
+                          </button>
+                        </div>
+                        <div style="padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; background: #ffffff; border-top: 1px solid var(--border-subtle);">
+                          <div style="font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(img.name || `Foto ${idx + 1}`)}">
+                            ${escapeHtml(img.name || `Foto ${idx + 1}`)}
+                          </div>
+                          <div style="display: flex; gap: 3px; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-sm btn-set-img-angle" data-img-idx="${idx}" data-angle="front" title="Definir como Frente (Principal)" style="flex: 1; padding: 2px 4px; font-size: 9.5px; ${isFront ? 'background: #dcfce7; color: #15803d; font-weight: bold;' : ''}">
+                              ${isFront ? '✓ Frente' : 'Frente'}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-set-img-angle" data-img-idx="${idx}" data-angle="angle" title="Definir como Lateral" style="flex: 1; padding: 2px 4px; font-size: 9.5px; ${isAngle ? 'background: #dbeafe; color: #1d4ed8; font-weight: bold;' : ''}">
+                              ${isAngle ? '✓ Lat' : 'Lat'}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-set-img-angle" data-img-idx="${idx}" data-angle="back" title="Definir como Verso" style="flex: 1; padding: 2px 4px; font-size: 9.5px; ${isBack ? 'background: #ede9fe; color: #6d28d9; font-weight: bold;' : ''}">
+                              ${isBack ? '✓ Verso' : 'Verso'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
           <!-- Preview 3D Mockup Estático (03 Posições) -->
           <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <div>
                 <div style="font-size: 12.5px; font-weight: 700; color: var(--text-primary);">Preview Mockup 3D Estático (03 Posições)</div>
-                <div style="font-size: 11px; color: var(--text-muted);">Visualização do produto em 3 ângulos fotográficos</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Visualização e fotos do produto em 3 ângulos fotográficos</div>
               </div>
               <span class="badge-count" style="font-size: 10px; background: #e0e7ff; color: #4338ca;">3 Posições</span>
             </div>
@@ -320,7 +517,7 @@ export function openProductConfigDrawer({
             <!-- Abas das 3 posições -->
             <div style="display: flex; gap: 6px; margin-bottom: 12px;">
               <button type="button" class="btn btn-sm ${activeMockupTab === 'front' ? 'btn-primary' : ''}" data-mockup-tab="front" style="flex: 1; font-size: 11px;">
-                1. Frente
+                1. Frente (Principal)
               </button>
               <button type="button" class="btn btn-sm ${activeMockupTab === 'angle' ? 'btn-primary' : ''}" data-mockup-tab="angle" style="flex: 1; font-size: 11px;">
                 2. Frente / Lateral
@@ -923,28 +1120,48 @@ export function openProductConfigDrawer({
 
   function renderMockupAnglePreview(angle, prod) {
     const angleLabels = {
-      front: 'Frente',
+      front: 'Frente (Principal)',
       angle: 'Frente / Lateral',
       back: 'Verso'
     };
-    const currentPhoto = prod.mockups?.[angle] || prod.imageUrl || '';
+    const currentPhoto = prod.mockups?.[angle] || (angle === 'front' ? prod.imageUrl : '');
 
     return `
-      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-        <div style="width: 140px; height: 140px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+        <div id="pcfg-mockup-dropzone" style="width: 170px; height: 170px; background: #ffffff; border: 2px dashed ${currentPhoto ? 'var(--border-subtle)' : '#cbd5e1'}; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: all 0.2s ease;">
           ${currentPhoto ? `
-            <img src="${escapeHtml(currentPhoto)}" alt="Mockup ${angleLabels[angle]}" style="width: 100%; height: 100%; object-fit: cover;" />
+            <img src="${escapeHtml(currentPhoto)}" alt="Mockup ${angleLabels[angle]}" style="width: 100%; height: 100%; object-fit: contain; padding: 4px;" />
+            <div style="position: absolute; bottom: 6px; right: 6px; display: flex; gap: 4px;">
+              <button type="button" class="btn btn-sm" id="btn-change-angle-photo" title="Trocar foto deste ângulo" style="padding: 3px 8px; font-size: 11px; background: rgba(255,255,255,0.95); backdrop-filter: blur(4px); box-shadow: 0 1px 4px rgba(0,0,0,0.15); border: 1px solid var(--border-subtle); border-radius: 4px; cursor: pointer;">
+                🔄 Trocar
+              </button>
+              <button type="button" class="btn btn-sm" id="btn-remove-angle-photo" title="Remover foto deste ângulo" style="padding: 3px 8px; font-size: 11px; color: #dc2626; background: rgba(255,255,255,0.95); backdrop-filter: blur(4px); box-shadow: 0 1px 4px rgba(0,0,0,0.15); border: 1px solid #fecaca; border-radius: 4px; cursor: pointer;">
+                🗑️
+              </button>
+            </div>
           ` : `
-            <div style="text-align: center; color: var(--text-muted);">
+            <div style="text-align: center; color: var(--text-muted); padding: 12px;">
               <div style="font-size: 36px; margin-bottom: 4px;">
                 ${angle === 'front' ? '🛍️' : angle === 'angle' ? '📦' : '✨'}
               </div>
-              <div style="font-size: 10px; font-weight: 600;">Mockup 3D: ${angleLabels[angle]}</div>
+              <div style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">
+                ${angleLabels[angle]}
+              </div>
+              <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 2px; margin-bottom: 8px;">
+                Arraste uma foto aqui ou
+              </div>
+              <button type="button" class="btn btn-sm btn-primary" id="btn-upload-angle-photo" style="font-size: 11px; padding: 3px 10px;">
+                + Carregar Foto
+              </button>
             </div>
           `}
         </div>
-        <div style="font-size: 11px; color: var(--text-secondary);">
-          Ângulo Selecionado: <b>${angleLabels[angle]}</b>
+
+        <input type="file" id="inp-pcfg-angle-upload" accept="image/png,image/jpeg,image/webp,image/jpg" style="display: none;" />
+
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; max-width: 280px; font-size: 11.5px; color: var(--text-secondary);">
+          <span>Posição: <b>${angleLabels[angle]}</b></span>
+          ${currentPhoto ? `<span style="color: #16a34a; font-weight: 600;">✓ Foto vinculada</span>` : `<span style="color: var(--text-muted);">Sem foto</span>`}
         </div>
       </div>
     `;
@@ -1013,6 +1230,239 @@ export function openProductConfigDrawer({
         }
       });
     }
+
+    // 3.1. Upload de Fotos e Mockup 3D (Step 1)
+    const galleryInput = drawer.querySelector('#inp-pcfg-gallery-upload');
+    const galleryDropzone = drawer.querySelector('#pcfg-dropzone-gallery');
+    const uploadFeedback = drawer.querySelector('#pcfg-upload-feedback');
+
+    async function handleUploadFiles(files, targetAngle = null) {
+      if (!files || files.length === 0) return;
+      const validFiles = Array.from(files).filter(f => f.type && f.type.startsWith('image/'));
+      if (validFiles.length === 0) {
+        showToast('Selecione arquivos de imagem válidos (PNG, JPG, WEBP).', '⚠');
+        return;
+      }
+      if (uploadFeedback) {
+        uploadFeedback.innerHTML = `<span style="color: #4f46e5; font-weight: 600;">⏳ Processando e otimizando ${validFiles.length} foto(s)...</span>`;
+      }
+      try {
+        product.images = product.images || [];
+        product.mockups = product.mockups || { front: '', angle: '', back: '' };
+
+        let addedCount = 0;
+        for (let i = 0; i < validFiles.length; i++) {
+          const file = validFiles[i];
+          const processed = await processImageFile(file, 900, 900, 0.85);
+
+          let assignedAngle = targetAngle;
+          if (!assignedAngle) {
+            if (!product.mockups.front && !product.imageUrl) {
+              assignedAngle = 'front';
+            } else if (!product.mockups.angle) {
+              assignedAngle = 'angle';
+            } else if (!product.mockups.back) {
+              assignedAngle = 'back';
+            } else {
+              assignedAngle = 'gallery';
+            }
+          }
+
+          if (assignedAngle === 'front') {
+            product.mockups.front = processed.dataUrl;
+            product.imageUrl = processed.dataUrl;
+          } else if (assignedAngle === 'angle') {
+            product.mockups.angle = processed.dataUrl;
+          } else if (assignedAngle === 'back') {
+            product.mockups.back = processed.dataUrl;
+          }
+
+          product.images.push({
+            id: 'img_' + generateId('i'),
+            fileId: processed.fileId,
+            url: processed.dataUrl,
+            name: processed.name,
+            angle: assignedAngle,
+            uploadedAt: new Date().toISOString()
+          });
+          addedCount++;
+        }
+
+        saveCurrentStepInputs(drawer);
+        showToast(`${addedCount} foto(s) adicionada(s) ao produto!`, '📸');
+        reRender(drawer);
+      } catch (err) {
+        console.error('Image upload error:', err);
+        if (uploadFeedback) {
+          uploadFeedback.innerHTML = `<span style="color: #dc2626; font-weight: 600;">⚠ ${escapeHtml(err.message)}</span>`;
+        }
+        showToast(err.message, '⚠');
+      }
+    }
+
+    if (galleryDropzone && galleryInput) {
+      galleryDropzone.addEventListener('click', () => galleryInput.click());
+
+      galleryDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        galleryDropzone.style.borderColor = '#4f46e5';
+        galleryDropzone.style.background = '#eef2ff';
+      });
+
+      galleryDropzone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        galleryDropzone.style.borderColor = '#cbd5e1';
+        galleryDropzone.style.background = '#f8fafc';
+      });
+
+      galleryDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        galleryDropzone.style.borderColor = '#cbd5e1';
+        galleryDropzone.style.background = '#f8fafc';
+        if (e.dataTransfer && e.dataTransfer.files) {
+          handleUploadFiles(e.dataTransfer.files);
+        }
+      });
+
+      galleryInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          handleUploadFiles(e.target.files);
+        }
+      });
+    }
+
+    // Upload direto no card do Mockup 3D
+    const angleDropzone = drawer.querySelector('#pcfg-mockup-dropzone');
+    const angleFileInput = drawer.querySelector('#inp-pcfg-angle-upload');
+    const btnUploadAngle = drawer.querySelector('#btn-upload-angle-photo');
+    const btnChangeAngle = drawer.querySelector('#btn-change-angle-photo');
+    const btnRemoveAngle = drawer.querySelector('#btn-remove-angle-photo');
+
+    if (btnUploadAngle && angleFileInput) {
+      btnUploadAngle.addEventListener('click', () => angleFileInput.click());
+    }
+    if (btnChangeAngle && angleFileInput) {
+      btnChangeAngle.addEventListener('click', () => angleFileInput.click());
+    }
+    if (angleFileInput) {
+      angleFileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          handleUploadFiles(e.target.files, activeMockupTab);
+        }
+      });
+    }
+
+    if (angleDropzone) {
+      angleDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        angleDropzone.style.borderColor = '#4f46e5';
+        angleDropzone.style.background = '#eef2ff';
+      });
+
+      angleDropzone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        angleDropzone.style.borderColor = '#cbd5e1';
+        angleDropzone.style.background = '#ffffff';
+      });
+
+      angleDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        angleDropzone.style.borderColor = '#cbd5e1';
+        angleDropzone.style.background = '#ffffff';
+        if (e.dataTransfer && e.dataTransfer.files) {
+          handleUploadFiles(e.dataTransfer.files, activeMockupTab);
+        }
+      });
+    }
+
+    if (btnRemoveAngle) {
+      btnRemoveAngle.addEventListener('click', () => {
+        const removedUrl = product.mockups?.[activeMockupTab] || '';
+        if (product.mockups) {
+          product.mockups[activeMockupTab] = '';
+        }
+        if (activeMockupTab === 'front') {
+          const nextImg = (product.images || []).find(img => img.url !== removedUrl);
+          product.imageUrl = nextImg ? nextImg.url : '';
+        }
+        (product.images || []).forEach(img => {
+          if (img.url === removedUrl) {
+            img.angle = 'gallery';
+          }
+        });
+        saveCurrentStepInputs(drawer);
+        showToast(`Foto de ${activeMockupTab === 'front' ? 'Frente' : activeMockupTab === 'angle' ? 'Lateral' : 'Verso'} removida.`, '🗑️');
+        reRender(drawer);
+      });
+    }
+
+    // Ações de cada foto na galeria (Excluir e Definir Ângulo)
+    drawer.querySelectorAll('.btn-del-gallery-img').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.imgIdx, 10);
+        const img = product.images?.[idx];
+        if (!img) return;
+
+        if (product.mockups?.front === img.url) product.mockups.front = '';
+        if (product.mockups?.angle === img.url) product.mockups.angle = '';
+        if (product.mockups?.back === img.url) product.mockups.back = '';
+        if (product.imageUrl === img.url) {
+          product.imageUrl = product.mockups?.front || '';
+        }
+
+        if (img.fileId) {
+          fileStorage.deleteFile(img.fileId).catch(() => {});
+        }
+
+        product.images.splice(idx, 1);
+        saveCurrentStepInputs(drawer);
+        showToast('Foto excluída da galeria.', '🗑️');
+        reRender(drawer);
+      });
+    });
+
+    drawer.querySelectorAll('.btn-set-img-angle').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.imgIdx, 10);
+        const targetAngle = btn.dataset.angle; // 'front', 'angle', 'back'
+        const img = product.images?.[idx];
+        if (!img) return;
+
+        product.mockups = product.mockups || { front: '', angle: '', back: '' };
+
+        if (targetAngle === 'front') {
+          product.mockups.front = img.url;
+          product.imageUrl = img.url;
+          showToast('Foto definida como Principal (Frente)!', '⭐');
+        } else if (targetAngle === 'angle') {
+          product.mockups.angle = img.url;
+          showToast('Foto definida como Frente / Lateral!', '📐');
+        } else if (targetAngle === 'back') {
+          product.mockups.back = img.url;
+          showToast('Foto definida como Verso!', '🔄');
+        }
+
+        product.images.forEach((item, i) => {
+          if (i === idx) {
+            item.angle = targetAngle;
+          } else if (item.angle === targetAngle) {
+            item.angle = 'gallery';
+          }
+        });
+
+        activeMockupTab = targetAngle;
+        saveCurrentStepInputs(drawer);
+        reRender(drawer);
+      });
+    });
 
     // 4. Category Inline Creation (+)
     const btnToggleCat = drawer.querySelector('#btn-toggle-add-cat');
@@ -1557,6 +2007,19 @@ export function openProductConfigDrawer({
           const nameInp = drawer.querySelector('#inp-pcfg-name');
           if (nameInp) nameInp.focus();
           return;
+        }
+
+        // Sincroniza foto principal e mockups antes de persistir
+        product.mockups = product.mockups || { front: '', angle: '', back: '' };
+        if (!product.imageUrl && product.mockups.front) {
+          product.imageUrl = product.mockups.front;
+        }
+        if (!product.mockups.front && product.imageUrl) {
+          product.mockups.front = product.imageUrl;
+        }
+        if (!product.imageUrl && product.images && product.images.length > 0) {
+          product.imageUrl = product.images[0].url;
+          if (!product.mockups.front) product.mockups.front = product.images[0].url;
         }
 
         // Automatic price history register if price changed

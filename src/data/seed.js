@@ -579,6 +579,8 @@ export function createSnapshotFromProduct(product) {
     price: product.price || 0,
     cost: product.cost || 0,
     categoryId: product.categoryId || '',
+    imageUrl: product.imageUrl || product.mockups?.front || '',
+    mockups: product.mockups ? { ...product.mockups } : null,
     personalizationFields: JSON.parse(JSON.stringify(product.personalizationFields || [])),
     changeOptions: JSON.parse(JSON.stringify(product.changeOptions || [])),
     editor: JSON.parse(JSON.stringify(product.editor || { textAreas: [], elementAreas: [], colorAreas: [] })),
