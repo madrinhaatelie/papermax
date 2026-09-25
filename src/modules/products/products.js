@@ -317,6 +317,7 @@ export function importProductsCSV(csvText) {
 export {
   calculateProductIntelligence,
   exportProductIntelligenceCSV,
+  calculateProductionCapacity,
   INTELLIGENCE_PERIODS
 } from './products.intelligence.js';
 

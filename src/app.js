@@ -4,7 +4,7 @@
  */
 
 import { bus, showToast } from './core/events.js';
-import { onSaveStatusChange, loadSettings, saveSettings, clearAllSystemData } from './data/storage.js';
+import { onSaveStatusChange, loadSettings, saveSettings, clearAllSystemData, loadMaterials, loadComponents } from './data/storage.js';
 import { exportBackup, restoreBackup, getLastBackupTimestamp } from './data/backup.engine.js';
 import { getAuthenticatedUser, renderLoginScreen, getGreetingPhrase } from './data/auth.js';
 import { calculateDashboardMetrics } from './modules/dashboard/dashboard.js';
@@ -64,6 +64,7 @@ import {
   isSmartMold,
   calculateProductIntelligence,
   exportProductIntelligenceCSV,
+  calculateProductionCapacity,
   renderProductsRankingView,
   renderProductsTrendsView,
   renderProductsCapacityView,
@@ -81,6 +82,7 @@ import {
   getProductCountForCategory
 } from './modules/categories/categories.js';
 import { renderStockModule, openPurchaseDrawer } from './modules/stock/stock.ui.js';
+import { buildMaterialsMap, buildComponentsMap } from './modules/stock/stock.engine.js';
 import { renderFinanceModule } from './modules/finance/finance.ui.js';
 import { renderSettingsView as renderSettingsModule, setActiveSettingsTab } from './modules/settings/settings.ui.js';
 import { openBulkPersonalizationModal } from './modules/personalization/bulk.ui.js';
@@ -874,11 +876,23 @@ function renderProductsView() {
   } else if (productsTab === 'vitrine') {
     renderProductsVitrine(tabContent, displayedProducts, categories);
   } else if (productsTab === 'ranking') {
-    renderProductsRankingView(tabContent, { openDrawer, closeDrawer, showToast });
+    renderProductsRankingView(tabContent, {
+      openDrawer,
+      closeDrawer,
+      showToast,
+      openIntelligenceDrawer: (id) => openProductIntelligenceDrawer({ productId: id, openDrawer, closeDrawer }),
+      onPreview: (id) => showProductDetailsDrawer(id)
+    });
   } else if (productsTab === 'tendencias') {
     renderProductsTrendsView(tabContent, { openDrawer, closeDrawer, showToast });
   } else if (productsTab === 'capacidade') {
-    renderProductsCapacityView(tabContent, { openDrawer, closeDrawer, showToast });
+    renderProductsCapacityView(tabContent, {
+      openDrawer,
+      closeDrawer,
+      showToast,
+      openIntelligenceDrawer: (id) => openProductIntelligenceDrawer({ productId: id, openDrawer, closeDrawer }),
+      onPreview: (id) => showProductDetailsDrawer(id)
+    });
   } else if (productsTab === 'categorias') {
     renderCategoriesManagerInline(tabContent, categories);
   }
@@ -906,68 +920,103 @@ function renderProductsView() {
 
 function renderProductsTable(container, products, categories) {
   const catMap = new Map(categories.map(c => [c.id, c.name]));
+  const materials = loadMaterials();
+  const components = loadComponents();
+  const materialsMap = buildMaterialsMap(materials);
+  const componentsMap = buildComponentsMap(components);
+
+  if (products.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 48px 24px; color: var(--text-muted); background: #ffffff; border-radius: 12px; border: 1px dashed var(--border-subtle);">
+        <div style="font-size: 32px; margin-bottom: 8px;">🛍️</div>
+        <b style="display: block; font-size: 14px; color: var(--text-primary); margin-bottom: 6px;">Nenhum produto cadastrado no catálogo.</b>
+        <p style="font-size: 12px; margin: 0;">Utilize o botão "+ Novo Produto" acima para cadastrar um novo item no catálogo.</p>
+      </div>
+    `;
+    return;
+  }
 
   container.innerHTML = `
-    <div class="products-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px;">
-      ${products.length === 0 ? `
-        <div style="grid-column: 1 / -1; text-align: center; padding: 36px; color: var(--text-muted); background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-subtle);">
-          Nenhum produto cadastrado no catálogo.
-        </div>
-      ` : products.map(p => {
+    <div class="list-group" id="products-list" style="display: flex; flex-direction: column; gap: 8px;">
+      ${products.map(p => {
         const isMold = isSmartMold(p);
-        const statusClass = p.status === 'ativo' ? 'status-green' : 'status-neutral';
-        const statusLabel = p.status === 'ativo' ? 'Ativo' : 'Inativo';
+        const statusClass = (p.status === 'inativo' || p.active === false) ? 'status-neutral' : 'status-green';
+        const catName = catMap.get(p.categoryId) || 'Geral';
 
         const unitPrice = Number(p.price) || 0;
         const unitCost = Number(p.cost) || 0;
         const unitProfit = Math.max(0, unitPrice - unitCost);
         const marginPct = unitPrice > 0 ? ((unitProfit / unitPrice) * 100).toFixed(0) : 0;
 
+        const capacity = calculateProductionCapacity(p, materialsMap, componentsMap);
+        let stockHtml = '';
+        if (capacity !== null) {
+          if (capacity <= 0) {
+            stockHtml = `<span class="badge-count" style="background: #fee2e2; color: #991b1b; font-size: 10.5px; font-weight: 700;" title="Insumos esgotados para produção deste item">⚠ 0 un disp.</span>`;
+          } else {
+            stockHtml = `<span class="badge-count" style="background: #dcfce7; color: #166534; font-size: 10.5px; font-weight: 700;" title="Capacidade imediata com o estoque atual de insumos">✓ ${capacity} un disp.</span>`;
+          }
+        } else {
+          stockHtml = `<span style="color: var(--text-muted); font-size: 11px; font-weight: 500;">Disponível</span>`;
+        }
+
         return `
-          <div class="list-row ${statusClass}" data-action="view-product-card" data-id="${p.id}" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); transition: all 0.15s ease; cursor: pointer;">
+          <div class="list-row ${statusClass}" data-product-id="${p.id}" style="cursor: pointer;" title="Clique para abrir consulta completa de ${escapeHtml(p.name)}">
             
-            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
-              <!-- Foto do Produto -->
-              <div class="product-thumb" style="width: 46px; height: 46px; border-radius: 8px; overflow: hidden; background: #f8fafc; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; border: 1px solid var(--border-subtle);">
+            <!-- Coluna 1: Foto, Título, Badges e Metadados -->
+            <div class="list-main" data-action="view-product-main" data-id="${p.id}" style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+              <!-- Mini Thumbnail -->
+              <div style="width: 38px; height: 38px; border-radius: 8px; overflow: hidden; background: #f8fafc; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; border: 1px solid var(--border-subtle);">
                 ${p.imageUrl || p.image || p.photo 
                   ? `<img src="${escapeHtml(p.imageUrl || p.image || p.photo)}" alt="${escapeHtml(p.name)}" style="width: 100%; height: 100%; object-fit: cover;" />`
                   : (p.categoryId === 'cat_sacolas' ? '🛍️' : p.categoryId === 'cat_festas' ? '🎉' : p.categoryId === 'cat_caixas' ? '📦' : p.categoryId === 'cat_agendas' ? '📔' : '✨')
                 }
               </div>
 
-              <!-- Nome & Subtítulo: Lucro -->
-              <div class="list-main" style="flex: 1; min-width: 0;">
+              <!-- Textos -->
+              <div style="flex: 1; min-width: 0;">
                 <div class="list-title" style="display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                   <span style="overflow: hidden; text-overflow: ellipsis;">${escapeHtml(p.name)}</span>
-                  ${p.isKit ? `<span class="badge-count" style="background: #dcfce7; color: #15803d; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;" title="Vendido em kits/lotes de quantidades">📦 Kit ${(p.kitTiers && p.kitTiers.length > 0) ? `(${p.kitTiers.map(t => t.quantity + ' un').join(', ')})` : ''}</span>` : ''}
+                  ${p.isKit ? `<span class="badge-count" style="background: #dcfce7; color: #15803d; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;" title="Vendido em pacotes">📦 Kit ${(p.kitTiers && p.kitTiers.length > 0) ? `(${p.kitTiers.map(t => t.quantity + ' un').join(', ')})` : ''}</span>` : ''}
+                  ${isMold ? `<span class="badge-count" style="background: #e0e7ff; color: #3730a3; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px;">📐 Molde</span>` : ''}
+                  ${(p.status === 'inativo' || p.active === false) ? `<span class="badge-count" style="background: #f1f5f9; color: #64748b; font-size: 10px; padding: 1px 6px; border-radius: 4px;">Oculto</span>` : ''}
                 </div>
-                <div class="list-meta" style="font-size: 11.5px; margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+
+                <div class="list-meta" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span style="font-weight: 500;">${escapeHtml(catName)}</span>
+                  <span style="color: #cbd5e1;">•</span>
                   <span style="color: #16a34a; font-weight: 600;">Lucro: R$ ${unitProfit.toFixed(2)} (${marginPct}%)</span>
+                  <span style="color: #cbd5e1;">•</span>
+                  <span style="color: var(--text-muted); font-weight: 500;">⏱️ ${p.productionTime || 1}d úteis</span>
                 </div>
               </div>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-              <div style="text-align: right;">
-                <span style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: block;">${formatCurrency(p.price)}</span>
-                <span style="font-size: 10.5px; color: var(--text-muted); font-weight: 500;">${statusLabel}</span>
+            <!-- Coluna 2: Preço & Quantidade Disponível (Compacto) -->
+            <div style="text-align: right; min-width: 140px; flex-shrink: 0;" data-action="view-product-pricing" data-id="${p.id}">
+              <span style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: block;">
+                ${p.isKit ? `A partir de ${formatCurrency(p.price)}` : formatCurrency(p.price)}
+              </span>
+              <div style="font-size: 11px; margin-top: 2px; display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
+                ${stockHtml}
               </div>
+            </div>
 
-              <div class="actions" style="position: relative;">
-                <button class="action-btn btn-dots-menu" data-action="toggle-dots-prod" data-id="${p.id}" title="Ações do produto" style="padding: 4px 8px; font-weight: bold; font-size: 14px; line-height: 1; cursor: pointer;">⋮</button>
-                <div class="dots-dropdown-menu" id="dots-prod-menu-${p.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 140px; padding: 4px 0;">
-                  <button class="dots-menu-item" data-action="view-product" data-id="${p.id}">📄 Consultar</button>
-                  <button class="dots-menu-item" data-action="edit-product" data-id="${p.id}">✏️ Editar</button>
-                  <button class="dots-menu-item" data-action="dup-product" data-id="${p.id}">📋 Duplicar</button>
-                  <button class="dots-menu-item" data-action="intel-product" data-id="${p.id}">📊 Intel</button>
-                  <button class="dots-menu-item" data-action="bulk-product" data-id="${p.id}">⚡ Lote</button>
-                  ${(p.status === 'inativo' || p.active === false)
-                    ? `<button class="dots-menu-item" data-action="unhide-product" data-id="${p.id}">👁️‍🗨️ Reativar</button>`
-                    : `<button class="dots-menu-item" data-action="hide-product" data-id="${p.id}">👁️ Ocultar</button>`
-                  }
-                  <div style="height: 1px; background: var(--border-subtle); margin: 4px 0;"></div>
-                  <button class="dots-menu-item" data-action="del-product" data-id="${p.id}" style="color: #ef4444;">🗑️ Excluir</button>
-                </div>
+            <!-- Coluna 3: Menu de Ações ⋮ -->
+            <div class="actions" style="position: relative;">
+              <button class="action-btn btn-dots-menu" data-action="toggle-dots-prod" data-id="${p.id}" title="Ações do produto" style="padding: 4px 8px; font-weight: bold; font-size: 14px; line-height: 1; cursor: pointer;">⋮</button>
+              <div class="dots-dropdown-menu" id="dots-prod-menu-${p.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 140px; padding: 4px 0;">
+                <button class="dots-menu-item" data-action="view-product" data-id="${p.id}">📄 Consultar</button>
+                <button class="dots-menu-item" data-action="edit-product" data-id="${p.id}">✏️ Editar</button>
+                <button class="dots-menu-item" data-action="dup-product" data-id="${p.id}">📋 Duplicar</button>
+                <button class="dots-menu-item" data-action="intel-product" data-id="${p.id}">📊 Intel</button>
+                <button class="dots-menu-item" data-action="bulk-product" data-id="${p.id}">⚡ Lote</button>
+                ${(p.status === 'inativo' || p.active === false)
+                  ? `<button class="dots-menu-item" data-action="unhide-product" data-id="${p.id}">👁️‍🗨️ Reativar</button>`
+                  : `<button class="dots-menu-item" data-action="hide-product" data-id="${p.id}">👁️ Ocultar</button>`
+                }
+                <div style="height: 1px; background: var(--border-subtle); margin: 4px 0;"></div>
+                <button class="dots-menu-item" data-action="del-product" data-id="${p.id}" style="color: #ef4444;">🗑️ Excluir</button>
               </div>
             </div>
 
@@ -977,13 +1026,21 @@ function renderProductsTable(container, products, categories) {
     </div>
   `;
 
-  // Click on entire card opens product details
-  container.querySelectorAll('[data-action="view-product-card"]').forEach(card => {
-    card.addEventListener('click', e => {
-      if (e.target.closest('.actions') || e.target.closest('.dots-dropdown-menu')) {
+  // Click on entire row immediately opens product details drawer
+  container.querySelectorAll('.list-row[data-product-id]').forEach(row => {
+    row.addEventListener('click', e => {
+      if (e.target.closest('.actions') || e.target.closest('.dots-dropdown-menu') || e.target.closest('button')) {
         return;
       }
-      showProductDetailsDrawer(card.dataset.id);
+      showProductDetailsDrawer(row.dataset.productId);
+    });
+  });
+
+  // Explicit click on main and pricing areas
+  container.querySelectorAll('[data-action="view-product-main"], [data-action="view-product-pricing"]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      showProductDetailsDrawer(el.dataset.id);
     });
   });
 
@@ -1001,7 +1058,7 @@ function renderProductsTable(container, products, categories) {
     });
   });
 
-  // Bind Actions
+  // Bind Actions inside dots menu
   container.querySelectorAll('[data-action="intel-product"]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1019,7 +1076,11 @@ function renderProductsTable(container, products, categories) {
   });
 
   container.querySelectorAll('[data-action="view-product"]').forEach(el => {
-    el.addEventListener('click', () => showProductDetailsDrawer(el.dataset.id));
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.querySelectorAll('.dots-dropdown-menu').forEach(m => m.style.display = 'none');
+      showProductDetailsDrawer(el.dataset.id);
+    });
   });
 
   container.querySelectorAll('[data-action="edit-product"]').forEach(el => {

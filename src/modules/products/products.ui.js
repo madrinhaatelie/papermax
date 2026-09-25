@@ -148,8 +148,8 @@ export function renderProductsRankingView(container, options = {}) {
               else if (p.margin < 25 && p.margin > 0) marginBadgeClass = 'status-orange';
 
               return `
-                <div class="list-row status-neutral">
-                  <div class="list-main" style="display: flex; gap: 12px; align-items: center; cursor: pointer;" data-action="view-intelligence" data-id="${p.id}">
+                <div class="list-row status-neutral" data-product-id="${p.id}" style="cursor: pointer;" title="Clique para abrir detalhes de ${escapeHtml(p.name)}">
+                  <div class="list-main" style="display: flex; gap: 12px; align-items: center;" data-action="view-intelligence" data-id="${p.id}">
                     <div style="flex: 0 0 40px; text-align: center;">
                       <span class="ranking-pos-badge ${posBadgeClass}" style="display: inline-block;">${idx + 1}º</span>
                     </div>
@@ -228,11 +228,31 @@ export function renderProductsRankingView(container, options = {}) {
     });
   }
 
-  // Bind Intelligence Details Action
-  container.querySelectorAll('[data-action="view-intelligence"]').forEach(btn => {
-    btn.addEventListener('click', () => {
+  // Bind Row and Intelligence Details Action
+  container.querySelectorAll('.list-row[data-product-id]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.actions') || e.target.closest('button')) return;
+      const id = row.dataset.productId;
       if (typeof options.openIntelligenceDrawer === 'function') {
-        options.openIntelligenceDrawer(btn.dataset.id);
+        options.openIntelligenceDrawer(id);
+      } else if (typeof options.onPreview === 'function') {
+        options.onPreview(id);
+      } else if (options.openDrawer) {
+        openProductIntelligenceDrawer(id, options.openDrawer, options.closeDrawer);
+      }
+    });
+  });
+
+  container.querySelectorAll('[data-action="view-intelligence"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      if (typeof options.openIntelligenceDrawer === 'function') {
+        options.openIntelligenceDrawer(id);
+      } else if (typeof options.onPreview === 'function') {
+        options.onPreview(id);
+      } else if (options.openDrawer) {
+        openProductIntelligenceDrawer(id, options.openDrawer, options.closeDrawer);
       }
     });
   });
@@ -432,7 +452,7 @@ export function renderProductsCapacityView(container, options = {}) {
             ` : prodsWithBom.map(p => {
               const isShortage = p.stockCapacity !== null && p.qty > 0 && p.stockCapacity < p.qty;
               return `
-                <div class="list-row ${isShortage ? 'status-red' : 'status-green'}">
+                <div class="list-row ${isShortage ? 'status-red' : 'status-green'}" data-product-id="${p.id}" style="cursor: pointer;" title="Clique para abrir detalhes de ${escapeHtml(p.name)}">
                   <div class="list-main">
                     <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
                       ${escapeHtml(p.name)}
@@ -464,10 +484,30 @@ export function renderProductsCapacityView(container, options = {}) {
   `;
 
   // Bind Actions
-  container.querySelectorAll('[data-action="view-intelligence"]').forEach(btn => {
-    btn.addEventListener('click', () => {
+  container.querySelectorAll('.list-row[data-product-id]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.actions') || e.target.closest('button')) return;
+      const id = row.dataset.productId;
       if (typeof options.openIntelligenceDrawer === 'function') {
-        options.openIntelligenceDrawer(btn.dataset.id);
+        options.openIntelligenceDrawer(id);
+      } else if (typeof options.onPreview === 'function') {
+        options.onPreview(id);
+      } else if (options.openDrawer) {
+        openProductIntelligenceDrawer(id, options.openDrawer, options.closeDrawer);
+      }
+    });
+  });
+
+  container.querySelectorAll('[data-action="view-intelligence"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      if (typeof options.openIntelligenceDrawer === 'function') {
+        options.openIntelligenceDrawer(id);
+      } else if (typeof options.onPreview === 'function') {
+        options.onPreview(id);
+      } else if (options.openDrawer) {
+        openProductIntelligenceDrawer(id, options.openDrawer, options.closeDrawer);
       }
     });
   });
@@ -476,7 +516,21 @@ export function renderProductsCapacityView(container, options = {}) {
 /**
  * Abre o Drawer com Raio-X Completo de Inteligência do Produto
  */
-export function openProductIntelligenceDrawer(productId, openDrawerFn, closeDrawerFn) {
+export function openProductIntelligenceDrawer(arg1, arg2, arg3) {
+  let productId = null;
+  let openDrawerFn = null;
+  let closeDrawerFn = null;
+
+  if (typeof arg1 === 'object' && arg1 !== null) {
+    productId = arg1.productId;
+    openDrawerFn = arg1.openDrawer || arg1.openDrawerFn;
+    closeDrawerFn = arg1.closeDrawer || arg1.closeDrawerFn;
+  } else {
+    productId = arg1;
+    openDrawerFn = arg2;
+    closeDrawerFn = arg3;
+  }
+
   const analysis = calculateProductIntelligence({
     period: INTELLIGENCE_PERIODS.DIAS_90
   });
