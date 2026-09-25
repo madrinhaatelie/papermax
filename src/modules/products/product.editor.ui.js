@@ -125,6 +125,9 @@ export function openProductConfigDrawer({
       subcategoryId: '',
       status: 'ativo',
       type: 'personalizado',
+      isKit: false,
+      kitMinQuantity: 10,
+      kitTiers: [],
       description: '',
       price: 30.00,
       priceFrom: 35.00,
@@ -200,6 +203,9 @@ export function openProductConfigDrawer({
     if (!product.composition || !Array.isArray(product.composition)) {
       product.composition = [];
     }
+    if (product.isKit === undefined) product.isKit = false;
+    if (!product.kitTiers || !Array.isArray(product.kitTiers)) product.kitTiers = [];
+    if (!product.kitMinQuantity) product.kitMinQuantity = product.isKit && product.kitTiers.length > 0 ? product.kitTiers[0].quantity : 10;
   }
 
   let activeStep = 1; // 1: Produto | 2: Insumos & Componentes | 3: Precificação | 4: Personalização | 5: PDF + Gabarito
@@ -213,6 +219,46 @@ export function openProductConfigDrawer({
   let isAddingOption = false;
   let isAddingPriceHistory = false;
   let isAddingArea = false;
+  let isAddingKitTier = false;
+
+  // Helper to generate smart kit packages
+  function generateDefaultKitTiers(preset = 'standard') {
+    const pPrice = Number(product.price) || 30.00;
+    // Estimate unit price if price currently reflects a kit or unit
+    let baseUnit = pPrice > 25 ? (pPrice / 10) : (pPrice > 0 ? pPrice : 3.00);
+    if (baseUnit < 0.50) baseUnit = 3.00;
+
+    let quantities = [10, 25, 50, 100];
+    if (preset === 'party') {
+      quantities = [15, 20, 30, 50];
+    }
+
+    const discountRates = [1.0, 0.92, 0.86, 0.80];
+
+    product.kitTiers = quantities.map((qty, idx) => {
+      const rate = discountRates[idx] || 0.80;
+      const unitP = Math.max(0.10, Math.round(baseUnit * rate * 100) / 100);
+      const tierPrice = Math.round(qty * unitP * 100) / 100;
+      return {
+        id: 'tier_' + Date.now() + '_' + qty,
+        name: `Kit ${qty} unidades`,
+        quantity: qty,
+        price: tierPrice,
+        unitPrice: unitP,
+        isDefault: idx === 1 || (quantities.length === 1 && idx === 0)
+      };
+    });
+
+    if (!product.kitTiers.some(t => t.isDefault) && product.kitTiers.length > 0) {
+      product.kitTiers[0].isDefault = true;
+    }
+
+    const defaultTier = product.kitTiers.find(t => t.isDefault) || product.kitTiers[0];
+    if (defaultTier) {
+      product.price = defaultTier.price;
+      product.kitMinQuantity = quantities[0];
+    }
+  }
 
   // Selected item type in composition form ('insumo' | 'componente')
   let selectedCompItemType = 'insumo';
@@ -345,6 +391,37 @@ export function openProductConfigDrawer({
                 ${isActive ? 'Ativo' : 'Desativado'}
               </span>
             </label>
+          </div>
+
+          <!-- Bloco: Venda em Kit / Lote de Quantidades -->
+          <div style="background: ${product.isKit ? '#f0fdf4' : '#f8fafc'}; border: 1px solid ${product.isKit ? '#86efac' : 'var(--border-subtle)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 200px;">
+                <div style="font-weight: 700; font-size: 13px; color: ${product.isKit ? '#166534' : 'var(--text-primary)'}; display: flex; align-items: center; gap: 6px;">
+                  <span>📦 Vender este produto em Kit / Pacotes de Quantidades</span>
+                  ${product.isKit ? '<span class="badge-count" style="background: #22c55e; color: #ffffff; font-size: 10px; font-weight: 700;">ATIVO</span>' : ''}
+                </div>
+                <div style="font-size: 11.5px; color: ${product.isKit ? '#15803d' : 'var(--text-muted)'}; margin-top: 2px;">
+                  Para produtos que só vendem em mais quantidades (ex: <b>Tubolata, Tubete, Balinha personalizada, Latinhas, Caixas em lote</b>). Permite incluir diferentes quantidades (10 un, 25 un, 100 un...) com preços progressivos.
+                </div>
+              </div>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; background: #ffffff; padding: 6px 12px; border-radius: 6px; border: 1px solid ${product.isKit ? '#86efac' : 'var(--border-subtle)'};">
+                <input type="checkbox" id="chk-pcfg-iskit" ${product.isKit ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: #16a34a; cursor: pointer;" />
+                <span id="lbl-pcfg-iskit" style="font-weight: 700; font-size: 12.5px; color: ${product.isKit ? '#15803d' : '#64748b'};">
+                  ${product.isKit ? 'Sim, criar Kit' : 'Unidade Avulsa'}
+                </span>
+              </label>
+            </div>
+            ${product.isKit ? `
+              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #bbf7d0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                <span style="font-size: 11.5px; color: #166534; font-weight: 600;">
+                  ✓ ${(product.kitTiers || []).length} opção(ões) de quantidade configurada(s): ${(product.kitTiers || []).map(t => t.quantity + ' un').join(', ') || 'Nenhuma ainda'}
+                </span>
+                <button type="button" class="btn btn-sm btn-outline" id="btn-goto-step3-kits" style="font-size: 11px; font-weight: 600; padding: 3px 10px; background: #ffffff; border-color: #86efac; color: #166534;">
+                  ⚙️ Gerenciar Quantidades & Preços no Passo 3 ➔
+                </button>
+              </div>
+            ` : ''}
           </div>
 
           <!-- Nome do Produto -->
@@ -814,6 +891,152 @@ export function openProductConfigDrawer({
             </div>
           </div>
 
+          <!-- Bloco do Kit e Pacotes de Quantidade -->
+          <div style="background: ${product.isKit ? '#f0fdf4' : '#ffffff'}; border: 1px solid ${product.isKit ? '#86efac' : 'var(--border-subtle)'}; border-radius: 8px; padding: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <div style="font-size: 13px; font-weight: 700; color: ${product.isKit ? '#166534' : 'var(--text-primary)'}; display: flex; align-items: center; gap: 6px;">
+                  <span>📦 Opções de Quantidades / Pacotes do Kit</span>
+                  ${product.isKit ? '<span class="badge-count" style="background: #22c55e; color: #ffffff; font-size: 10px; font-weight: 700;">KIT ATIVO</span>' : ''}
+                </div>
+                <div style="font-size: 11px; color: ${product.isKit ? '#15803d' : 'var(--text-muted)'}; margin-top: 2px;">
+                  Cadastre as opções de quantidades para venda (ex: 10 un, 25 un, 50 un, 100 un) com preços e margens específicas.
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; background: #ffffff; padding: 5px 10px; border-radius: 6px; border: 1px solid ${product.isKit ? '#86efac' : 'var(--border-subtle)'}; font-size: 11.5px; font-weight: 600;">
+                  <input type="checkbox" id="chk-pcfg-iskit-step3" ${product.isKit ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: #16a34a; cursor: pointer;" />
+                  <span style="color: ${product.isKit ? '#166534' : 'var(--text-primary)'};">${product.isKit ? 'Ativado como Kit' : 'Ativar Modo Kit'}</span>
+                </label>
+              </div>
+            </div>
+
+            ${!product.isKit ? `
+              <div style="text-align: center; padding: 14px; background: #f8fafc; border: 1px dashed var(--border-subtle); border-radius: 6px; color: var(--text-muted); font-size: 12px;">
+                Este produto está configurado para venda por unidade avulsa.<br>
+                Para vender apenas em pacotes de quantidades (ex: tubetes, tubolatas, balinhas), marque a opção <b>Ativar Modo Kit</b> acima.
+              </div>
+            ` : `
+              <!-- Ações Rápidas de Pacotes -->
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                  <button type="button" class="btn btn-sm btn-outline" id="btn-suggest-kit-tiers" style="font-size: 11px; font-weight: 600; padding: 4px 10px; background: #ffffff; border-color: #86efac; color: #166534;" title="Gera pacotes de 10, 25, 50 e 100 unidades aplicando descontos progressivos saudáveis">
+                    ⚡ Sugerir Pacotes (10, 25, 50 e 100 un)
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline" id="btn-suggest-kit-tiers-party" style="font-size: 11px; font-weight: 600; padding: 4px 10px; background: #ffffff; border-color: #86efac; color: #166534;" title="Gera pacotes típicos para festas infantis">
+                    ⚡ Sugerir Pacotes (15, 20, 30 e 50 un)
+                  </button>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" id="btn-toggle-add-tier" style="font-size: 11px; font-weight: 600; padding: 4px 10px;">
+                  + Adicionar Quantidade
+                </button>
+              </div>
+
+              <!-- Formulário Inline de Adição de Pacote -->
+              ${isAddingKitTier ? `
+                <div style="background: #ffffff; border: 2px solid #86efac; border-radius: 8px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                  <div style="font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                    <span>➕ Novo Pacote de Quantidade</span>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 120px 1.5fr 130px auto auto; gap: 8px; align-items: flex-end;">
+                    <div>
+                      <label class="form-label" style="font-size: 11px; font-weight: 600; margin-bottom: 2px;">Qtd (unidades) *</label>
+                      <input type="number" id="inp-new-tier-qty" class="form-input" placeholder="Ex: 25" min="1" value="25" style="font-size: 12px; font-weight: 700; text-align: center;" />
+                    </div>
+                    <div>
+                      <label class="form-label" style="font-size: 11px; font-weight: 600; margin-bottom: 2px;">Nome / Rótulo</label>
+                      <input type="text" id="inp-new-tier-name" class="form-input" placeholder="Ex: Kit 25 unidades" value="Kit 25 unidades" style="font-size: 12px;" />
+                    </div>
+                    <div>
+                      <label class="form-label" style="font-size: 11px; font-weight: 600; margin-bottom: 2px;">Preço Total (R$) *</label>
+                      <input type="number" step="0.50" id="inp-new-tier-price" class="form-input" placeholder="Ex: 75.00" value="${((cost * 25 * 2) || 75).toFixed(2)}" style="font-size: 12px; font-weight: 700;" />
+                    </div>
+                    <div>
+                      <button type="button" class="btn btn-sm btn-primary" id="btn-save-new-tier" style="height: 34px; padding: 0 14px; font-weight: 700;">
+                        Salvar Pacote
+                      </button>
+                    </div>
+                    <div>
+                      <button type="button" class="btn btn-sm btn-secondary" id="btn-cancel-new-tier" style="height: 34px; padding: 0 10px;">
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ` : ''}
+
+              <!-- Tabela / Lista dos Pacotes Cadastrados -->
+              <div style="background: #ffffff; border: 1px solid #bbf7d0; border-radius: 8px; overflow: hidden;">
+                ${(!product.kitTiers || product.kitTiers.length === 0) ? `
+                  <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">
+                    Nenhum pacote de quantidade cadastrado ainda.<br>
+                    Clique em <b>⚡ Sugerir Pacotes (10, 25, 50 e 100 un)</b> para criar rapidamente ou adicione um manualmente acima.
+                  </div>
+                ` : `
+                  <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <thead>
+                      <tr style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; text-align: left;">
+                        <th style="padding: 8px 10px; font-weight: 700; color: #166534;">Pacote / Quantidade</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #166534; text-align: right;">Preço do Kit</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #166534; text-align: right;">Preço / Un</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #166534; text-align: right;">Custo Est.</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #166534; text-align: right;">Lucro Líquido</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #166534; text-align: center;">Padrão</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #166534; text-align: center; width: 40px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${product.kitTiers.map(tier => {
+                        const tierQty = Number(tier.quantity) || 1;
+                        const tierPrice = Number(tier.price) || 0;
+                        const tierUnitPrice = tierQty > 0 ? (tierPrice / tierQty) : 0;
+                        const tierCost = (Number(cost) || 0) * tierQty;
+                        const tierProfit = Math.max(0, tierPrice - tierCost);
+                        const tierMargin = tierPrice > 0 ? ((tierProfit / tierPrice) * 100).toFixed(0) : 0;
+
+                        return `
+                          <tr style="border-bottom: 1px solid #f0fdf4; background: ${tier.isDefault ? 'rgba(34, 197, 94, 0.05)' : 'transparent'};">
+                            <td style="padding: 8px 10px; font-weight: 700; color: var(--text-primary);">
+                              ${escapeHtml(tier.name || (tierQty + ' unidades'))}
+                              <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal; margin-left: 4px;">(${tierQty} un)</span>
+                            </td>
+                            <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #15803d; font-size: 13px;">
+                              ${formatCurrency(tierPrice)}
+                            </td>
+                            <td style="padding: 8px 10px; text-align: right; color: var(--text-secondary);">
+                              ${formatCurrency(tierUnitPrice)}/un
+                            </td>
+                            <td style="padding: 8px 10px; text-align: right; color: var(--text-muted); font-size: 11px;">
+                              ${formatCurrency(tierCost)}
+                            </td>
+                            <td style="padding: 8px 10px; text-align: right; font-weight: 600; color: ${tierMargin >= 30 ? '#15803d' : '#b45309'};">
+                              ${formatCurrency(tierProfit)} <span style="font-size: 10px;">(${tierMargin}%)</span>
+                            </td>
+                            <td style="padding: 8px 10px; text-align: center;">
+                              ${tier.isDefault ? `
+                                <span class="badge-count" style="background: #22c55e; color: #ffffff; font-size: 9.5px; font-weight: 700;">★ PADRÃO</span>
+                              ` : `
+                                <button type="button" class="btn btn-sm btn-set-default-tier" data-tier-id="${tier.id}" style="padding: 1px 6px; font-size: 10px; background: #f8fafc; border: 1px solid #cbd5e1; color: #475569; border-radius: 4px;" title="Definir como pacote padrão de venda">
+                                  Tornar Padrão
+                                </button>
+                              `}
+                            </td>
+                            <td style="padding: 8px 10px; text-align: center;">
+                              <button type="button" class="btn-del-tier" data-tier-id="${tier.id}" style="background: none; border: none; cursor: pointer; color: #ef4444; font-size: 13px;" title="Excluir este pacote de quantidade">
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                `}
+              </div>
+            `}
+          </div>
+
           <!-- Histórico de Valor -->
           <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -1168,39 +1391,117 @@ export function openProductConfigDrawer({
   }
 
   function saveCurrentStepInputs(drawer) {
-    if (activeStep === 1) {
-      const activeChk = drawer.querySelector('#chk-pcfg-active');
-      if (activeChk) product.status = activeChk.checked ? 'ativo' : 'inativo';
-      const nameInp = drawer.querySelector('#inp-pcfg-name');
-      if (nameInp) product.name = nameInp.value.trim();
-      const catInp = drawer.querySelector('#inp-pcfg-cat');
-      if (catInp) product.categoryId = catInp.value;
-      const subcatInp = drawer.querySelector('#inp-pcfg-subcat');
-      if (subcatInp) product.subcategoryId = subcatInp.value;
-      const descInp = drawer.querySelector('#inp-pcfg-desc');
-      if (descInp) product.description = descInp.value;
-    }
+    if (!drawer) return;
+    
+    const activeChk = drawer.querySelector('#chk-pcfg-active');
+    if (activeChk) product.status = activeChk.checked ? 'ativo' : 'inativo';
+    
+    const nameInp = drawer.querySelector('#inp-pcfg-name');
+    if (nameInp) product.name = nameInp.value;
+    
+    const catInp = drawer.querySelector('#inp-pcfg-cat');
+    if (catInp) product.categoryId = catInp.value;
+    
+    const subcatInp = drawer.querySelector('#inp-pcfg-subcat');
+    if (subcatInp) product.subcategoryId = subcatInp.value;
+    
+    const descInp = drawer.querySelector('#inp-pcfg-desc');
+    if (descInp) product.description = descInp.value;
 
-    if (activeStep === 3) {
-      const timeInp = drawer.querySelector('#inp-pcfg-time');
-      if (timeInp) product.productionTime = parseInt(timeInp.value, 10) || 1;
-      const priceFromInp = drawer.querySelector('#inp-pcfg-pricefrom');
-      if (priceFromInp) product.priceFrom = parseFloat(priceFromInp.value) || 0;
-      const priceInp = drawer.querySelector('#inp-pcfg-price');
-      if (priceInp) product.price = parseFloat(priceInp.value) || 0;
-      const wearInp = drawer.querySelector('#inp-pcfg-machinewear');
-      if (wearInp) product.machineWearRate = parseFloat(wearInp.value) || 0;
-      const costInp = drawer.querySelector('#inp-pcfg-cost');
-      if (costInp) product.cost = parseFloat(costInp.value) || 0;
-    }
+    const timeInp = drawer.querySelector('#inp-pcfg-time');
+    if (timeInp) product.productionTime = parseInt(timeInp.value, 10) || 1;
+    
+    const priceFromInp = drawer.querySelector('#inp-pcfg-pricefrom');
+    if (priceFromInp) product.priceFrom = parseFloat(priceFromInp.value) || 0;
+    
+    const priceInp = drawer.querySelector('#inp-pcfg-price');
+    if (priceInp) product.price = parseFloat(priceInp.value) || 0;
+    
+    const wearInp = drawer.querySelector('#inp-pcfg-machinewear');
+    if (wearInp) product.machineWearRate = parseFloat(wearInp.value) || 0;
+    
+    const costInp = drawer.querySelector('#inp-pcfg-cost');
+    if (costInp) product.cost = parseFloat(costInp.value) || 0;
+
+    const isKitChk = drawer.querySelector('#chk-pcfg-iskit') || drawer.querySelector('#chk-pcfg-iskit-step3');
+    if (isKitChk) product.isKit = Boolean(isKitChk.checked);
   }
 
   function reRender(drawer) {
-    drawer.querySelector('#drawer-dynamic-content').innerHTML = renderDrawerContent();
+    saveCurrentStepInputs(drawer);
+    const contentEl = drawer.querySelector('#drawer-dynamic-content');
+    if (contentEl) {
+      contentEl.innerHTML = renderDrawerContent();
+    }
     bindEvents(drawer);
   }
 
   function bindEvents(drawer) {
+    // Real-time synchronization of step 1 inputs
+    const nameInp = drawer.querySelector('#inp-pcfg-name');
+    if (nameInp) {
+      nameInp.addEventListener('input', (e) => {
+        product.name = e.target.value;
+      });
+    }
+
+    const descInp = drawer.querySelector('#inp-pcfg-desc');
+    if (descInp) {
+      descInp.addEventListener('input', (e) => {
+        product.description = e.target.value;
+      });
+    }
+
+    const catInp = drawer.querySelector('#inp-pcfg-cat');
+    if (catInp) {
+      catInp.addEventListener('change', (e) => {
+        product.categoryId = e.target.value;
+      });
+    }
+
+    const subcatInp = drawer.querySelector('#inp-pcfg-subcat');
+    if (subcatInp) {
+      subcatInp.addEventListener('change', (e) => {
+        product.subcategoryId = e.target.value;
+      });
+    }
+
+    // Step 3 inputs real-time sync
+    const timeInp = drawer.querySelector('#inp-pcfg-time');
+    if (timeInp) {
+      timeInp.addEventListener('input', (e) => {
+        product.productionTime = parseInt(e.target.value, 10) || 1;
+      });
+    }
+
+    const priceFromInp = drawer.querySelector('#inp-pcfg-pricefrom');
+    if (priceFromInp) {
+      priceFromInp.addEventListener('input', (e) => {
+        product.priceFrom = parseFloat(e.target.value) || 0;
+      });
+    }
+
+    // Prevent Enter key in text inputs from triggering unwanted clicks or form submits
+    drawer.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && inp.type !== 'submit') {
+          if (inp.id === 'inp-new-cat-name') {
+            e.preventDefault();
+            drawer.querySelector('#btn-save-new-cat')?.click();
+          } else if (inp.id === 'inp-new-subcat-name') {
+            e.preventDefault();
+            drawer.querySelector('#btn-save-new-subcat')?.click();
+          } else if (inp.id === 'inp-new-pfield-name' || inp.id === 'inp-new-pfield-default') {
+            e.preventDefault();
+            drawer.querySelector('#btn-save-new-pfield')?.click();
+          } else if (inp.id === 'inp-new-copt-name' || inp.id === 'inp-new-copt-choices') {
+            e.preventDefault();
+            drawer.querySelector('#btn-save-new-copt')?.click();
+          }
+        }
+      });
+    });
+
     // 1. Step Navigation Buttons
     drawer.querySelectorAll('[data-step]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1724,6 +2025,182 @@ export function openProductConfigDrawer({
       updatePricingCalculationsLive();
     });
 
+    // =========================================================================
+    // KIT / PACOTES DE QUANTIDADES (Steps 1 & 3)
+    // =========================================================================
+    const handleKitToggle = (checked) => {
+      product.isKit = checked;
+      if (product.isKit && (!product.kitTiers || product.kitTiers.length === 0)) {
+        generateDefaultKitTiers('standard');
+      }
+      reRender(drawer);
+    };
+
+    const isKitChk = drawer.querySelector('#chk-pcfg-iskit');
+    if (isKitChk) {
+      isKitChk.addEventListener('change', (e) => {
+        handleKitToggle(e.target.checked);
+      });
+    }
+
+    const isKitStep3Chk = drawer.querySelector('#chk-pcfg-iskit-step3');
+    if (isKitStep3Chk) {
+      isKitStep3Chk.addEventListener('change', (e) => {
+        handleKitToggle(e.target.checked);
+      });
+    }
+
+    const btnGotoStep3Kits = drawer.querySelector('#btn-goto-step3-kits');
+    if (btnGotoStep3Kits) {
+      btnGotoStep3Kits.addEventListener('click', () => {
+        saveCurrentStepInputs(drawer);
+        activeStep = 3;
+        reRender(drawer);
+      });
+    }
+
+    const btnSuggestKits = drawer.querySelector('#btn-suggest-kit-tiers');
+    if (btnSuggestKits) {
+      btnSuggestKits.addEventListener('click', () => {
+        generateDefaultKitTiers('standard');
+        showToast('Pacotes de 10, 25, 50 e 100 unidades gerados!', '📦');
+        reRender(drawer);
+      });
+    }
+
+    const btnSuggestKitsParty = drawer.querySelector('#btn-suggest-kit-tiers-party');
+    if (btnSuggestKitsParty) {
+      btnSuggestKitsParty.addEventListener('click', () => {
+        generateDefaultKitTiers('party');
+        showToast('Pacotes de festa (15, 20, 30 e 50 un) gerados!', '🎉');
+        reRender(drawer);
+      });
+    }
+
+    const btnToggleAddTier = drawer.querySelector('#btn-toggle-add-tier');
+    if (btnToggleAddTier) {
+      btnToggleAddTier.addEventListener('click', () => {
+        isAddingKitTier = !isAddingKitTier;
+        reRender(drawer);
+      });
+    }
+
+    const btnCancelAddTier = drawer.querySelector('#btn-cancel-new-tier');
+    if (btnCancelAddTier) {
+      btnCancelAddTier.addEventListener('click', () => {
+        isAddingKitTier = false;
+        reRender(drawer);
+      });
+    }
+
+    // Auto calculate name when changing quantity in new tier form
+    const inpNewTierQty = drawer.querySelector('#inp-new-tier-qty');
+    const inpNewTierName = drawer.querySelector('#inp-new-tier-name');
+    const inpNewTierPrice = drawer.querySelector('#inp-new-tier-price');
+    if (inpNewTierQty && inpNewTierName) {
+      inpNewTierQty.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (val && (!inpNewTierName.value || inpNewTierName.value.startsWith('Kit '))) {
+          inpNewTierName.value = `Kit ${val} unidades`;
+        }
+        if (val && inpNewTierPrice) {
+          const currentUnit = (Number(product.price) || 30) / 10;
+          inpNewTierPrice.value = (val * (currentUnit > 0 ? currentUnit : 3)).toFixed(2);
+        }
+      });
+    }
+
+    const btnSaveNewTier = drawer.querySelector('#btn-save-new-tier');
+    if (btnSaveNewTier) {
+      btnSaveNewTier.addEventListener('click', () => {
+        const qty = parseInt(drawer.querySelector('#inp-new-tier-qty')?.value, 10) || 0;
+        const price = parseFloat(drawer.querySelector('#inp-new-tier-price')?.value) || 0;
+        let name = drawer.querySelector('#inp-new-tier-name')?.value?.trim() || '';
+
+        if (qty <= 0) {
+          showToast('Informe uma quantidade válida para o pacote (mínimo 1 unidade).', '⚠');
+          return;
+        }
+
+        if (price <= 0) {
+          showToast('Informe um preço total válido para o pacote.', '⚠');
+          return;
+        }
+
+        if (!name) {
+          name = `Kit ${qty} unidades`;
+        }
+
+        if (!product.kitTiers) product.kitTiers = [];
+
+        const existingIdx = product.kitTiers.findIndex(t => t.quantity === qty);
+        if (existingIdx >= 0) {
+          product.kitTiers[existingIdx].name = name;
+          product.kitTiers[existingIdx].price = price;
+          product.kitTiers[existingIdx].unitPrice = price / qty;
+          showToast(`Pacote de ${qty} unidades atualizado!`, '✅');
+        } else {
+          product.kitTiers.push({
+            id: 'tier_' + Date.now() + '_' + qty,
+            name,
+            quantity: qty,
+            price,
+            unitPrice: price / qty,
+            isDefault: product.kitTiers.length === 0
+          });
+          showToast(`Pacote de ${qty} unidades adicionado!`, '✅');
+        }
+
+        product.kitTiers.sort((a, b) => a.quantity - b.quantity);
+        if (!product.kitTiers.some(t => t.isDefault)) {
+          product.kitTiers[0].isDefault = true;
+        }
+
+        product.kitMinQuantity = product.kitTiers[0]?.quantity || qty;
+        isAddingKitTier = false;
+        reRender(drawer);
+      });
+    }
+
+    drawer.querySelectorAll('.btn-del-tier').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tierId = btn.dataset.tierId;
+        if (!product.kitTiers) return;
+        const wasDefault = product.kitTiers.find(t => t.id === tierId)?.isDefault;
+        product.kitTiers = product.kitTiers.filter(t => t.id !== tierId);
+        if (wasDefault && product.kitTiers.length > 0) {
+          product.kitTiers[0].isDefault = true;
+          product.price = product.kitTiers[0].price;
+        }
+        if (product.kitTiers.length > 0) {
+          product.kitMinQuantity = product.kitTiers[0].quantity;
+        }
+        showToast('Pacote removido.', '🗑️');
+        reRender(drawer);
+      });
+    });
+
+    drawer.querySelectorAll('.btn-set-default-tier').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tierId = btn.dataset.tierId;
+        if (!product.kitTiers) return;
+        let selected = null;
+        product.kitTiers.forEach(t => {
+          if (t.id === tierId) {
+            t.isDefault = true;
+            selected = t;
+          } else {
+            t.isDefault = false;
+          }
+        });
+        if (selected) {
+          product.price = selected.price;
+          showToast(`Pacote "${selected.name}" definido como padrão!`, '★');
+        }
+        reRender(drawer);
+      });
+    });
+
     // 7. Price History Inline (+) (Step 3)
     const btnToggleHist = drawer.querySelector('#btn-toggle-add-hist');
     if (btnToggleHist) {
@@ -2031,6 +2508,17 @@ export function openProductConfigDrawer({
             price: currentPrice,
             date: new Date().toLocaleDateString('pt-BR')
           });
+        }
+
+        if (product.isKit) {
+          if (!product.kitTiers || product.kitTiers.length === 0) {
+            generateDefaultKitTiers('standard');
+          }
+          const defaultTier = product.kitTiers.find(t => t.isDefault) || product.kitTiers[0];
+          if (defaultTier) {
+            product.price = defaultTier.price;
+            product.kitMinQuantity = product.kitTiers[0].quantity;
+          }
         }
 
         try {

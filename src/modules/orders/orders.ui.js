@@ -917,6 +917,14 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
     notes: editingOrder?.notes || ''
   };
 
+  let currentSelectedProdId = products[0]?.id || '';
+  let currentSelectedKitTierId = '';
+  const initialSelProd = products.find(p => p.id === currentSelectedProdId);
+  if (initialSelProd && initialSelProd.isKit && Array.isArray(initialSelProd.kitTiers) && initialSelProd.kitTiers.length > 0) {
+    const defTier = initialSelProd.kitTiers.find(t => t.isDefault) || initialSelProd.kitTiers[0];
+    currentSelectedKitTierId = defTier ? defTier.id : '';
+  }
+
   // Helper to calculate BOM for all items
   function calculateTotalBOM() {
     let totalCost = 0;
@@ -940,7 +948,8 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
           unitCost = m ? (m.purchaseCost / (m.packQuantity || 1)) : 0;
         }
         
-        const totalQty = (comp.quantity || 1) * item.qty;
+        const itemMultiplier = (item.kitQuantity && item.kitQuantity > 1) ? (item.qty * item.kitQuantity) : item.qty;
+        const totalQty = (comp.quantity || 1) * itemMultiplier;
         const subtotal = totalQty * unitCost;
         totalCost += subtotal;
         
@@ -1140,26 +1149,64 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
                 <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
                   🛍️ Adicionar Produto ao Pedido
                 </h3>
-                <div style="display: grid; grid-template-columns: minmax(200px, 3fr) minmax(100px, 1fr) auto; gap: 12px; align-items: flex-end;">
-                  <div>
-                    <label class="form-label" style="font-weight: 600;">Produto do Catálogo</label>
-                    <select class="form-input" id="inp-prod-select" style="width: 100%;">
-                      ${products.length === 0 
-                        ? '<option value="">Nenhum produto cadastrado no catálogo</option>' 
-                        : products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} - R$ ${Number(p.price || 0).toFixed(2)}</option>`).join('')
-                      }
-                    </select>
-                  </div>
-                  <div>
-                    <label class="form-label" style="font-weight: 600;">Quantidade</label>
-                    <input type="number" class="form-input" id="inp-prod-qty" value="1" min="1" style="width: 100%; text-align: center; font-weight: 600;">
-                  </div>
-                  <div>
-                    <button type="button" class="btn btn-primary" id="btn-add-product" style="padding: 9px 18px; font-weight: 600; white-space: nowrap; width: 100%;">
-                      + Adicionar Item
-                    </button>
-                  </div>
-                </div>
+                ${(() => {
+                  const activeSelectedProd = products.find(p => p.id === currentSelectedProdId) || products[0];
+                  const isKitProd = Boolean(activeSelectedProd?.isKit && Array.isArray(activeSelectedProd?.kitTiers) && activeSelectedProd?.kitTiers.length > 0);
+
+                  return `
+                    <div style="display: grid; grid-template-columns: minmax(200px, 3fr) ${isKitProd ? 'minmax(220px, 2.5fr)' : ''} minmax(100px, 1fr) auto; gap: 12px; align-items: flex-end;">
+                      <div>
+                        <label class="form-label" style="font-weight: 600;">Produto do Catálogo</label>
+                        <select class="form-input" id="inp-prod-select" style="width: 100%;">
+                          ${products.length === 0 
+                            ? '<option value="">Nenhum produto cadastrado no catálogo</option>' 
+                            : products.map(p => `
+                                <option value="${p.id}" ${p.id === currentSelectedProdId ? 'selected' : ''}>
+                                  ${escapeHtml(p.name)} ${p.isKit ? '📦 [Kit/Lote]' : ''} - R$ ${Number(p.price || 0).toFixed(2)}
+                                </option>
+                              `).join('')
+                          }
+                        </select>
+                      </div>
+
+                      ${isKitProd ? `
+                        <div>
+                          <label class="form-label" style="font-weight: 600; color: #166534; display: flex; align-items: center; gap: 4px;">
+                            <span>📦 Opção de Quantidade / Pacote</span>
+                          </label>
+                          <select class="form-input" id="inp-prod-kit-tier" style="width: 100%; border-color: #86efac; background: #f0fdf4; font-weight: 600; color: #166534;">
+                            ${activeSelectedProd.kitTiers.map(tier => `
+                              <option value="${tier.id}" ${tier.id === currentSelectedKitTierId ? 'selected' : ''}>
+                                ${escapeHtml(tier.name || (tier.quantity + ' unidades'))} — R$ ${Number(tier.price).toFixed(2)} (${formatCurrency(tier.price / tier.quantity)}/un)
+                              </option>
+                            `).join('')}
+                            <option value="custom" ${currentSelectedKitTierId === 'custom' ? 'selected' : ''}>Quantidade Personalizada (avulsa)</option>
+                          </select>
+                        </div>
+                      ` : ''}
+
+                      <div>
+                        <label class="form-label" style="font-weight: 600;">
+                          ${isKitProd && currentSelectedKitTierId !== 'custom' ? 'Qtd de Pacotes' : 'Quantidade'}
+                        </label>
+                        <input type="number" class="form-input" id="inp-prod-qty" value="1" min="1" style="width: 100%; text-align: center; font-weight: 600;">
+                      </div>
+
+                      <div>
+                        <button type="button" class="btn btn-primary" id="btn-add-product" style="padding: 9px 18px; font-weight: 600; white-space: nowrap; width: 100%;">
+                          + Adicionar Item
+                        </button>
+                      </div>
+                    </div>
+
+                    ${isKitProd ? `
+                      <div style="margin-top: 10px; font-size: 11.5px; color: #15803d; background: #dcfce7; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-weight: 600;">
+                        <span>📦 Produto vendido em lotes de quantidades. Escolha o pacote acima para cálculo exato de insumos e preço unitário.</span>
+                        <span>Pacotes disponíveis: ${activeSelectedProd.kitTiers.map(t => t.quantity + ' un').join(', ')}</span>
+                      </div>
+                    ` : ''}
+                  `;
+                })()}
               </div>
 
               <div class="panel" style="border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
@@ -1235,9 +1282,22 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
                                 ${index + 1}
                               </span>
                               <div>
-                                <div style="font-weight: 700; font-size: 14px; color: var(--text-primary);">${escapeHtml(item.productTitle || 'Item')}</div>
-                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 1px;">
-                                  Preço Unitário: <b>R$ ${itemUnitPrice.toFixed(2)}</b>
+                                <div style="font-weight: 700; font-size: 14px; color: var(--text-primary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                  <span>${escapeHtml(item.productTitle || 'Item')}</span>
+                                  ${item.isKit && item.kitQuantity > 1 ? `
+                                    <span class="badge-count" style="background: #dcfce7; color: #15803d; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                      📦 Kit (${item.kitQuantity} un/pacote)
+                                    </span>
+                                  ` : ''}
+                                </div>
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                                  Preço: <b>R$ ${itemUnitPrice.toFixed(2)}</b>
+                                  ${item.isKit && item.kitQuantity > 1 ? `
+                                    <span style="color: var(--text-muted); margin-left: 4px;">(R$ ${(itemUnitPrice / item.kitQuantity).toFixed(2)} / un)</span>
+                                    <span style="margin-left: 8px; color: #15803d; font-weight: 600; background: #f0fdf4; padding: 1px 6px; border-radius: 4px;">
+                                      • Total a produzir: <b>${itemQty * item.kitQuantity} unidades</b>
+                                    </span>
+                                  ` : ''}
                                 </div>
                               </div>
                             </div>
@@ -1525,16 +1585,16 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
       if (inpCliEmpresa) orderData.customerCompany = inpCliEmpresa.value;
 
       const inpCliContato = container.querySelector('#inp-cli-contato');
-      if (inpCliContato) orderData.customerPhone = formatPhone(inpCliContato.value);
+      if (inpCliContato) orderData.customerPhone = inpCliContato.value;
 
       const inpCliNasc = container.querySelector('#inp-cli-nasc');
       if (inpCliNasc) orderData.customerBirthDate = inpCliNasc.value;
 
       const inpCliCpf = container.querySelector('#inp-cli-cpf');
-      if (inpCliCpf) orderData.customerCPF = formatCPF(inpCliCpf.value);
+      if (inpCliCpf) orderData.customerCPF = inpCliCpf.value;
 
       const inpCliCnpj = container.querySelector('#inp-cli-cnpj');
-      if (inpCliCnpj) orderData.customerCNPJ = formatCNPJ(inpCliCnpj.value);
+      if (inpCliCnpj) orderData.customerCNPJ = inpCliCnpj.value;
 
       const inpCliDataPed = container.querySelector('#inp-cli-data-pedido');
       if (inpCliDataPed && inpCliDataPed.value) orderData.orderDate = inpCliDataPed.value;
@@ -1609,6 +1669,56 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
       }
     }
 
+    // Real-time synchronization of all form inputs so state is never lost
+    container.addEventListener('input', (e) => {
+      const t = e.target;
+      if (!t) return;
+      if (t.id === 'inp-cli-nome') orderData.customer = t.value;
+      else if (t.id === 'inp-cli-empresa') orderData.customerCompany = t.value;
+      else if (t.id === 'inp-cli-contato') orderData.customerPhone = t.value;
+      else if (t.id === 'inp-cli-nasc') orderData.customerBirthDate = t.value;
+      else if (t.id === 'inp-cli-cpf') orderData.customerCPF = t.value;
+      else if (t.id === 'inp-cli-cnpj') orderData.customerCNPJ = t.value;
+      else if (t.id === 'inp-cli-data-pedido') orderData.orderDate = t.value;
+      else if (t.id === 'inp-cli-evento') orderData.eventDate = t.value;
+      else if (t.id === 'inp-cli-limite') orderData.limitDate = t.value;
+      else if (t.id === 'inp-cli-obs') orderData.notes = t.value;
+      else if (t.id === 'inp-ent-cep') orderData.deliveryCep = t.value;
+      else if (t.id === 'inp-ent-endereco') orderData.deliveryAddress = t.value;
+      else if (t.id === 'inp-ent-numero') orderData.deliveryNumber = t.value;
+      else if (t.id === 'inp-ent-bairro') orderData.deliveryNeighborhood = t.value;
+      else if (t.id === 'inp-ent-cidade') orderData.deliveryCity = t.value;
+      else if (t.id === 'inp-ent-estado') orderData.deliveryState = t.value;
+      else if (t.id === 'inp-ent-obs') orderData.deliveryNotes = t.value;
+      else if (t.classList.contains('item-pers-field')) {
+        const idx = t.dataset.index;
+        const fid = t.dataset.field;
+        if (orderData.items[idx]) {
+          if (!orderData.items[idx].personalization) orderData.items[idx].personalization = {};
+          orderData.items[idx].personalization[fid] = t.value;
+        }
+      } else if (t.classList.contains('item-opt-field')) {
+        const idx = t.dataset.index;
+        const fid = t.dataset.field;
+        if (orderData.items[idx]) {
+          if (!orderData.items[idx].changeOptions) orderData.items[idx].changeOptions = {};
+          orderData.items[idx].changeOptions[fid] = t.value;
+        }
+      } else if (t.classList.contains('item-notes-field')) {
+        const idx = t.dataset.index;
+        if (orderData.items[idx]) {
+          orderData.items[idx].notes = t.value;
+        }
+      }
+    });
+
+    // Prevent Enter key in text inputs from triggering unwanted form submits
+    container.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT' && e.target.type !== 'submit') {
+        e.preventDefault();
+      }
+    });
+
     // Attach click events on top binder tabs
     container.querySelectorAll('.binder-tab').forEach(tab => {
       tab.addEventListener('click', (e) => {
@@ -1663,27 +1773,83 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
       });
     }
 
+    const inpProdSelect = document.getElementById('inp-prod-select');
+    if (inpProdSelect) {
+      inpProdSelect.addEventListener('change', (e) => {
+        currentSelectedProdId = e.target.value;
+        const p = products.find(x => x.id === currentSelectedProdId);
+        if (p && p.isKit && Array.isArray(p.kitTiers) && p.kitTiers.length > 0) {
+          const defT = p.kitTiers.find(t => t.isDefault) || p.kitTiers[0];
+          currentSelectedKitTierId = defT ? defT.id : '';
+        } else {
+          currentSelectedKitTierId = '';
+        }
+        saveCurrentState();
+        activeDivisoria = 'section-produto';
+        render();
+      });
+    }
+
+    const inpKitTier = document.getElementById('inp-prod-kit-tier');
+    if (inpKitTier) {
+      inpKitTier.addEventListener('change', (e) => {
+        currentSelectedKitTierId = e.target.value;
+      });
+    }
+
     const btnAddProduct = document.getElementById('btn-add-product');
     if (btnAddProduct) {
       btnAddProduct.addEventListener('click', () => {
         saveCurrentState();
-        const pid = document.getElementById('inp-prod-select').value;
-        const pqty = Number(document.getElementById('inp-prod-qty').value) || 1;
+        const pid = document.getElementById('inp-prod-select')?.value;
+        const pqty = Number(document.getElementById('inp-prod-qty')?.value) || 1;
         const prod = products.find(p => p.id === pid);
         if (prod) {
+          let itemTitle = prod.name;
+          let itemPrice = Number(prod.price) || 0;
+          let isKit = Boolean(prod.isKit);
+          let kitTierId = null;
+          let kitTierName = null;
+          let kitQty = 1;
+          let itemNotes = '';
+
+          if (isKit && Array.isArray(prod.kitTiers) && prod.kitTiers.length > 0) {
+            const tierSelect = document.getElementById('inp-prod-kit-tier');
+            const chosenTierId = tierSelect ? tierSelect.value : currentSelectedKitTierId;
+            if (chosenTierId && chosenTierId !== 'custom') {
+              const tier = prod.kitTiers.find(t => t.id === chosenTierId) || prod.kitTiers[0];
+              if (tier) {
+                kitTierId = tier.id;
+                kitTierName = tier.name || `Kit ${tier.quantity} unidades`;
+                kitQty = Number(tier.quantity) || 1;
+                itemPrice = Number(tier.price) || itemPrice;
+                itemTitle = `${prod.name} (${kitTierName})`;
+                itemNotes = `Pacote com ${kitQty} unidades`;
+              }
+            } else if (chosenTierId === 'custom') {
+              kitQty = 1;
+              kitTierName = 'Quantidade Personalizada';
+            }
+          }
+
           orderData.items.push({
             productId: prod.id,
-            productTitle: prod.name,
+            productTitle: itemTitle,
             qty: pqty,
-            unitPrice: prod.price || 0,
+            unitPrice: itemPrice,
+            isKit: isKit,
+            kitTierId: kitTierId,
+            kitTierName: kitTierName,
+            kitQuantity: kitQty,
+            totalUnits: pqty * kitQty,
             personalization: {},
             changeOptions: {},
             productSnapshot: JSON.parse(JSON.stringify(prod)),
-            notes: ''
+            notes: itemNotes
           });
           activeDivisoria = 'section-produto';
           render();
-          showToast(`"${prod.name}" adicionado ao pedido!`, '🛍️');
+          showToast(`"${itemTitle}" adicionado ao pedido!`, '🛍️');
         }
       });
     }

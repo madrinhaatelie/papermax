@@ -917,6 +917,59 @@ export function openProductCommercialPreviewDrawer({
             <span class="detail-val">${p.basePdfMetadata ? escapeHtml(p.basePdfMetadata.name) : 'Gabarito Padrão'}</span>
           </div>
         </div>
+
+        ${p.isKit ? `
+          <!-- Tabela de Pacotes do Kit -->
+          <div style="margin-top: 14px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+              <span style="font-weight: 700; font-size: 13px; color: #166534; display: flex; align-items: center; gap: 6px;">
+                <span>📦 Pacotes e Opções de Quantidades do Kit</span>
+                <span class="badge-count" style="background: #22c55e; color: #ffffff; font-size: 10px; font-weight: 700;">PRODUTO EM KIT</span>
+              </span>
+              <span style="font-size: 11px; color: #15803d; font-weight: 600;">
+                Mínimo: ${p.kitMinQuantity || 10} unidades
+              </span>
+            </div>
+            <div style="font-size: 11.5px; color: #166534; margin-bottom: 10px;">
+              Este produto é vendido em múltiplos e pacotes fechados. Selecione o lote desejado ao emitir pedidos ou orçamentos.
+            </div>
+
+            <div style="background: #ffffff; border: 1px solid #bbf7d0; border-radius: 6px; overflow: hidden;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr style="background: #e8f5e9; border-bottom: 1px solid #c8e6c9; text-align: left;">
+                    <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700;">Pacote</th>
+                    <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700; text-align: center;">Qtd</th>
+                    <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700; text-align: right;">Preço do Kit</th>
+                    <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700; text-align: right;">Valor Unitário</th>
+                    <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700; text-align: center;">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(p.kitTiers || []).map(tier => `
+                    <tr style="border-bottom: 1px solid #f1f5f9; background: ${tier.isDefault ? '#f0fdf4' : 'transparent'};">
+                      <td style="padding: 6px 10px; font-weight: 700; color: var(--text-primary);">
+                        ${escapeHtml(tier.name || (tier.quantity + ' unidades'))}
+                      </td>
+                      <td style="padding: 6px 10px; text-align: center; color: var(--text-secondary); font-weight: 600;">
+                        ${tier.quantity} un
+                      </td>
+                      <td style="padding: 6px 10px; text-align: right; font-weight: 700; color: #15803d; font-size: 13px;">
+                        ${formatCurrency(tier.price)}
+                      </td>
+                      <td style="padding: 6px 10px; text-align: right; color: var(--text-secondary);">
+                        ${formatCurrency(tier.price / (tier.quantity || 1))}/un
+                      </td>
+                      <td style="padding: 6px 10px; text-align: center;">
+                        ${tier.isDefault ? '<span class="badge-count" style="background: #22c55e; color: #ffffff; font-size: 9px; font-weight: 700;">★ PADRÃO</span>' : '<span style="color: var(--text-muted); font-size: 10px;">Opção</span>'}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ` : ''}
       </div>
 
       <!-- SEÇÃO 1: EDITÁVEL (Textos, Nomes, Idades e Datas) -->

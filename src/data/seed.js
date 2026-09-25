@@ -144,6 +144,111 @@ export const SEED_PRODUCTS = [
     ],
     createdAt: '2026-09-03T00:00:00Z',
     updatedAt: '2026-09-03T00:00:00Z'
+  },
+  {
+    id: 'prod_tubolata_luxo',
+    name: 'Tubolata Kraft Luxo Personalizada',
+    categoryId: 'cat_lembrancas',
+    status: 'ativo',
+    type: 'personalizado',
+    isKit: true,
+    kitMinQuantity: 10,
+    kitTiers: [
+      { id: 'tier_tubo_10', name: 'Kit 10 unidades', quantity: 10, price: 58.00, unitPrice: 5.80, isDefault: false },
+      { id: 'tier_tubo_25', name: 'Kit 25 unidades', quantity: 25, price: 130.00, unitPrice: 5.20, isDefault: true },
+      { id: 'tier_tubo_50', name: 'Kit 50 unidades', quantity: 50, price: 240.00, unitPrice: 4.80, isDefault: false },
+      { id: 'tier_tubo_100', name: 'Kit 100 unidades', quantity: 100, price: 440.00, unitPrice: 4.40, isDefault: false }
+    ],
+    description: 'Tubolata personalizada 10x10cm com rótulo adesivo vinílico fosco, laço em fita gorgurão ou cetim e tampa metálica.',
+    price: 130.00,
+    priceFrom: 145.00,
+    cost: 48.00,
+    productionTime: 3,
+    configurationVersion: 1,
+    personalizationFields: [
+      { id: 'field_nome', name: 'Nome / Tema', type: 'text', required: true, defaultValue: '' },
+      { id: 'field_idade', name: 'Idade / Ocasião', type: 'text', required: false, defaultValue: '' }
+    ],
+    changeOptions: [
+      { id: 'opt_tampa', name: 'Cor da Tampa', type: 'choice', required: true, defaultValue: 'Dourada', choices: ['Dourada', 'Prateada', 'Branca', 'Ouro Rose'] },
+      { id: 'opt_fita', name: 'Cor do Laço', type: 'choice', required: true, defaultValue: 'Dourado', choices: ['Dourado', 'Rosa Bebê', 'Azul Marinho', 'Verde Oliva'] }
+    ],
+    editor: { textAreas: [], elementAreas: [], colorAreas: [] },
+    basePdfMetadata: null,
+    composition: [
+      { id: 'comp_tubo_1', type: 'insumo', itemId: 'mat_papel_kraft_180', quantity: 0.5, unit: 'folha' }
+    ],
+    createdAt: '2026-09-04T00:00:00Z',
+    updatedAt: '2026-09-04T00:00:00Z'
+  },
+  {
+    id: 'prod_tubete_3d',
+    name: 'Tubete Personalizado com Aplique 3D',
+    categoryId: 'cat_festas',
+    status: 'ativo',
+    type: 'personalizado',
+    isKit: true,
+    kitMinQuantity: 10,
+    kitTiers: [
+      { id: 'tier_tubete_10', name: 'Kit 10 unidades', quantity: 10, price: 35.00, unitPrice: 3.50, isDefault: false },
+      { id: 'tier_tubete_25', name: 'Kit 25 unidades', quantity: 25, price: 75.00, unitPrice: 3.00, isDefault: true },
+      { id: 'tier_tubete_50', name: 'Kit 50 unidades', quantity: 50, price: 140.00, unitPrice: 2.80, isDefault: false },
+      { id: 'tier_tubete_100', name: 'Kit 100 unidades', quantity: 100, price: 260.00, unitPrice: 2.60, isDefault: false }
+    ],
+    description: 'Tubete 13cm em acrílico cristal com aplique em camadas de papel fotográfico 230g e mini laço de cetim.',
+    price: 75.00,
+    priceFrom: 85.00,
+    cost: 26.00,
+    productionTime: 2,
+    configurationVersion: 1,
+    personalizationFields: [
+      { id: 'field_nome', name: 'Nome da Criança', type: 'text', required: true, defaultValue: '' },
+      { id: 'field_idade', name: 'Idade', type: 'number', required: false, defaultValue: '' }
+    ],
+    changeOptions: [
+      { id: 'opt_tampa_tub', name: 'Cor da Tampa do Tubete', type: 'choice', required: true, defaultValue: 'Transparente', choices: ['Transparente', 'Dourada', 'Rosa', 'Azul', 'Branca'] }
+    ],
+    editor: { textAreas: [], elementAreas: [], colorAreas: [] },
+    basePdfMetadata: null,
+    composition: [
+      { id: 'comp_tubete_1', type: 'insumo', itemId: 'mat_papel_foto_230', quantity: 0.2, unit: 'folha' }
+    ],
+    createdAt: '2026-09-04T00:00:00Z',
+    updatedAt: '2026-09-04T00:00:00Z'
+  },
+  {
+    id: 'prod_balinha_personalizada',
+    name: 'Balinhas Personalizadas Mastigáveis',
+    categoryId: 'cat_lembrancas',
+    status: 'ativo',
+    type: 'personalizado',
+    isKit: true,
+    kitMinQuantity: 25,
+    kitTiers: [
+      { id: 'tier_bala_25', name: 'Kit 25 unidades', quantity: 25, price: 22.00, unitPrice: 0.88, isDefault: false },
+      { id: 'tier_bala_50', name: 'Kit 50 unidades', quantity: 50, price: 40.00, unitPrice: 0.80, isDefault: false },
+      { id: 'tier_bala_100', name: 'Kit 100 unidades', quantity: 100, price: 75.00, unitPrice: 0.75, isDefault: true }
+    ],
+    description: 'Balas mastigáveis sortidas embaladas em rótulo adesivo fotográfico personalizado de fácil abertura com tema e logo.',
+    price: 75.00,
+    priceFrom: 85.00,
+    cost: 24.00,
+    productionTime: 2,
+    configurationVersion: 1,
+    personalizationFields: [
+      { id: 'field_nome', name: 'Nome / Frase do Rótulo', type: 'text', required: true, defaultValue: '' },
+      { id: 'field_contato', name: 'Instagram ou Contato no Verso', type: 'text', required: false, defaultValue: '' }
+    ],
+    changeOptions: [
+      { id: 'opt_sabor', name: 'Mix de Sabores', type: 'choice', required: true, defaultValue: 'Sortido Frutas', choices: ['Sortido Frutas', 'Iogurte', 'Menta'] }
+    ],
+    editor: { textAreas: [], elementAreas: [], colorAreas: [] },
+    basePdfMetadata: null,
+    composition: [
+      { id: 'comp_bala_1', type: 'insumo', itemId: 'mat_papel_foto_230', quantity: 0.1, unit: 'folha' }
+    ],
+    createdAt: '2026-09-04T00:00:00Z',
+    updatedAt: '2026-09-04T00:00:00Z'
   }
 ];
 

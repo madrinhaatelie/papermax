@@ -173,11 +173,29 @@ export function loadProducts() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.PRODUCTS);
     if (!raw) {
-      saveProducts([], true);
-      return [];
+      saveProducts(SEED_PRODUCTS, true);
+      return SEED_PRODUCTS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      saveProducts(SEED_PRODUCTS, true);
+      return SEED_PRODUCTS;
+    }
+
+    // Ensure any newly added seed products exist (e.g. Tubolata, Tubete, Balinhas)
+    const existingIds = new Set(parsed.map(p => p.id));
+    let added = false;
+    for (const sp of SEED_PRODUCTS) {
+      if (!existingIds.has(sp.id)) {
+        parsed.push(sp);
+        added = true;
+      }
+    }
+    if (added) {
+      saveProducts(parsed, true);
+    }
+
+    return parsed;
   } catch (e) {
     return [];
   }

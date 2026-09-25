@@ -71,6 +71,9 @@ export function createProduct(payload) {
     status: payload.status || 'ativo',
     active: (payload.status || 'ativo') === 'ativo',
     type: payload.type || 'personalizado',
+    isKit: Boolean(payload.isKit),
+    kitMinQuantity: Number(payload.kitMinQuantity) || (payload.isKit && Array.isArray(payload.kitTiers) && payload.kitTiers[0]?.quantity ? payload.kitTiers[0].quantity : 1),
+    kitTiers: Array.isArray(payload.kitTiers) ? payload.kitTiers : [],
     description: (payload.description || '').trim(),
     price: Number(payload.price) || 0,
     priceFrom: Number(payload.priceFrom) || 0,
@@ -124,6 +127,9 @@ export function updateProduct(id, payload) {
   if (payload.composition && JSON.stringify(payload.composition) !== JSON.stringify(existing.composition)) {
     configChanged = true;
   }
+  if (payload.kitTiers && JSON.stringify(payload.kitTiers) !== JSON.stringify(existing.kitTiers)) {
+    configChanged = true;
+  }
 
   const nextVersion = configChanged ? (existing.configurationVersion || 1) + 1 : (existing.configurationVersion || 1);
 
@@ -135,6 +141,9 @@ export function updateProduct(id, payload) {
     status: payload.status !== undefined ? payload.status : (payload.active !== undefined ? (payload.active ? 'ativo' : 'inativo') : existing.status),
     active: payload.active !== undefined ? payload.active : (payload.status !== undefined ? payload.status === 'ativo' : (existing.active !== undefined ? existing.active : existing.status === 'ativo')),
     type: payload.type !== undefined ? payload.type : existing.type,
+    isKit: payload.isKit !== undefined ? Boolean(payload.isKit) : Boolean(existing.isKit),
+    kitMinQuantity: payload.kitMinQuantity !== undefined ? Number(payload.kitMinQuantity) || 1 : (existing.kitMinQuantity || 1),
+    kitTiers: payload.kitTiers !== undefined ? (Array.isArray(payload.kitTiers) ? payload.kitTiers : []) : (existing.kitTiers || []),
     description: payload.description !== undefined ? payload.description : existing.description,
     price: payload.price !== undefined ? Number(payload.price) || 0 : existing.price,
     priceFrom: payload.priceFrom !== undefined ? Number(payload.priceFrom) || 0 : (existing.priceFrom || 0),

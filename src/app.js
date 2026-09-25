@@ -929,6 +929,7 @@ function renderProductsTable(container, products, categories) {
               <div class="list-main" style="flex: 1; min-width: 0;">
                 <div class="list-title" style="display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                   <span style="overflow: hidden; text-overflow: ellipsis;">${escapeHtml(p.name)}</span>
+                  ${p.isKit ? `<span class="badge-count" style="background: #dcfce7; color: #15803d; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;" title="Vendido em kits/lotes de quantidades">📦 Kit ${(p.kitTiers && p.kitTiers.length > 0) ? `(${p.kitTiers.map(t => t.quantity + ' un').join(', ')})` : ''}</span>` : ''}
                 </div>
                 <div class="list-meta" style="font-size: 11.5px; margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                   <span style="color: #16a34a; font-weight: 600;">Lucro: R$ ${unitProfit.toFixed(2)} (${marginPct}%)</span>
@@ -1710,38 +1711,57 @@ function initAppAfterAuth() {
     const mask = target.getAttribute('data-mask');
 
     // Telefone / Contato / WhatsApp -> (XX) 9 XXXX-XXXX
-    if (mask === 'phone' || id.includes('contato') || id.includes('phone') || id.includes('whatsapp') || id.includes('tel') || name.includes('phone') || name.includes('contato') || target.type === 'tel') {
+    const isPhoneField = mask === 'phone' ||
+      target.type === 'tel' ||
+      id.includes('contato') ||
+      id.includes('phone') ||
+      id.includes('whatsapp') ||
+      id.includes('telefone') ||
+      id === 'tel' || id.startsWith('tel-') || id.endsWith('-tel') ||
+      name.includes('phone') ||
+      name.includes('contato') ||
+      name.includes('telefone') ||
+      name.includes('whatsapp');
+
+    if (isPhoneField) {
       const val = target.value;
       const formatted = formatPhone(val);
       if (val !== formatted) {
-        const cursor = target.selectionStart;
+        const oldCursor = target.selectionStart || 0;
         target.value = formatted;
-        // Keep cursor near position if reasonable
-        if (cursor && cursor <= formatted.length) {
-          try { target.setSelectionRange(target.value.length, target.value.length); } catch (_) {}
-        }
+        const diff = formatted.length - val.length;
+        const newCursor = Math.max(0, Math.min(formatted.length, oldCursor + diff));
+        try { target.setSelectionRange(newCursor, newCursor); } catch (_) {}
       }
       return;
     }
 
     // CPF -> XXX.XXX.XXX-XX
-    if (mask === 'cpf' || id.includes('cpf') || name.includes('cpf')) {
+    const isCpfField = mask === 'cpf' || (id.includes('cpf') && !id.includes('cnpj')) || (name.includes('cpf') && !name.includes('cnpj'));
+    if (isCpfField) {
       const val = target.value;
       const formatted = formatCPF(val);
       if (val !== formatted) {
+        const oldCursor = target.selectionStart || 0;
         target.value = formatted;
-        try { target.setSelectionRange(target.value.length, target.value.length); } catch (_) {}
+        const diff = formatted.length - val.length;
+        const newCursor = Math.max(0, Math.min(formatted.length, oldCursor + diff));
+        try { target.setSelectionRange(newCursor, newCursor); } catch (_) {}
       }
       return;
     }
 
     // CNPJ -> XX.XXX.XXX/XXXX-XX
-    if (mask === 'cnpj' || id.includes('cnpj') || name.includes('cnpj')) {
+    const isCnpjField = mask === 'cnpj' || id.includes('cnpj') || name.includes('cnpj');
+    if (isCnpjField) {
       const val = target.value;
       const formatted = formatCNPJ(val);
       if (val !== formatted) {
+        const oldCursor = target.selectionStart || 0;
         target.value = formatted;
-        try { target.setSelectionRange(target.value.length, target.value.length); } catch (_) {}
+        const diff = formatted.length - val.length;
+        const newCursor = Math.max(0, Math.min(formatted.length, oldCursor + diff));
+        try { target.setSelectionRange(newCursor, newCursor); } catch (_) {}
       }
       return;
     }
@@ -1751,8 +1771,11 @@ function initAppAfterAuth() {
       const val = target.value;
       const formatted = formatCPFOrCNPJ(val);
       if (val !== formatted) {
+        const oldCursor = target.selectionStart || 0;
         target.value = formatted;
-        try { target.setSelectionRange(target.value.length, target.value.length); } catch (_) {}
+        const diff = formatted.length - val.length;
+        const newCursor = Math.max(0, Math.min(formatted.length, oldCursor + diff));
+        try { target.setSelectionRange(newCursor, newCursor); } catch (_) {}
       }
     }
   });
