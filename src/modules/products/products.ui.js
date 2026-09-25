@@ -644,7 +644,7 @@ export function renderCommercialVitrine(container, products, categories, options
         const stockCap = rData?.stockCapacity !== null && rData?.stockCapacity !== undefined ? rData.stockCapacity : null;
 
         return `
-          <div class="vitrine-card" style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04); transition: transform 0.15s ease, box-shadow 0.15s ease; position: relative;" data-product-card-id="${p.id}">
+          <div class="vitrine-card" style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; position: relative; cursor: pointer;" data-product-card-id="${p.id}" data-action="view-product-card" data-id="${p.id}" title="Clique para abrir consulta completa deste produto">
             
             <!-- Topo do Card: Foto & Badges -->
             <div>
@@ -661,6 +661,11 @@ export function renderCommercialVitrine(container, products, categories, options
                 <!-- Tags Superiores -->
                 <div style="position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; flex-wrap: wrap;">
                   <span class="badge-count" style="background: rgba(255, 255, 255, 0.92); color: var(--text-primary); backdrop-filter: blur(4px); font-size: 10px; font-weight: 700; border: 1px solid rgba(0,0,0,0.06);">${escapeHtml(catName)}</span>
+                  ${p.isKit ? `
+                    <span class="badge-count" style="background: #16a34a; color: #ffffff; font-size: 10px; font-weight: 800; border: 1px solid #15803d; box-shadow: 0 1px 3px rgba(0,0,0,0.12);">
+                      📦 KIT ${(p.kitTiers && p.kitTiers.length > 0) ? `(${p.kitTiers.map(t => t.quantity + ' un').join(', ')})` : ''}
+                    </span>
+                  ` : ''}
                 </div>
 
                 <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 4px;">
@@ -691,6 +696,11 @@ export function renderCommercialVitrine(container, products, categories, options
                 <span class="badge-count" style="font-size: 10px; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;">
                   ⏱ ${p.productionTime || 1} dias úteis
                 </span>
+                ${p.isKit ? `
+                  <span class="badge-count" style="font-size: 10px; background: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700;" title="Vendido em pacotes de quantidades fechadas">
+                    📦 Kit (${(p.kitTiers || []).length} opções de lotes)
+                  </span>
+                ` : ''}
                 ${editableCount > 0 ? `
                   <span class="badge-count" style="font-size: 10px; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe;" title="${reqFieldsCount} campo(s) obrigatório(s)">
                     ✏️ ${editableCount} campo(s) texto
@@ -713,7 +723,9 @@ export function renderCommercialVitrine(container, products, categories, options
             <div style="border-top: 1px solid var(--border-subtle); padding-top: 10px; margin-top: 4px;">
               <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
                 <div>
-                  <span style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block;">Preço Unitário</span>
+                  <span style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block;">
+                    ${p.isKit ? 'Valor do Kit (a partir de)' : 'Preço Unitário'}
+                  </span>
                   <div style="display: flex; align-items: baseline; gap: 6px;">
                     <span style="font-size: 18px; font-weight: 800; color: #059669;">${formatCurrency(price)}</span>
                     ${hasDiscount ? `<span style="font-size: 12px; color: var(--text-muted); text-decoration: line-through;">${formatCurrency(priceFrom)}</span>` : ''}
@@ -730,7 +742,7 @@ export function renderCommercialVitrine(container, products, categories, options
                   + Criar Pedido
                 </button>
                 <button type="button" class="btn btn-secondary" data-action="preview-product" data-id="${p.id}" title="Visualizar Detalhes e Personalização" style="font-weight: 600; font-size: 11.5px; padding: 8px 8px; white-space: nowrap;">
-                  🔍 Personalizar
+                  🔍 Consultar
                 </button>
                 <button type="button" class="btn btn-secondary" data-action="bulk-from-vitrine" data-id="${p.id}" title="Personalização em Lote / Massa" style="font-weight: 600; font-size: 12px; padding: 8px 10px;">
                   ⚡
@@ -745,6 +757,20 @@ export function renderCommercialVitrine(container, products, categories, options
   `;
 
   // Bind Clicks
+  // 1. Click directly on the entire card immediately opens consultation drawer
+  container.querySelectorAll('.vitrine-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      // Prevent opening drawer if an interactive child button was clicked
+      if (e.target.closest('button') || e.target.closest('.btn') || e.target.closest('a')) {
+        return;
+      }
+      const prodId = card.dataset.productCardId || card.dataset.id;
+      if (typeof onPreview === 'function' && prodId) {
+        onPreview(prodId);
+      }
+    });
+  });
+
   container.querySelectorAll('[data-action="order-from-vitrine"]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -943,6 +969,7 @@ export function openProductCommercialPreviewDrawer({
                     <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700; text-align: right;">Preço do Kit</th>
                     <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700; text-align: right;">Valor Unitário</th>
                     <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700; text-align: center;">Status</th>
+                    <th style="padding: 6px 10px; color: #1b5e20; font-weight: 700; text-align: center;">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -962,6 +989,11 @@ export function openProductCommercialPreviewDrawer({
                       </td>
                       <td style="padding: 6px 10px; text-align: center;">
                         ${tier.isDefault ? '<span class="badge-count" style="background: #22c55e; color: #ffffff; font-size: 9px; font-weight: 700;">★ PADRÃO</span>' : '<span style="color: var(--text-muted); font-size: 10px;">Opção</span>'}
+                      </td>
+                      <td style="padding: 6px 10px; text-align: center;">
+                        <button type="button" class="btn btn-sm btn-primary" data-action="order-kit-tier" data-tier-qty="${tier.quantity}" data-tier-price="${tier.price}" style="font-size: 11px; padding: 3px 8px; font-weight: 700; white-space: nowrap;">
+                          + Pedir ${tier.quantity} un
+                        </button>
                       </td>
                     </tr>
                   `).join('')}
@@ -1112,6 +1144,28 @@ export function openProductCommercialPreviewDrawer({
       });
 
       // Actions
+      drawer.querySelectorAll('[data-action="order-kit-tier"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const tierQty = Number(btn.dataset.tierQty) || 1;
+          const tierPrice = Number(btn.dataset.tierPrice) || price;
+          closeDrawerFn();
+          if (typeof onOrderCreate === 'function') {
+            onOrderCreate({
+              productId: p.id,
+              qty: tierQty,
+              isKit: true,
+              kitTierQuantity: tierQty,
+              kitTierPrice: tierPrice,
+              unitPrice: tierPrice / tierQty,
+              price: tierPrice,
+              personalization: sandboxPers,
+              changeOptions: sandboxOpts
+            });
+          }
+        });
+      });
+
       drawer.querySelector('#btn-edit-prod-from-preview').addEventListener('click', () => {
         closeDrawerFn();
         if (typeof onEditProduct === 'function') {

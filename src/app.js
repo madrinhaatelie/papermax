@@ -651,8 +651,8 @@ function renderDashboardOrdersList() {
     const date = order.deliveryDate || order.date || '--/--/--';
 
     return `
-      <div class="list-row ${statusClass}" data-order-id="${order.id}">
-        <div class="list-main" style="cursor: pointer;" data-action="view-order" data-id="${order.id}">
+      <div class="list-row ${statusClass}" data-order-id="${order.id}" style="cursor: pointer;" title="Clique para abrir consulta do Pedido ${orderTitleFormatted}">
+        <div class="list-main" data-action="view-order" data-id="${order.id}">
           <div class="list-title" style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;">
             ${orderTitleFormatted}
             <span style="font-size: 12px; font-weight: normal; color: var(--text-secondary);">· ${customer}</span>
@@ -666,11 +666,12 @@ function renderDashboardOrdersList() {
         </div>
         <div class="actions" style="position: relative;">
           <button class="action-btn btn-dots-menu" data-action="toggle-dots" data-id="${order.id}" title="Ações do pedido" style="padding: 4px 8px; font-weight: bold; font-size: 14px; line-height: 1;">⋮</button>
-          <div class="dots-dropdown-menu" id="dots-menu-${order.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 120px; padding: 4px 0;">
-            <button class="dots-menu-item" data-action="edit-order" data-id="${order.id}">Editar</button>
-            <button class="dots-menu-item" data-action="dup-order" data-id="${order.id}">Duplicar</button>
-            <button class="dots-menu-item" data-action="del-order" data-id="${order.id}" style="color: #ef4444;">Excluir</button>
-            <button class="dots-menu-item" data-action="hide-order" data-id="${order.id}">Ocultar</button>
+          <div class="dots-dropdown-menu" id="dots-menu-${order.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 140px; padding: 4px 0;">
+            <button class="dots-menu-item" data-action="view-order" data-id="${order.id}">📄 Consultar</button>
+            <button class="dots-menu-item" data-action="edit-order" data-id="${order.id}">✏️ Editar</button>
+            <button class="dots-menu-item" data-action="dup-order" data-id="${order.id}">📋 Duplicar</button>
+            <button class="dots-menu-item" data-action="del-order" data-id="${order.id}" style="color: #ef4444;">🗑️ Excluir</button>
+            <button class="dots-menu-item" data-action="hide-order" data-id="${order.id}">👁️ Ocultar</button>
           </div>
         </div>
       </div>
@@ -699,6 +700,15 @@ function renderDashboardOrdersList() {
       cycleOrderStatus(id);
       renderDashboard();
       showToast('Status atualizado');
+    });
+  });
+
+  container.querySelectorAll('.list-row[data-order-id]').forEach(row => {
+    row.addEventListener('click', e => {
+      if (e.target.closest('.actions') || e.target.closest('.dots-dropdown-menu') || e.target.closest('[data-action="cycle-status"]')) {
+        return;
+      }
+      showOrderDetailsDrawer(row.dataset.orderId);
     });
   });
 
@@ -945,7 +955,8 @@ function renderProductsTable(container, products, categories) {
 
               <div class="actions" style="position: relative;">
                 <button class="action-btn btn-dots-menu" data-action="toggle-dots-prod" data-id="${p.id}" title="Ações do produto" style="padding: 4px 8px; font-weight: bold; font-size: 14px; line-height: 1; cursor: pointer;">⋮</button>
-                <div class="dots-dropdown-menu" id="dots-prod-menu-${p.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 130px; padding: 4px 0;">
+                <div class="dots-dropdown-menu" id="dots-prod-menu-${p.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 140px; padding: 4px 0;">
+                  <button class="dots-menu-item" data-action="view-product" data-id="${p.id}">📄 Consultar</button>
                   <button class="dots-menu-item" data-action="edit-product" data-id="${p.id}">✏️ Editar</button>
                   <button class="dots-menu-item" data-action="dup-product" data-id="${p.id}">📋 Duplicar</button>
                   <button class="dots-menu-item" data-action="intel-product" data-id="${p.id}">📊 Intel</button>
