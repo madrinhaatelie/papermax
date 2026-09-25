@@ -357,12 +357,12 @@ export function renderOrdersView(container, ctx) {
     </div>
 
     <!-- Search & Select Filter Bar -->
-    <div class="filter-bar" style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
-      <div style="display: flex; align-items: center; gap: 8px; min-width: 240px;">
+    <div class="filter-bar orders-filter-bar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; width: 100%;">
+      <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 200px; min-width: 0; max-width: 100%;">
         <label for="select-orders-tab" style="font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; display: flex; align-items: center; gap: 4px;">
           <span>🎯 Status:</span>
         </label>
-        <select id="select-orders-tab" class="form-select" style="height: 38px; font-size: 13px; font-weight: 600; border-radius: 8px; border: 1px solid var(--border-subtle); background-color: #ffffff; padding: 0 12px; color: var(--text-primary); cursor: pointer; flex: 1; min-width: 190px;">
+        <select id="select-orders-tab" class="form-select" style="height: 38px; font-size: 13px; font-weight: 600; border-radius: 8px; border: 1px solid var(--border-subtle); background-color: #ffffff; padding: 0 12px; color: var(--text-primary); cursor: pointer; flex: 1; min-width: 0;">
           ${[
             { id: 'em_andamento', label: '⚡ Em Andamento' },
             { id: 'todos', label: '📋 Todos os Pedidos' },
@@ -385,14 +385,14 @@ export function renderOrdersView(container, ctx) {
         </select>
       </div>
 
-      <div class="search-wrapper" style="flex: 1; min-width: 240px; position: relative;">
+      <div class="search-wrapper" style="flex: 2 1 220px; min-width: 0; max-width: 100%; position: relative;">
         <span class="search-icon" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--text-secondary);">🔍</span>
         <input class="search" id="input-orders-search" 
                placeholder="Busca em tempo real por número (ex: 0001, 1048), cliente, produto ou status..." 
                value="${escapeHtml(currentSearchTerm)}" 
-               style="width: 100%; padding-left: 36px; height: 38px; border-radius: 8px; font-size: 13px;" />
+               style="width: 100%; padding-left: 36px; height: 38px; border-radius: 8px; font-size: 13px; box-sizing: border-box;" />
       </div>
-      <span class="badge-count" style="background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap;">
+      <span class="badge-count" style="background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex-shrink: 0;">
         ${orders.length} ${orders.length === 1 ? 'pedido' : 'pedidos'}
       </span>
     </div>

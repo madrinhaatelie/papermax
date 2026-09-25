@@ -343,20 +343,20 @@ export function openProductConfigDrawer({
     return `
       <div class="product-wizard-container">
         <!-- Barra de Progresso / Passos (5 Passos Completos) -->
-        <div class="wizard-steps-header" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 16px;">
-          <button type="button" class="wizard-step-btn ${activeStep === 1 ? 'active' : ''}" data-step="1" style="padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 1 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 1 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 1 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
+        <div class="wizard-steps-header" style="display: flex; gap: 4px; overflow-x: auto; flex-wrap: nowrap; margin-bottom: 16px; -webkit-overflow-scrolling: touch; scrollbar-width: none;">
+          <button type="button" class="wizard-step-btn ${activeStep === 1 ? 'active' : ''}" data-step="1" style="flex: 1 1 90px; min-width: 80px; flex-shrink: 0; padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 1 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 1 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 1 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
             1. Produto
           </button>
-          <button type="button" class="wizard-step-btn ${activeStep === 2 ? 'active' : ''}" data-step="2" style="padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 2 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 2 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 2 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
+          <button type="button" class="wizard-step-btn ${activeStep === 2 ? 'active' : ''}" data-step="2" style="flex: 1 1 90px; min-width: 80px; flex-shrink: 0; padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 2 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 2 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 2 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
             2. Insumos (${product.composition?.length || 0})
           </button>
-          <button type="button" class="wizard-step-btn ${activeStep === 3 ? 'active' : ''}" data-step="3" style="padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 3 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 3 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 3 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
+          <button type="button" class="wizard-step-btn ${activeStep === 3 ? 'active' : ''}" data-step="3" style="flex: 1 1 90px; min-width: 80px; flex-shrink: 0; padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 3 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 3 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 3 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
             3. Precificação
           </button>
-          <button type="button" class="wizard-step-btn ${activeStep === 4 ? 'active' : ''}" data-step="4" style="padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 4 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 4 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 4 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
+          <button type="button" class="wizard-step-btn ${activeStep === 4 ? 'active' : ''}" data-step="4" style="flex: 1 1 90px; min-width: 80px; flex-shrink: 0; padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 4 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 4 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 4 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
             4. Personalização
           </button>
-          <button type="button" class="wizard-step-btn ${activeStep === 5 ? 'active' : ''}" data-step="5" style="padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 5 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 5 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 5 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
+          <button type="button" class="wizard-step-btn ${activeStep === 5 ? 'active' : ''}" data-step="5" style="flex: 1 1 90px; min-width: 80px; flex-shrink: 0; padding: 8px 4px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid ${activeStep === 5 ? '#4f46e5' : 'var(--border-subtle)'}; background: ${activeStep === 5 ? '#eef2ff' : '#ffffff'}; color: ${activeStep === 5 ? '#4338ca' : 'var(--text-secondary)'}; cursor: pointer; text-align: center;">
             5. PDF + Molde
           </button>
         </div>
@@ -939,7 +939,7 @@ export function openProductConfigDrawer({
                   <div style="font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
                     <span>➕ Novo Pacote de Quantidade</span>
                   </div>
-                  <div style="display: grid; grid-template-columns: 120px 1.5fr 130px auto auto; gap: 8px; align-items: flex-end;">
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; align-items: flex-end;">
                     <div>
                       <label class="form-label" style="font-size: 11px; font-weight: 600; margin-bottom: 2px;">Qtd (unidades) *</label>
                       <input type="number" id="inp-new-tier-qty" class="form-input" placeholder="Ex: 25" min="1" value="25" style="font-size: 12px; font-weight: 700; text-align: center;" />

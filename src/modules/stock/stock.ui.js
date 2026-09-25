@@ -428,7 +428,7 @@ function renderAlertsTab(balanceData) {
 
           return `
             <div class="alert-card alert-${item.alertBadge}" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; padding: 14px 16px;">
-              <div style="flex: 1; min-width: 280px;">
+              <div style="flex: 1 1 200px; min-width: 0; max-width: 100%;">
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                   <span style="font-size: 15px; font-weight: 700; color: var(--text-primary);">
                     ${item.alertBadge === 'red' ? '🔴' : item.alertBadge === 'orange' ? '🟠' : '🟡'}

@@ -835,12 +835,12 @@ function renderProductsView() {
     </div>
 
     <!-- Search & Quick Stats -->
-    <div class="filter-bar" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-      <div class="search-wrapper flex-1" style="min-width: 240px;">
+    <div class="filter-bar" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; width: 100%;">
+      <div class="search-wrapper flex-1" style="flex: 1 1 200px; min-width: 0; max-width: 100%;">
         <span class="search-icon">🔍</span>
-        <input class="search w-full" id="input-products-search" placeholder="Buscar por nome do produto, descrição ou categoria..." value="${escapeHtml(productSearchTerm)}" />
+        <input class="search w-full" id="input-products-search" placeholder="Buscar por nome do produto, descrição ou categoria..." value="${escapeHtml(productSearchTerm)}" style="width: 100%; box-sizing: border-box;" />
       </div>
-      <span class="badge-count">${displayedProducts.length} produtos</span>
+      <span class="badge-count" style="flex-shrink: 0;">${displayedProducts.length} produtos</span>
     </div>
 
     <!-- Navigation Tabs Bar (Divisórias de Fichário Horizontais) -->
@@ -993,7 +993,7 @@ function renderProductsTable(container, products, categories) {
             </div>
 
             <!-- Coluna 2: Preço & Quantidade Disponível (Compacto) -->
-            <div style="text-align: right; min-width: 140px; flex-shrink: 0;" data-action="view-product-pricing" data-id="${p.id}">
+            <div style="text-align: right; min-width: 95px; flex-shrink: 0;" data-action="view-product-pricing" data-id="${p.id}">
               <span style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: block;">
                 ${p.isKit ? `A partir de ${formatCurrency(p.price)}` : formatCurrency(p.price)}
               </span>
@@ -1004,7 +1004,7 @@ function renderProductsTable(container, products, categories) {
 
             <!-- Coluna 3: Menu de Ações ⋮ -->
             <div class="actions" style="position: relative;">
-              <button class="action-btn btn-dots-menu" data-action="toggle-dots-prod" data-id="${p.id}" title="Ações do produto" style="padding: 4px 8px; font-weight: bold; font-size: 14px; line-height: 1; cursor: pointer;">⋮</button>
+              <button class="action-btn btn-dots-menu" data-action="toggle-dots-prod" data-id="${p.id}" title="Ações do produto" style="min-width: 36px; min-height: 36px; display: grid; place-items: center; font-weight: bold; font-size: 16px; line-height: 1; cursor: pointer; padding: 4px;">⋮</button>
               <div class="dots-dropdown-menu" id="dots-prod-menu-${p.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 140px; padding: 4px 0;">
                 <button class="dots-menu-item" data-action="view-product" data-id="${p.id}">📄 Consultar</button>
                 <button class="dots-menu-item" data-action="edit-product" data-id="${p.id}">✏️ Editar</button>

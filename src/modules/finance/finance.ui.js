@@ -390,18 +390,18 @@ function renderVendasTab() {
     <div style="display: flex; flex-direction: column; gap: 24px;">
       
       <!-- Toolbar & Search -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: #ffffff; padding: 18px 24px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
-        <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; background: #ffffff; padding: 14px 18px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+        <div style="display: flex; align-items: center; gap: 10px; flex: 1 1 240px; min-width: 0; max-width: 100%;">
           <input 
             type="text" 
             id="input-search-sales" 
             class="form-input" 
             placeholder="🔍 Buscar por pedido, cliente ou produto..." 
             value="${escapeHtml(salesSearchQuery)}"
-            style="width: 300px; padding: 8px 14px; font-size: 0.875rem;"
+            style="width: 100%; max-width: 340px; padding: 8px 14px; font-size: 0.875rem;"
           />
         </div>
-        <div style="display: flex; gap: 24px; align-items: center; font-size: 0.9375rem;">
+        <div style="display: flex; gap: 16px; align-items: center; font-size: 0.9375rem; flex-wrap: wrap;">
           <div><strong>Total Vendas:</strong> <span style="color: #059669; font-weight: 800; font-size: 1.0625rem;">${formatCurrency(totalSalesSum)}</span></div>
           <div><strong>Custo Total:</strong> <span style="color: #dc2626; font-weight: 700;">${formatCurrency(totalCostSum)}</span></div>
           <div><strong>Lucro:</strong> <span style="color: #2563eb; font-weight: 800; font-size: 1.0625rem;">${formatCurrency(totalProfitSum)}</span></div>
@@ -479,30 +479,30 @@ function renderDespesasTab() {
     <div style="display: flex; flex-direction: column; gap: 20px;">
       
       <!-- Toolbar & Filters -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg-card); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border-subtle);">
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; background: var(--bg-card); padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 260px; min-width: 0; width: 100%;">
           <input 
             type="text" 
             id="input-search-expenses" 
             class="form-input" 
             placeholder="🔍 Buscar despesa..." 
             value="${escapeHtml(expensesSearchQuery)}"
-            style="width: 200px;"
+            style="flex: 1 1 160px; min-width: 140px; max-width: 100%;"
           />
-          <select id="select-category-expenses" class="form-select" style="width: 160px;">
+          <select id="select-category-expenses" class="form-select" style="flex: 1 1 140px; min-width: 120px; max-width: 100%;">
             <option value="todos" ${expensesCategoryFilter === 'todos' ? 'selected' : ''}>Todas Categorias</option>
             ${EXPENSE_CATEGORIES.map(cat => `
               <option value="${cat}" ${expensesCategoryFilter === cat ? 'selected' : ''}>${cat}</option>
             `).join('')}
           </select>
-          <select id="select-status-expenses" class="form-select" style="width: 140px;">
+          <select id="select-status-expenses" class="form-select" style="flex: 1 1 120px; min-width: 100px; max-width: 100%;">
             <option value="todos" ${expensesStatusFilter === 'todos' ? 'selected' : ''}>Todos Status</option>
             <option value="aberto" ${expensesStatusFilter === 'aberto' ? 'selected' : ''}>Aberto</option>
             <option value="pago" ${expensesStatusFilter === 'pago' ? 'selected' : ''}>Pago</option>
           </select>
         </div>
 
-        <div style="display: flex; gap: 20px; align-items: center; font-size: 0.875rem;">
+        <div style="display: flex; gap: 14px; align-items: center; font-size: 0.875rem; flex-wrap: wrap;">
           <div><strong>Total:</strong> <span style="color: var(--text-primary); font-weight: 700;">${formatCurrency(totalExpensesSum)}</span></div>
           <div><strong>Pago:</strong> <span style="color: #ef4444; font-weight: 700;">${formatCurrency(paidExpensesSum)}</span></div>
           <div><strong>A Pagar:</strong> <span style="color: #f59e0b; font-weight: 700;">${formatCurrency(openExpensesSum)}</span></div>
@@ -577,24 +577,24 @@ function renderAReceberTab() {
     <div style="display: flex; flex-direction: column; gap: 20px;">
       
       <!-- Toolbar & Filters -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg-card); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border-subtle);">
-        <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; background: var(--bg-card); padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 260px; min-width: 0; width: 100%;">
           <input 
             type="text" 
             id="input-search-receivables" 
             class="form-input" 
             placeholder="🔍 Buscar por cliente ou descrição..." 
             value="${escapeHtml(receivablesSearchQuery)}"
-            style="width: 260px;"
+            style="flex: 1 1 180px; min-width: 140px; max-width: 100%;"
           />
-          <select id="select-status-receivables" class="form-select" style="width: 150px;">
+          <select id="select-status-receivables" class="form-select" style="flex: 1 1 130px; min-width: 110px; max-width: 100%;">
             <option value="todos" ${receivablesStatusFilter === 'todos' ? 'selected' : ''}>Todos Status</option>
             <option value="aberto" ${receivablesStatusFilter === 'aberto' ? 'selected' : ''}>Em Aberto</option>
             <option value="recebido" ${receivablesStatusFilter === 'recebido' ? 'selected' : ''}>Recebido</option>
           </select>
         </div>
 
-        <div style="display: flex; gap: 20px; align-items: center; font-size: 0.875rem;">
+        <div style="display: flex; gap: 14px; align-items: center; font-size: 0.875rem; flex-wrap: wrap;">
           <div><strong>Total:</strong> <span style="color: var(--text-primary); font-weight: 700;">${formatCurrency(totalRecSum)}</span></div>
           <div><strong>Recebido:</strong> <span style="color: #10b981; font-weight: 700;">${formatCurrency(receivedSum)}</span></div>
           <div><strong>A Receber:</strong> <span style="color: #f59e0b; font-weight: 700;">${formatCurrency(pendingRecSum)}</span></div>
@@ -668,24 +668,24 @@ function renderAPagarTab() {
     <div style="display: flex; flex-direction: column; gap: 20px;">
       
       <!-- Toolbar & Filters -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg-card); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border-subtle);">
-        <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; background: var(--bg-card); padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 260px; min-width: 0; width: 100%;">
           <input 
             type="text" 
             id="input-search-payables" 
             class="form-input" 
             placeholder="🔍 Buscar por fornecedor ou descrição..." 
             value="${escapeHtml(payablesSearchQuery)}"
-            style="width: 260px;"
+            style="flex: 1 1 180px; min-width: 140px; max-width: 100%;"
           />
-          <select id="select-status-payables" class="form-select" style="width: 150px;">
+          <select id="select-status-payables" class="form-select" style="flex: 1 1 130px; min-width: 110px; max-width: 100%;">
             <option value="todos" ${payablesStatusFilter === 'todos' ? 'selected' : ''}>Todos Status</option>
             <option value="aberto" ${payablesStatusFilter === 'aberto' ? 'selected' : ''}>Em Aberto</option>
             <option value="pago" ${payablesStatusFilter === 'pago' ? 'selected' : ''}>Pago</option>
           </select>
         </div>
 
-        <div style="display: flex; gap: 20px; align-items: center; font-size: 0.875rem;">
+        <div style="display: flex; gap: 14px; align-items: center; font-size: 0.875rem; flex-wrap: wrap;">
           <div><strong>Total:</strong> <span style="color: var(--text-primary); font-weight: 700;">${formatCurrency(totalPaySum)}</span></div>
           <div><strong>Pago:</strong> <span style="color: #ef4444; font-weight: 700;">${formatCurrency(paidSum)}</span></div>
           <div><strong>A Pagar:</strong> <span style="color: #f59e0b; font-weight: 700;">${formatCurrency(pendingPaySum)}</span></div>
