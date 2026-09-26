@@ -497,51 +497,15 @@ function renderDashboard() {
       </div>
 
       <div class="chart-container-responsive" style="position: relative; width: 100%; padding-top: 8px;">
-        <!-- Responsive Line SVG Overlay -->
-        <svg class="chart-line-overlay" viewBox="0 0 600 120" preserveAspectRatio="none" style="position: absolute; top: 18px; left: 0; width: 100%; height: 110px; pointer-events: none; z-index: 5; overflow: visible;">
-          <defs>
-            <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#818cf8" stop-opacity="0.6"/>
-              <stop offset="70%" stop-color="#c084fc" stop-opacity="0.85"/>
-              <stop offset="100%" stop-color="#f472b6" stop-opacity="1"/>
-            </linearGradient>
-            <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-          </defs>
-          ${(() => {
-            const data = metrics.chartData;
-            const maxVal = Math.max(...data.map(d => d.value), 10);
-            const points = data.map((d, i) => {
-              const x = (i + 0.5) * (600 / data.length);
-              const y = 110 - Math.round((d.value / maxVal) * 85);
-              return { x, y, val: d.value, isCurrent: d.isCurrent };
-            });
-            const dPath = points.reduce((acc, pt, i) => {
-              if (i === 0) return `M ${pt.x} ${pt.y}`;
-              const prev = points[i - 1];
-              const cx = (prev.x + pt.x) / 2;
-              return `${acc} C ${cx} ${prev.y}, ${cx} ${pt.y}, ${pt.x} ${pt.y}`;
-            }, '');
-            return `
-              <path d="${dPath}" fill="none" stroke="url(#lineGrad)" stroke-width="3" stroke-linecap="round" filter="url(#neonGlow)" />
-              ${points.map(pt => `
-                <circle cx="${pt.x}" cy="${pt.y}" r="${pt.isCurrent ? '5.5' : '3.5'}" fill="${pt.isCurrent ? '#f472b6' : '#818cf8'}" stroke="#ffffff" stroke-width="2" />
-              `).join('')}
-            `;
-          })()}
-        </svg>
-
-        <!-- Responsive Bars with Tooltips and Neon Pulse -->
-        <div class="bars" id="sales-bars-container" style="position: relative; z-index: 2;">
+        <!-- Responsive Bars with Tooltips and Neon Pulse (Espaçamento 01) -->
+        <div class="bars" id="sales-bars-container" style="position: relative; z-index: 2; gap: 1px;">
           ${metrics.chartData.map(bar => {
             const maxVal = Math.max(...metrics.chartData.map(b => b.value), 10);
-            const percent = Math.min(100, Math.round((bar.value / maxVal) * 85) + 12);
+            const percent = bar.value > 0 ? Math.min(100, Math.round((bar.value / maxVal) * 85) + 12) : 6;
             const activeClass = bar.isCurrent ? 'active neon-pulse' : '';
             return `
               <div class="bar-wrap">
-                <span class="bar-tooltip" style="z-index: 20;">${bar.value} pedidos</span>
+                <span class="bar-tooltip" style="z-index: 20;">${bar.value} ${bar.value === 1 ? 'pedido' : 'pedidos'}</span>
                 <div class="bar ${activeClass}" style="height: ${percent}%;"></div>
                 <span class="bar-label" style="font-size: 11px;">${escapeHtml(bar.label)}</span>
               </div>
@@ -835,12 +799,12 @@ function renderProductsView() {
     </div>
 
     <!-- Search & Quick Stats -->
-    <div class="filter-bar" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; width: 100%;">
-      <div class="search-wrapper flex-1" style="flex: 1 1 200px; min-width: 0; max-width: 100%;">
+    <div class="filter-bar" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <div class="search-wrapper flex-1" style="min-width: 240px;">
         <span class="search-icon">🔍</span>
-        <input class="search w-full" id="input-products-search" placeholder="Buscar por nome do produto, descrição ou categoria..." value="${escapeHtml(productSearchTerm)}" style="width: 100%; box-sizing: border-box;" />
+        <input class="search w-full" id="input-products-search" placeholder="Buscar por nome do produto, descrição ou categoria..." value="${escapeHtml(productSearchTerm)}" />
       </div>
-      <span class="badge-count" style="flex-shrink: 0;">${displayedProducts.length} produtos</span>
+      <span class="badge-count">${displayedProducts.length} produtos</span>
     </div>
 
     <!-- Navigation Tabs Bar (Divisórias de Fichário Horizontais) -->
@@ -993,7 +957,7 @@ function renderProductsTable(container, products, categories) {
             </div>
 
             <!-- Coluna 2: Preço & Quantidade Disponível (Compacto) -->
-            <div style="text-align: right; min-width: 95px; flex-shrink: 0;" data-action="view-product-pricing" data-id="${p.id}">
+            <div style="text-align: right; min-width: 140px; flex-shrink: 0;" data-action="view-product-pricing" data-id="${p.id}">
               <span style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: block;">
                 ${p.isKit ? `A partir de ${formatCurrency(p.price)}` : formatCurrency(p.price)}
               </span>
@@ -1004,7 +968,7 @@ function renderProductsTable(container, products, categories) {
 
             <!-- Coluna 3: Menu de Ações ⋮ -->
             <div class="actions" style="position: relative;">
-              <button class="action-btn btn-dots-menu" data-action="toggle-dots-prod" data-id="${p.id}" title="Ações do produto" style="min-width: 36px; min-height: 36px; display: grid; place-items: center; font-weight: bold; font-size: 16px; line-height: 1; cursor: pointer; padding: 4px;">⋮</button>
+              <button class="action-btn btn-dots-menu" data-action="toggle-dots-prod" data-id="${p.id}" title="Ações do produto" style="padding: 4px 8px; font-weight: bold; font-size: 14px; line-height: 1; cursor: pointer;">⋮</button>
               <div class="dots-dropdown-menu" id="dots-prod-menu-${p.id}" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); z-index: 50; min-width: 140px; padding: 4px 0;">
                 <button class="dots-menu-item" data-action="view-product" data-id="${p.id}">📄 Consultar</button>
                 <button class="dots-menu-item" data-action="edit-product" data-id="${p.id}">✏️ Editar</button>

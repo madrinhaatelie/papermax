@@ -152,17 +152,36 @@ export function loadCategories() {
   try {
     const raw = getStorageItem(STORAGE_KEYS.CATEGORIES);
     if (!raw) {
-      saveCategories([], true);
-      return [];
+      saveCategories(SEED_CATEGORIES, true);
+      return SEED_CATEGORIES;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      saveCategories(SEED_CATEGORIES, true);
+      return SEED_CATEGORIES;
+    }
+
+    // Ensure seed categories are present without duplicating user categories
+    const existingIds = new Set(parsed.map(c => c.id));
+    const existingNames = new Set(parsed.map(c => (c.name || '').toLowerCase().trim()));
+    let added = false;
+    for (const sc of SEED_CATEGORIES) {
+      if (!existingIds.has(sc.id) && !existingNames.has(sc.name.toLowerCase().trim())) {
+        parsed.push(sc);
+        added = true;
+      }
+    }
+    if (added) {
+      saveCategories(parsed, true);
+    }
+
+    return parsed;
   } catch (e) {
-    return [];
+    return SEED_CATEGORIES;
   }
 }
 
-export function saveCategories(categories, immediate = false) {
+export function saveCategories(categories, immediate = true) {
   scheduleSave(STORAGE_KEYS.CATEGORIES, categories, immediate);
 }
 

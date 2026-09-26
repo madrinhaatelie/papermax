@@ -16,10 +16,6 @@ export function getProducts(filter = {}) {
     list = list.filter(p => p.categoryId === filter.categoryId);
   }
 
-  if (filter.status) {
-    list = list.filter(p => p.status === filter.status);
-  }
-
   if (filter.search) {
     const term = filter.search.toLowerCase().trim();
     list = list.filter(p => 

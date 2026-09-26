@@ -40,7 +40,7 @@ export function createCategory({ name, description = '' }) {
   };
 
   categories.push(newCategory);
-  saveCategories(categories);
+  saveCategories(categories, true);
   bus.emit('categories:changed', categories);
   return newCategory;
 }
@@ -69,7 +69,7 @@ export function updateCategory(id, { name, description }) {
     updatedAt: new Date().toISOString()
   };
 
-  saveCategories(categories);
+  saveCategories(categories, true);
   bus.emit('categories:changed', categories);
   return categories[index];
 }
@@ -93,7 +93,7 @@ export function deleteCategory(id) {
     return { success: false, message: 'Categoria não encontrada.' };
   }
 
-  saveCategories(categories);
+  saveCategories(categories, true);
   bus.emit('categories:changed', categories);
   return { success: true, message: 'Categoria excluída com sucesso.' };
 }
@@ -113,7 +113,7 @@ export function createSubcategory(categoryId, name) {
   categories[index].subcategories = categories[index].subcategories || [];
   if (!categories[index].subcategories.includes(cleanName)) {
     categories[index].subcategories.push(cleanName);
-    saveCategories(categories);
+    saveCategories(categories, true);
     bus.emit('categories:changed', categories);
   }
   return cleanName;

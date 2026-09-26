@@ -428,7 +428,7 @@ function renderAlertsTab(balanceData) {
 
           return `
             <div class="alert-card alert-${item.alertBadge}" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; padding: 14px 16px;">
-              <div style="flex: 1 1 200px; min-width: 0; max-width: 100%;">
+              <div style="flex: 1; min-width: 280px;">
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                   <span style="font-size: 15px; font-weight: 700; color: var(--text-primary);">
                     ${item.alertBadge === 'red' ? '🔴' : item.alertBadge === 'orange' ? '🟠' : '🟡'}
@@ -931,7 +931,7 @@ function bindStockEvents(container, balanceData, materials, components, supplier
   // Row Click -> Open Material Summary Drawer
   container.querySelectorAll('.list-row, [data-action="view-material-summary"]').forEach(el => {
     el.addEventListener('click', (e) => {
-      if (e.target.closest('.actions') || e.target.closest('button') || e.target.closest('.btn-mat-summary-btn') || e.target.closest('.btn-quick-buy')) {
+      if (e.target.closest('.actions') || e.target.closest('button') || e.target.closest('.btn-mat-summary-btn') || e.target.closest('.btn-quick-buy') || e.target.closest('a')) {
         return;
       }
       const row = el.closest('.list-row') || el;
@@ -939,7 +939,53 @@ function bindStockEvents(container, balanceData, materials, components, supplier
       const item = balanceData.all.find(it => it.id === id);
       if (item) {
         openMaterialSummaryDrawer(item, balanceData, materials, components, orders, purchases, suppliers, products);
+        return;
       }
+      const s = suppliers.find(x => x.id === id);
+      if (s) {
+        openSupplierSummaryDrawer(s, purchases);
+        return;
+      }
+      const p = purchases.find(x => x.id === id);
+      if (p) {
+        openPurchaseSummaryDrawer(p, suppliers, materials);
+        return;
+      }
+      const m = movements.find(x => x.id === id);
+      if (m) {
+        openMovementSummaryDrawer(m);
+        return;
+      }
+    });
+  });
+
+  // Explicit Supplier Row Click
+  container.querySelectorAll('.btn-open-supplier-summary').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.actions') || e.target.closest('button') || e.target.closest('a')) return;
+      const id = el.getAttribute('data-id');
+      const s = suppliers.find(x => x.id === id);
+      if (s) openSupplierSummaryDrawer(s, purchases);
+    });
+  });
+
+  // Explicit Purchase Row Click
+  container.querySelectorAll('.btn-open-purchase-summary').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.actions') || e.target.closest('button') || e.target.closest('a')) return;
+      const id = el.getAttribute('data-id');
+      const p = purchases.find(x => x.id === id);
+      if (p) openPurchaseSummaryDrawer(p, suppliers, materials);
+    });
+  });
+
+  // Explicit Movement Row Click
+  container.querySelectorAll('.btn-open-movement-summary').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.actions') || e.target.closest('button') || e.target.closest('a')) return;
+      const id = el.getAttribute('data-id');
+      const m = movements.find(x => x.id === id);
+      if (m) openMovementSummaryDrawer(m);
     });
   });
 
@@ -1932,13 +1978,16 @@ export function openStockItemDrawer({ item = null, itemType = 'material', suppli
         `).join('');
       }
 
-      // recalculate cost preview
-      const tempComp = { items: compItems, yield: Number(drawer.querySelector('#inp-comp-yield')?.value) || 1 };
-      const unitCost = calculateComponentCost(tempComp, materialsMap);
-      const totalBox = drawer.querySelector('#comp-cost-total');
-      if (totalBox) {
-        totalBox.innerHTML = `Custo Unitário de Fabricação: <b>R$ ${unitCost.toFixed(4).replace('.', ',')} / unidade</b>`;
-      }
+      // recalculate cost preview without rebuilding DOM
+      const updateCostCalculation = () => {
+        const tempComp = { items: compItems, yield: Number(drawer.querySelector('#inp-comp-yield')?.value) || 1 };
+        const unitCost = calculateComponentCost(tempComp, materialsMap);
+        const totalBox = drawer.querySelector('#comp-cost-total');
+        if (totalBox) {
+          totalBox.innerHTML = `Custo Unitário de Fabricação: <b>R$ ${unitCost.toFixed(4).replace('.', ',')} / unidade</b>`;
+        }
+      };
+      updateCostCalculation();
 
       // bind row events
       compContainer.querySelectorAll('.comp-item-mat').forEach(el => {
@@ -1954,14 +2003,13 @@ export function openStockItemDrawer({ item = null, itemType = 'material', suppli
         el.addEventListener('input', () => {
           const idx = Number(el.getAttribute('data-idx'));
           compItems[idx].quantity = Number(el.value) || 0;
-          renderCompItems();
+          updateCostCalculation();
         });
       });
       compContainer.querySelectorAll('.comp-item-unit').forEach(el => {
         el.addEventListener('input', () => {
           const idx = Number(el.getAttribute('data-idx'));
           compItems[idx].unit = el.value.trim();
-          renderCompItems();
         });
       });
       compContainer.querySelectorAll('.btn-remove-item').forEach(el => {
@@ -1982,7 +2030,14 @@ export function openStockItemDrawer({ item = null, itemType = 'material', suppli
       renderCompItems();
     });
 
-    drawer.querySelector('#inp-comp-yield')?.addEventListener('input', renderCompItems);
+    drawer.querySelector('#inp-comp-yield')?.addEventListener('input', () => {
+      const tempComp = { items: compItems, yield: Number(drawer.querySelector('#inp-comp-yield')?.value) || 1 };
+      const unitCost = calculateComponentCost(tempComp, materialsMap);
+      const totalBox = drawer.querySelector('#comp-cost-total');
+      if (totalBox) {
+        totalBox.innerHTML = `Custo Unitário de Fabricação: <b>R$ ${unitCost.toFixed(4).replace('.', ',')} / unidade</b>`;
+      }
+    });
     renderCompItems();
 
     // SUBMIT: Material (Insumo ou Maquinário)
@@ -2389,9 +2444,15 @@ export function openPurchaseDrawer(purchase = null, suppliers = [], materials = 
         </div>
       `).join('');
 
-      let total = 0;
-      items.forEach(it => { total += Number(it.packCost) || 0; });
-      drawer.querySelector('#purchase-total-box').innerHTML = `Total Estimado: <b>R$ ${total.toFixed(2).replace('.', ',')}</b>`;
+      const updatePurchaseTotalCalculation = () => {
+        let total = 0;
+        items.forEach(it => { total += Number(it.packCost) || 0; });
+        const totalBox = drawer.querySelector('#purchase-total-box');
+        if (totalBox) {
+          totalBox.innerHTML = `Total Estimado: <b>R$ ${total.toFixed(2).replace('.', ',')}</b>`;
+        }
+      };
+      updatePurchaseTotalCalculation();
 
       container.querySelectorAll('.pur-item-mat').forEach(el => {
         el.addEventListener('change', () => {
@@ -2402,22 +2463,31 @@ export function openPurchaseDrawer(purchase = null, suppliers = [], materials = 
             items[idx].name = mat.name;
             items[idx].unit = mat.baseUnit;
             items[idx].packCost = mat.purchaseCost;
+            const costInp = container.querySelector(`.pur-item-cost[data-idx="${idx}"]`);
+            if (costInp) costInp.value = mat.purchaseCost;
+            const unitInp = container.querySelector(`.pur-item-unit[data-idx="${idx}"]`);
+            if (unitInp) unitInp.value = mat.baseUnit;
           }
-          renderItems();
+          updatePurchaseTotalCalculation();
         });
       });
       container.querySelectorAll('.pur-item-qty').forEach(el => {
         el.addEventListener('input', () => {
           const idx = Number(el.getAttribute('data-idx'));
           items[idx].quantity = Number(el.value) || 0;
-          renderItems();
+        });
+      });
+      container.querySelectorAll('.pur-item-unit').forEach(el => {
+        el.addEventListener('input', () => {
+          const idx = Number(el.getAttribute('data-idx'));
+          items[idx].unit = el.value;
         });
       });
       container.querySelectorAll('.pur-item-cost').forEach(el => {
         el.addEventListener('input', () => {
           const idx = Number(el.getAttribute('data-idx'));
           items[idx].packCost = Number(el.value) || 0;
-          renderItems();
+          updatePurchaseTotalCalculation();
         });
       });
       container.querySelectorAll('.btn-remove-pur-item').forEach(el => {

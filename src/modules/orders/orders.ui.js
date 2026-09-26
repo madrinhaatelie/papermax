@@ -357,12 +357,12 @@ export function renderOrdersView(container, ctx) {
     </div>
 
     <!-- Search & Select Filter Bar -->
-    <div class="filter-bar orders-filter-bar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; width: 100%;">
-      <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 200px; min-width: 0; max-width: 100%;">
+    <div class="filter-bar" style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 8px; min-width: 240px;">
         <label for="select-orders-tab" style="font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; display: flex; align-items: center; gap: 4px;">
           <span>🎯 Status:</span>
         </label>
-        <select id="select-orders-tab" class="form-select" style="height: 38px; font-size: 13px; font-weight: 600; border-radius: 8px; border: 1px solid var(--border-subtle); background-color: #ffffff; padding: 0 12px; color: var(--text-primary); cursor: pointer; flex: 1; min-width: 0;">
+        <select id="select-orders-tab" class="form-select" style="height: 38px; font-size: 13px; font-weight: 600; border-radius: 8px; border: 1px solid var(--border-subtle); background-color: #ffffff; padding: 0 12px; color: var(--text-primary); cursor: pointer; flex: 1; min-width: 190px;">
           ${[
             { id: 'em_andamento', label: '⚡ Em Andamento' },
             { id: 'todos', label: '📋 Todos os Pedidos' },
@@ -385,14 +385,14 @@ export function renderOrdersView(container, ctx) {
         </select>
       </div>
 
-      <div class="search-wrapper" style="flex: 2 1 220px; min-width: 0; max-width: 100%; position: relative;">
+      <div class="search-wrapper" style="flex: 1; min-width: 240px; position: relative;">
         <span class="search-icon" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--text-secondary);">🔍</span>
         <input class="search" id="input-orders-search" 
                placeholder="Busca em tempo real por número (ex: 0001, 1048), cliente, produto ou status..." 
                value="${escapeHtml(currentSearchTerm)}" 
-               style="width: 100%; padding-left: 36px; height: 38px; border-radius: 8px; font-size: 13px; box-sizing: border-box;" />
+               style="width: 100%; padding-left: 36px; height: 38px; border-radius: 8px; font-size: 13px;" />
       </div>
-      <span class="badge-count" style="background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex-shrink: 0;">
+      <span class="badge-count" style="background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap;">
         ${orders.length} ${orders.length === 1 ? 'pedido' : 'pedidos'}
       </span>
     </div>
@@ -1032,21 +1032,21 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                     <div>
                       <label class="form-label">Nome *</label>
-                      <input class="form-input" id="inp-cli-nome" value="${orderData.customer}" placeholder="Nome do cliente">
+                      <input class="form-input" id="inp-cli-nome" value="${escapeHtml(orderData.customer || '')}" placeholder="Nome do cliente">
                     </div>
                     <div>
                       <label class="form-label">Contato (WhatsApp)</label>
-                      <input class="form-input" id="inp-cli-contato" data-mask="phone" value="${formatPhone(orderData.customerPhone)}" placeholder="(XX) 9 XXXX-XXXX">
+                      <input class="form-input" id="inp-cli-contato" data-mask="phone" value="${formatPhone(orderData.customerPhone || '')}" placeholder="(XX) 9 XXXX-XXXX">
                     </div>
                   </div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                     <div>
                       <label class="form-label">Data de Nascimento</label>
-                      <input type="date" class="form-input" id="inp-cli-nasc" value="${orderData.customerBirthDate}">
+                      <input type="date" class="form-input" id="inp-cli-nasc" value="${orderData.customerBirthDate || ''}">
                     </div>
                     <div>
                       <label class="form-label">CPF</label>
-                      <input class="form-input" id="inp-cli-cpf" data-mask="cpf" value="${formatCPF(orderData.customerCPF)}" placeholder="XXX.XXX.XXX-XX">
+                      <input class="form-input" id="inp-cli-cpf" data-mask="cpf" value="${formatCPF(orderData.customerCPF || '')}" placeholder="XXX.XXX.XXX-XX">
                     </div>
                   </div>
                 ` : `
@@ -1054,17 +1054,17 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                     <div>
                       <label class="form-label">Empresa / Razão Social *</label>
-                      <input class="form-input" id="inp-cli-empresa" value="${orderData.customerCompany}" placeholder="Nome da empresa">
+                      <input class="form-input" id="inp-cli-empresa" value="${escapeHtml(orderData.customerCompany || '')}" placeholder="Nome da empresa">
                     </div>
                     <div>
                       <label class="form-label">Contato (WhatsApp)</label>
-                      <input class="form-input" id="inp-cli-contato" data-mask="phone" value="${formatPhone(orderData.customerPhone)}" placeholder="(XX) 9 XXXX-XXXX">
+                      <input class="form-input" id="inp-cli-contato" data-mask="phone" value="${formatPhone(orderData.customerPhone || '')}" placeholder="(XX) 9 XXXX-XXXX">
                     </div>
                   </div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                     <div>
                       <label class="form-label">CNPJ</label>
-                      <input class="form-input" id="inp-cli-cnpj" data-mask="cnpj" value="${formatCNPJ(orderData.customerCNPJ)}" placeholder="XX.XXX.XXX/XXXX-XX">
+                      <input class="form-input" id="inp-cli-cnpj" data-mask="cnpj" value="${formatCNPJ(orderData.customerCNPJ || '')}" placeholder="XX.XXX.XXX/XXXX-XX">
                     </div>
                     <div></div>
                   </div>
@@ -1080,11 +1080,11 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
                   </div>
                   <div>
                     <label class="form-label">Data do Evento</label>
-                    <input type="date" class="form-input" id="inp-cli-evento" value="${orderData.eventDate}">
+                    <input type="date" class="form-input" id="inp-cli-evento" value="${orderData.eventDate || ''}">
                   </div>
                   <div>
                     <label class="form-label">Data de Entrega / Limite</label>
-                    <input type="date" class="form-input" id="inp-cli-limite" value="${orderData.limitDate}">
+                    <input type="date" class="form-input" id="inp-cli-limite" value="${orderData.limitDate || ''}">
                   </div>
                 </div>
 
@@ -1101,30 +1101,30 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
                   <div>
                     <label class="form-label">CEP</label>
                     <div style="display: flex; gap: 6px;">
-                      <input class="form-input" id="inp-ent-cep" value="${orderData.deliveryCep}" placeholder="00000-000">
+                      <input class="form-input" id="inp-ent-cep" value="${escapeHtml(orderData.deliveryCep || '')}" placeholder="00000-000">
                       <button type="button" class="btn btn-secondary" id="btn-busca-cep" style="padding: 0 10px;">🔍</button>
                     </div>
                   </div>
                   <div>
                     <label class="form-label">Endereço</label>
-                    <input class="form-input" id="inp-ent-endereco" value="${orderData.deliveryAddress}">
+                    <input class="form-input" id="inp-ent-endereco" value="${escapeHtml(orderData.deliveryAddress || '')}">
                   </div>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; margin-bottom: 12px;">
                   <div>
                     <label class="form-label">Número</label>
-                    <input class="form-input" id="inp-ent-numero" value="${orderData.deliveryNumber}">
+                    <input class="form-input" id="inp-ent-numero" value="${escapeHtml(orderData.deliveryNumber || '')}">
                   </div>
                   <div>
                     <label class="form-label">Bairro</label>
-                    <input class="form-input" id="inp-ent-bairro" value="${orderData.deliveryNeighborhood}">
+                    <input class="form-input" id="inp-ent-bairro" value="${escapeHtml(orderData.deliveryNeighborhood || '')}">
                   </div>
                   <div>
                     <label class="form-label">Cidade / Estado</label>
                     <div style="display: flex; gap: 6px;">
-                      <input class="form-input" id="inp-ent-cidade" value="${orderData.deliveryCity}" style="flex: 2;">
-                      <input class="form-input" id="inp-ent-estado" value="${orderData.deliveryState}" style="flex: 1;" placeholder="UF">
+                      <input class="form-input" id="inp-ent-cidade" value="${escapeHtml(orderData.deliveryCity || '')}" style="flex: 2;">
+                      <input class="form-input" id="inp-ent-estado" value="${escapeHtml(orderData.deliveryState || '')}" style="flex: 1;" placeholder="UF">
                     </div>
                   </div>
                 </div>
@@ -1974,14 +1974,17 @@ export function renderNewOrderPage(container, ctx, editOrderId = null, prefill =
       });
     }
 
-    // Refresh calculations when discount changes
+    // Refresh calculations when discount changes without re-rendering DOM
     const inpDiscount = container.querySelector('#inp-fin-discount');
     if (inpDiscount) {
-      inpDiscount.addEventListener('blur', () => {
-        saveCurrentState();
-        activeDivisoria = 'section-financeiro';
-        render();
-      });
+      const updateDiscountCalculations = () => {
+        orderData.discount = Number(inpDiscount.value) || 0;
+        const total = getCalculatedTotal();
+        const totalValEl = container.querySelector('#invoice-printable-area b, #invoice-printable-area span[style*="font-size: 15px"] + span');
+        if (totalValEl) totalValEl.textContent = `R$ ${total.toFixed(2)}`;
+      };
+      inpDiscount.addEventListener('input', updateDiscountCalculations);
+      inpDiscount.addEventListener('change', updateDiscountCalculations);
     }
 
     // Form Submit (Save Order)
